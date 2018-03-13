@@ -34,6 +34,9 @@ var langBuiltins = []*langBuiltin{
 	{"car", builtinCAR},
 	{"cdr", builtinCDR},
 	{"concat", builtinConcat},
+	{"map", builtinMap},
+	{"foldl", builtinFoldLeft},
+	{"foldr", builtinFoldRight},
 	{"list", builtinList},
 	{"not", builtinNot},
 	{"+", builtinAdd},
@@ -148,6 +151,89 @@ func builtinConcat(env *LEnv, v *LVal) *LVal {
 		q.Cells = append(q.Cells, c.Cells...)
 	}
 	return q
+}
+
+func builtinMap(env *LEnv, args *LVal) *LVal {
+	if len(args.Cells) != 2 {
+		return berrf("map", "too many arguments provided: %d", len(args.Cells))
+	}
+	f := args.Cells[0]
+	if f.Type != LFun {
+		return berrf("map", "first argument is not a function: %s", f.Type)
+	}
+	lis := args.Cells[1]
+	if lis.Type != LSExpr {
+		return berrf("map", "second argument is not a list: %s", lis.Type)
+	}
+	for i, c := range lis.Cells {
+		fargs := QExpr()
+		fargs.Cells = []*LVal{c}
+		fret := env.Call(f, fargs)
+		if fret.Type == LError {
+			return fret
+		}
+		lis.Cells[i] = fret
+	}
+	return lis
+}
+
+func builtinFoldLeft(env *LEnv, args *LVal) *LVal {
+	if len(args.Cells) != 3 {
+		return berrf("foldl", "too many arguments provided: %d", len(args.Cells))
+	}
+	f := args.Cells[0]
+	if f.Type != LFun {
+		return berrf("foldl", "first argument is not a function: %s", f.Type)
+	}
+	acc := args.Cells[1]
+	lis := args.Cells[2]
+	if lis.Type != LSExpr {
+		return berrf("foldl", "third argument is not a list: %s", lis.Type)
+	}
+	for _, c := range lis.Cells {
+		fargs := QExpr()
+		fargs.Cells = []*LVal{
+			// args reversed from foldr function invocation
+			acc,
+			c,
+		}
+		fret := env.Call(f, fargs)
+		if fret.Type == LError {
+			return fret
+		}
+		acc = fret
+	}
+	return acc
+}
+
+func builtinFoldRight(env *LEnv, args *LVal) *LVal {
+	if len(args.Cells) != 3 {
+		return berrf("foldr", "too many arguments provided: %d", len(args.Cells))
+	}
+	f := args.Cells[0]
+	if f.Type != LFun {
+		return berrf("foldr", "first argument is not a function: %s", f.Type)
+	}
+	acc := args.Cells[1]
+	lis := args.Cells[2]
+	if lis.Type != LSExpr {
+		return berrf("foldr", "third argument is not a list: %s", lis.Type)
+	}
+	for i := len(lis.Cells) - 1; i >= 0; i-- {
+		c := lis.Cells[i]
+		fargs := QExpr()
+		fargs.Cells = []*LVal{
+			// args reversed from foldl function invocation
+			c,
+			acc,
+		}
+		fret := env.Call(f, fargs)
+		if fret.Type == LError {
+			return fret
+		}
+		acc = fret
+	}
+	return acc
 }
 
 func builtinList(env *LEnv, v *LVal) *LVal {

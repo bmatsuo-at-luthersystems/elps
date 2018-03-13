@@ -196,6 +196,9 @@ func (env *LEnv) Call(fun *LVal, args *LVal) *LVal {
 	if fun.Builtin != nil {
 		return fun.Builtin(env, args)
 	}
+	// FIXME:  A shallow copy is probably correct here.  We don't want to copy
+	// the Env so that updates to the global scope are reflected.
+	fun = fun.Copy()
 	nargs := len(fun.Formals.Cells) // only used when not vargs
 	for i, v := range args.Cells {
 		if len(fun.Formals.Cells) == 0 {
