@@ -18,8 +18,8 @@ const (
 	LSymbol
 	LQSymbol
 	LSExpr
-	LQExpr
 	LFun
+	LQuote
 )
 
 var lvalTypeStrings = []string{
@@ -29,8 +29,8 @@ var lvalTypeStrings = []string{
 	LSymbol:  "symbol",
 	LQSymbol: "qsymbol",
 	LSExpr:   "sexpr",
-	LQExpr:   "qexpr",
 	LFun:     "function",
+	LQuote:   "quoted",
 }
 
 func (t LValType) String() string {
@@ -65,25 +65,17 @@ func (n Errno) String() string {
 	return errnoStrings[n]
 }
 
-// LBuiltin is a function that performs executes a lisp function.
-type LBuiltin func(env *LEnv, args *LVal) *LVal
-
-// LBuiltinDef is a built-in function
-// XXX: LBuiltinDef ... LBuiltInDef ... ?
-type LBuiltinDef interface {
-	Name() string
-	Eval(env *LEnv, args *LVal) *LVal
-}
-
 // LVal is a lisp value
 type LVal struct {
-	Type  LValType
-	Num   int
-	Sym   string
-	Err   error
-	Cells []*LVal
+	Type   LValType
+	Num    int
+	Sym    string
+	Err    error
+	Cells  []*LVal
+	Quoted bool // flag indicating a single level of quoting
 
 	// Variables needed for function values
+	Macro   bool
 	Builtin LBuiltin
 	Env     *LEnv
 	Formals *LVal
@@ -130,7 +122,8 @@ func SExpr() *LVal {
 // list.
 func QExpr() *LVal {
 	return &LVal{
-		Type: LQExpr,
+		Type:   LSExpr,
+		Quoted: true,
 	}
 }
 
@@ -142,17 +135,30 @@ func Fun(fn LBuiltin) *LVal {
 	}
 }
 
+// Macro returns an LVal representing a macro
+func Macro(fn LBuiltin) *LVal {
+	return &LVal{
+		Type:    LFun,
+		Macro:   true,
+		Builtin: fn,
+	}
+}
+
 // Lambda returns anonymous function that has formals as arguments and the
 // given body, which may reference symbols specified in the list of formals.
 func Lambda(formals *LVal, body *LVal) *LVal {
-	// XXX: Does this need error checking?
-	v := &LVal{
+	if formals.Type != LSExpr {
+		return Errorf("formals is not a list of symbols: %v", formals.Type)
+	}
+	if formals.Type != LSExpr {
+		return Errorf("body is not a list: %v", body.Type)
+	}
+	return &LVal{
 		Type:    LFun,
 		Env:     NewEnv(nil),
 		Formals: formals,
 		Body:    body,
 	}
-	return v
 }
 
 // Error returns an LVal representing the error corresponding to err.
@@ -163,12 +169,35 @@ func Error(err error) *LVal {
 	}
 }
 
+// Quote quotes v and returns the quoted value.  The LVal v is modified.
+func Quote(v *LVal) *LVal {
+	if !v.Quoted {
+		v.Quoted = true
+		return v
+	}
+	quote := &LVal{
+		Type:   LQuote,
+		Quoted: true,
+		Body:   v,
+	}
+	return quote
+}
+
 // Errorf returns an LVal representing with a formatted error message.
 func Errorf(format string, v ...interface{}) *LVal {
 	return &LVal{
 		Type: LError,
 		Err:  fmt.Errorf(format, v...),
 	}
+}
+
+// IsNil returns true if v represents a nil value.
+func (v *LVal) IsNil() bool {
+	switch v.Type {
+	case LSExpr:
+		return len(v.Cells) == 0
+	}
+	return false
 }
 
 // Copy creates a deep copy of the receiver.
@@ -197,27 +226,50 @@ func (v *LVal) copyCells() []*LVal {
 }
 
 func (v *LVal) String() string {
+	const QUOTE = `'`
+	if v.Type == LQuote {
+		return QUOTE + v.Body.str(true)
+	}
+	return v.str(false)
+}
+
+func (v *LVal) str(onTheRecord bool) string {
+	const QUOTE = `'`
+	// All types which may evaluate to things other than themselves must check
+	// v.Quoted.
+	quote := ""
+	if onTheRecord {
+		quote = QUOTE
+	}
 	switch v.Type {
 	case LNumber:
-		return strconv.Itoa(v.Num)
+		return quote + strconv.Itoa(v.Num)
 	case LError:
-		return v.Err.Error()
+		return quote + v.Err.Error()
 	case LSymbol:
-		return v.Sym
-	case LQSymbol:
-		return "'" + v.Sym
+		if v.Quoted {
+			quote = QUOTE
+		}
+		return quote + v.Sym
 	case LSExpr:
-		return exprString(v, "(", ")")
-	case LQExpr:
-		return exprString(v, "'(", ")")
+		if v.Quoted {
+			quote = QUOTE
+		}
+		return exprString(v, quote+"(", ")")
 	case LFun:
+		if v.Quoted {
+			quote = QUOTE
+		}
 		if v.Builtin != nil {
-			return "<builtin>"
+			return fmt.Sprintf("%s<builtin>", quote)
 		}
 		vars := lambdaVars(v.Formals, boundVars(v))
-		return fmt.Sprintf("(lambda %v %v)", vars, v.Body)
+		return fmt.Sprintf("%s(lambda %v %v)", quote, vars, v.Body)
+	case LQuote:
+		// TODO: make more efficient
+		return QUOTE + v.Body.str(true)
 	default:
-		return fmt.Sprintf("%#v", v)
+		return quote + fmt.Sprintf("%#v", v)
 	}
 }
 

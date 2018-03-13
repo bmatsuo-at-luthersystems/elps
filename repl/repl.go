@@ -15,6 +15,7 @@ import (
 func RunRepl(prompt string) {
 	env := lisp.NewEnv(nil)
 	env.AddBuiltins()
+	env.AddMacros()
 
 	rl, err := readline.New(prompt)
 	if err != nil {
@@ -29,18 +30,26 @@ func RunRepl(prompt string) {
 		if err != nil && err != readline.ErrInterrupt {
 			break
 		}
-		if len(buf) != 0 {
-			line = append(buf, line...)
+		if err == readline.ErrInterrupt {
+			line = nil
+			buf = nil
 			rl.SetPrompt(prompt)
 		}
-		complete, err := parser.Parse(env, line)
-		if err != nil {
-			errln(err)
-			continue
+		if len(buf) != 0 {
+			line = append(buf, line...)
+			buf = nil
+			rl.SetPrompt(prompt)
 		}
-		if !complete {
-			buf = line
-			rl.SetPrompt(contPrompt)
+		if len(line) != 0 {
+			complete, err := parser.Parse(env, line)
+			if err != nil {
+				errln(err)
+				continue
+			}
+			if !complete {
+				buf = line
+				rl.SetPrompt(contPrompt)
+			}
 		}
 	}
 	if err != io.EOF {

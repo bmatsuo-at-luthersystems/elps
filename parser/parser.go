@@ -44,29 +44,28 @@ func Parse(env *lisp.LEnv, text []byte) (bool, error) {
 	s := parsec.NewScanner(text)
 	openP := parsec.Atom("(", "OPENP")
 	closeP := parsec.Atom(")", "CLOSEP")
-	openC := parsec.Atom("'(", "OPENQ")
-	closeC := parsec.Atom(")", "CLOSEQ")
 	q := parsec.Atom("'", "QUOTE")
 	number := parsec.Token(`[+-]?[0-9]+`, "NUMBER")
 	//symbol := parsec.Token(`[^\s()']+`, "SYMBOL")
 	symbol := parsec.Token(`(?:\pL|[_+\-*/\=<>!&])+`, "SYMBOL")
-	qsymbol := parsec.And(nil, q, symbol)
+	//qsymbol := parsec.And(nil, q, symbol)
 	term := parsec.OrdChoice(astNode(nodeTerm), // terminal token
 		number,
 		symbol, // symbol comes last because it swallows anything
-		qsymbol,
+		//qsymbol,
 	)
 	var expr parsec.Parser // forward declaration allows for recursive parsing
 	exprList := parsec.Kleene(nil, &expr)
 	sexpr := parsec.And(astNode(nodeSExpr), openP, exprList, closeP)
-	qexpr := parsec.And(astNode(nodeQExpr), openC, exprList, closeC)
+	qexpr := parsec.And(astNode(nodeQExpr), q, &expr)
 	expr = parsec.OrdChoice(nil, term, sexpr, qexpr)
 
 	evaled := false
 	root, s := expr(s)
 	for root != nil {
 		evaled = true
-		dumpParsecNode(root, "")
+		// TODO:  Only dump the root if a verbosity flag is set
+		//dumpParsecNode(root, "")
 		evalParsecRoot(env, root)
 		root, s = expr(s)
 	}
@@ -92,7 +91,7 @@ func newAST(typ nodeType, nodes []parsec.ParsecNode) parsec.ParsecNode {
 	switch typ {
 	case nodeTerm:
 		var lval *lisp.LVal
-		term := nodes[len(nodes)-1].(*parsec.Terminal)
+		term := nodes[0].(*parsec.Terminal)
 		switch term.Name {
 		case "NUMBER":
 			x, err := strconv.Atoi(term.Value)
@@ -103,11 +102,7 @@ func newAST(typ nodeType, nodes []parsec.ParsecNode) parsec.ParsecNode {
 				lval = lisp.Number(x)
 			}
 		case "SYMBOL":
-			if nodes[0].(*parsec.Terminal).GetName() == "QUOTE" {
-				lval = lisp.QSymbol(term.Value)
-			} else {
-				lval = lisp.Symbol(term.Value)
-			}
+			lval = lisp.Symbol(term.Value)
 		}
 		return lval
 	case nodeSExpr:
@@ -123,12 +118,8 @@ func newAST(typ nodeType, nodes []parsec.ParsecNode) parsec.ParsecNode {
 	case nodeQExpr:
 		lval := lisp.QExpr()
 		// We don't want terminal parsec nodes "'(" and ")"
-		for _, c := range nodes {
-			switch c.(type) {
-			case *lisp.LVal:
-				lval.Cells = append(lval.Cells, c.(*lisp.LVal))
-			}
-		}
+		c := nodes[1].(*lisp.LVal)
+		lval = lisp.Quote(c)
 		return lval
 	default:
 		panic(fmt.Sprintf("unknown nodeType: %s (%d)", typ, typ))

@@ -4,6 +4,16 @@ import (
 	"fmt"
 )
 
+// LBuiltin is a function that performs executes a lisp function.
+type LBuiltin func(env *LEnv, args *LVal) *LVal
+
+// LBuiltinDef is a built-in function
+// XXX: LBuiltinDef ... LBuiltInDef ... ?
+type LBuiltinDef interface {
+	Name() string
+	Eval(env *LEnv, args *LVal) *LVal
+}
+
 type langBuiltin struct {
 	name string
 	fun  LBuiltin
@@ -25,14 +35,15 @@ var langBuiltins = []*langBuiltin{
 	{"cdr", builtinCDR},
 	{"concat", builtinConcat},
 	{"list", builtinList},
+	{"not", builtinNot},
 	{"+", builtinAdd},
 	{"-", builtinSub},
 	{"/", builtinDiv},
 	{"*", builtinMul},
 }
 
-// DefaultBuiltins returns the default set of LBuiltins added to LEnv objects
-// when LEnv.AddBuiltins is called without arguments.
+// DefaultBuiltins returns the default set of LBuiltinDefs added to LEnv
+// objects when LEnv.AddBuiltins is called without arguments.
 func DefaultBuiltins() []LBuiltinDef {
 	funs := make([]LBuiltinDef, len(langBuiltins))
 	for i := range funs {
@@ -52,12 +63,8 @@ func builtinSet(env *LEnv, v *LVal) *LVal {
 		return berrf("set", "first argument is not a symbol: %v", v.Cells[0].Type)
 	}
 
-	p := env
-	for p.Parent != nil {
-		p = p.Parent
-	}
-	p.Put(v.Cells[0], v.Cells[1])
-	return v.Cells[1].Copy() // Is a copy necessary?
+	env.PutGlobal(v.Cells[0], v.Cells[1])
+	return env.GetGlobal(v.Cells[0])
 }
 
 func builtinLambda(env *LEnv, v *LVal) *LVal {
@@ -68,7 +75,7 @@ func builtinLambda(env *LEnv, v *LVal) *LVal {
 		return berrf("lambda", "too many arguments provided: %d", len(v.Cells))
 	}
 	for _, q := range v.Cells {
-		if q.Type != LQExpr {
+		if q.Type != LSExpr {
 			return berrf("lambda", "argument is not a list: %v", q.Type)
 		}
 	}
@@ -90,17 +97,23 @@ func builtinLambda(env *LEnv, v *LVal) *LVal {
 	return fun
 }
 
-func builtinEval(env *LEnv, v *LVal) *LVal {
-	s := SExpr()
-	s.Cells = v.Cells
-	return env.EvalSExpr(s) // This modifies v
+func builtinEval(env *LEnv, args *LVal) *LVal {
+	if len(args.Cells) > 1 {
+		return berrf("eval", "too many arguments provided: %d", len(args.Cells))
+	}
+	v := args.Cells[0]
+	if v.Type == LQuote {
+		return v.Body
+	}
+	v.Quoted = false
+	return env.Eval(v)
 }
 
 func builtinCAR(env *LEnv, v *LVal) *LVal {
 	if len(v.Cells) != 1 {
 		return berrf("car", "too many arguments provided: %d", len(v.Cells))
 	}
-	if v.Cells[0].Type != LQExpr {
+	if v.Cells[0].Type != LSExpr {
 		return berrf("car", "argument is not a list: %v", v.Cells[0].Type)
 	}
 	if len(v.Cells[0].Cells) == 0 {
@@ -114,7 +127,7 @@ func builtinCDR(env *LEnv, v *LVal) *LVal {
 	if len(v.Cells) != 1 {
 		return berrf("cdr", "too many arguments provided: %d", len(v.Cells))
 	}
-	if v.Cells[0].Type != LQExpr {
+	if v.Cells[0].Type != LSExpr {
 		return berrf("cdr", "argument is not a list %v", v.Cells[0].Type)
 	}
 	if len(v.Cells[0].Cells) == 0 {
@@ -129,7 +142,7 @@ func builtinCDR(env *LEnv, v *LVal) *LVal {
 func builtinConcat(env *LEnv, v *LVal) *LVal {
 	q := QExpr()
 	for _, c := range v.Cells {
-		if c.Type != LQExpr {
+		if c.Type != LSExpr {
 			return berrf("concat", "argument is not a list: %v", c.Type)
 		}
 		q.Cells = append(q.Cells, c.Cells...)
@@ -141,6 +154,20 @@ func builtinList(env *LEnv, v *LVal) *LVal {
 	q := QExpr()
 	q.Cells = v.Cells
 	return q
+}
+
+func builtinNot(env *LEnv, v *LVal) *LVal {
+	if len(v.Cells) != 1 {
+		return berrf("not", "too many arguments provided: %d", len(v.Cells))
+	}
+	switch v.Cells[0].Type {
+	case LSExpr:
+		if len(v.Cells[0].Cells) == 0 {
+			// v.Cells[0] is nil
+			return Symbol("t")
+		}
+	}
+	return Nil()
 }
 
 func builtinAdd(env *LEnv, v *LVal) *LVal {

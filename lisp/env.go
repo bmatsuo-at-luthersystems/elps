@@ -1,5 +1,7 @@
 package lisp
 
+import "fmt"
+
 // LEnv is a lisp environment.
 type LEnv struct {
 	Count  int
@@ -32,8 +34,12 @@ func (env *LEnv) Copy() *LEnv {
 
 // Get takes an LSymbol k and returns the LVal it is bound to in env.
 func (env *LEnv) Get(k *LVal) *LVal {
-	if k.Type != LSymbol {
+	// LQSymbols are allowed...
+	if k.Type != LSymbol && k.Type != LQSymbol {
 		return Nil()
+	}
+	if k.Sym == "t" {
+		return Symbol("t")
 	}
 	v, ok := env.Scope[k.Sym]
 	if ok {
@@ -47,13 +53,51 @@ func (env *LEnv) Get(k *LVal) *LVal {
 
 // Put takes an LSymbol k and binds it to v in env.
 func (env *LEnv) Put(k, v *LVal) {
-	if k.Type != LSymbol {
+	if k.Type != LSymbol && k.Type != LQSymbol {
 		return
+	}
+	if k.Sym == "t" {
+		panic("constant value")
 	}
 	if v == nil {
 		panic("nil value")
 	}
 	env.Scope[k.Sym] = v.Copy()
+}
+
+// GetGlobal takes LSymbol k and returns the value it is bound to in the root
+// environment (global scope).
+func (env *LEnv) GetGlobal(k *LVal) *LVal {
+	return env.root().Get(k)
+}
+
+// PutGlobal takes an LSymbol k and binds it to v in root environment (global
+// scope).
+func (env *LEnv) PutGlobal(k, v *LVal) {
+	env.root().Put(k, v)
+}
+
+func (env *LEnv) root() *LEnv {
+	for env.Parent != nil {
+		env = env.Parent
+	}
+	return env
+}
+
+// AddMacros binds the given macros to their names in env.  When called with no
+// arguments AddMacros adds the DefaultMacros to env.
+func (env *LEnv) AddMacros(macs ...LBuiltinDef) {
+	if len(macs) == 0 {
+		macs = DefaultMacros()
+	}
+	for i, mac := range macs {
+		k := Symbol(mac.Name())
+		exist := env.Get(k)
+		if !exist.IsNil() && exist.Type != LError { // LError is ubound symbol
+			panic(fmt.Sprintf("macro already defined: %v (= %v)", k, exist))
+		}
+		env.Put(k, Macro(macs[i].Eval))
+	}
 }
 
 // AddBuiltins binds the given funs to their names in env.  When called with no
@@ -70,11 +114,13 @@ func (env *LEnv) AddBuiltins(funs ...LBuiltinDef) {
 }
 
 // Eval evaluates v in the context (scope) of env and returns the resulting
-// LVal.
+// LVal.  Eval does not unquote v during evaluation -- a difference between
+// Eval and the ``eval'' builtin function.
 func (env *LEnv) Eval(v *LVal) *LVal {
+	if v.Quoted {
+		return v
+	}
 	switch v.Type {
-	case LQSymbol:
-		return Symbol(v.Sym)
 	case LSymbol:
 		return env.Get(v)
 	case LSExpr:
@@ -89,27 +135,49 @@ func (env *LEnv) EvalSExpr(s *LVal) *LVal {
 	if s.Type != LSExpr {
 		return Errorf("not an s-expression")
 	}
-	for i := range s.Cells {
-		s.Cells[i] = env.Eval(s.Cells[i])
-	}
-	for i := range s.Cells {
-		if s.Cells[i].Type == LError {
-			return s.Cells[i]
-		}
-	}
 	if len(s.Cells) == 0 {
 		return Nil()
 	}
-	if len(s.Cells) == 1 {
-		// I guess ``(x)'' is the same as ``x''?  Is this implying currying?
-		return s.Cells[0]
+
+	f := env.Eval(s.Cells[0])
+	if f.Type == LError {
+		return f
 	}
-	f := s.Cells[0]
 	if f.Type != LFun {
-		return Errorf("first element of expression is not a function: %v", f.Type)
+		return Errorf("first element of expression is not a function: %v", f)
+	}
+	if f.Macro {
+		// Quote arguments before invoking f.
+		for i := 1; i < len(s.Cells); i++ {
+			s.Cells[i] = Quote(s.Cells[i])
+		}
+	} else {
+		// Evaluate arguments before invoking f.
+		for i := 1; i < len(s.Cells); i++ {
+			s.Cells[i] = env.Eval(s.Cells[i])
+		}
+		for _, c := range s.Cells[1:] {
+			if c.Type == LError {
+				return c
+			}
+		}
+		if len(s.Cells) == 1 {
+			// I guess ``(x)'' is the same as ``x''?  Is this implying currying?
+			return s.Cells[0]
+		}
 	}
 	s.Cells = s.Cells[1:]
-	return env.Call(f, s)
+	r := env.Call(f, s)
+	if r.Type == LError {
+		return r
+	}
+	if !f.Macro {
+		return r
+	}
+	// TODO:  Turn macro expansion into a loop instead of a recursive process.
+	// A real program will probably exhaust system memory with the call stack
+	// when expanding macros.
+	return env.Eval(r)
 }
 
 // Call invokes LFun fun with the list args.
