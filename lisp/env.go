@@ -125,6 +125,9 @@ func (env *LEnv) Eval(v *LVal) *LVal {
 		return env.Get(v)
 	case LSExpr:
 		return env.EvalSExpr(v)
+	case LQuote:
+		// this quote was unquoted... eval the underlying value
+		return env.Eval(v.Body)
 	default:
 		return v
 	}
@@ -147,10 +150,17 @@ func (env *LEnv) EvalSExpr(s *LVal) *LVal {
 		return Errorf("first element of expression is not a function: %v", f)
 	}
 	if f.Macro {
-		// Quote arguments before invoking f.
-		for i := 1; i < len(s.Cells); i++ {
-			s.Cells[i] = Quote(s.Cells[i])
-		}
+		// Argument to a macro a not evaluated but they aren't quoted either.
+		// This behavior is what allows ``unquote'' to properly resolve macro
+		// arguments symbols during and still produce valid code during macro
+		// expansion.  That is, if x is a macro argument then what do the
+		// following expressions return?
+		//		(quasiquote (unquote x))             	  => {expression bound to x}
+		//		(quasiquote (unquote '(if 1 '(1) '(2))))  => '(1)
+		// If the value given to x was quoted by eval then ``unquote'' would
+		// have to undo that quoting.  But unquote is not supposed to unquote
+		// the value returned by (if 1 '(1) '(2)), it merely evaluates the
+		// expression and produces '(1).
 	} else {
 		// Evaluate arguments before invoking f.
 		for i := 1; i < len(s.Cells); i++ {
@@ -177,6 +187,7 @@ func (env *LEnv) EvalSExpr(s *LVal) *LVal {
 	// TODO:  Turn macro expansion into a loop instead of a recursive process.
 	// A real program will probably exhaust system memory with the call stack
 	// when expanding macros.
+	r.Quoted = false
 	return env.Eval(r)
 }
 

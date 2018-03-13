@@ -108,7 +108,7 @@ func QSymbol(s string) *LVal {
 
 // Nil returns an LVal representing nil, an empty list, an absent value.
 func Nil() *LVal {
-	return QExpr()
+	return SExpr()
 }
 
 // SExpr returns an LVal representing an S-expression, a symbolic expression.
