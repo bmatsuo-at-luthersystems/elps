@@ -183,10 +183,22 @@ func (env *LEnv) EvalSExpr(s *LVal) *LVal {
 	if !f.Macro {
 		return r
 	}
+	// This is a lazy unquote.  Some builtin macros need return the quoted
+	// result of an evaluation (probably because they are supposed to be
+	// special operators, not macros).  Unquoting in this way appears to allow
+	// the upcoming evaluation to produce the correct value for user defined
+	// macros, which are typically using quasiquote.  Builtin macros can be
+	// massaged to return a proper value.  I'm sure there is a bug where
+	// something is unintentionally unquoted.  I will deal with implementing a
+	// proper system for special operators at that point.
+	//
+	// NOTE:  As far as I have reasoned a special operator is like a macro, in
+	// that it receives unevaluated arguments, but it is like a function in
+	// that its return value is not expected to require another evaluation.
+	r.Quoted = false
 	// TODO:  Turn macro expansion into a loop instead of a recursive process.
 	// A real program will probably exhaust system memory with the call stack
 	// when expanding macros.
-	r.Quoted = false
 	return env.Eval(r)
 }
 

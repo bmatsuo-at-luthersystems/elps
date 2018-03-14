@@ -5,6 +5,7 @@ var langMacros = []*langBuiltin{
 	{"defun", macroDefun},
 	{"quote", macroQuote},
 	{"quasiquote", macroQuasiquote},
+	{"progn", macroProgn},
 	{"if", macroIf},
 }
 
@@ -102,6 +103,14 @@ func findAndUnquote(env *LEnv, v *LVal) *LVal {
 		v.Cells[i] = findAndUnquote(env, v.Cells[i])
 	}
 	return v
+}
+
+func macroProgn(env *LEnv, args *LVal) *LVal {
+	val := Nil()
+	for _, c := range args.Cells {
+		val = env.Eval(c)
+	}
+	return Quote(val)
 }
 
 // (if test-form then-form else-form)
