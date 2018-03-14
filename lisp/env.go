@@ -170,10 +170,6 @@ func (env *LEnv) EvalSExpr(s *LVal) *LVal {
 				return c
 			}
 		}
-		if len(s.Cells) == 1 {
-			// I guess ``(x)'' is the same as ``x''?  Is this implying currying?
-			return s.Cells[0]
-		}
 	}
 	s.Cells = s.Cells[1:]
 	r := env.Call(f, s)
