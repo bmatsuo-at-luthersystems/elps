@@ -4,7 +4,6 @@ import "fmt"
 
 // LEnv is a lisp environment.
 type LEnv struct {
-	Count  int
 	Scope  map[string]*LVal
 	Parent *LEnv
 }
