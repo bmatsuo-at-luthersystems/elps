@@ -47,7 +47,7 @@ func Parse(env *lisp.LEnv, print bool, text []byte) (bool, error) {
 	closeP := parsec.Atom(")", "CLOSEP")
 	q := parsec.Atom("'", "QUOTE")
 	comment := parsec.Token(`;([^\n]*[^\s])?`, "COMMENT")
-	decimal := parsec.Token(`[+-]?[0-9]+(.[0-9]+)?([eE][+-]?[0-9]+)?`, "DECIMAL")
+	decimal := parsec.Token(`[+-]?[0-9]+([.][0-9]+)?([eE][+-]?[0-9]+)?`, "DECIMAL")
 	//symbol := parsec.Token(`[^\s()']+`, "SYMBOL")
 	symbol := parsec.Token(`(?:\pL|[_+\-*/\=<>!&])+`, "SYMBOL")
 	//qsymbol := parsec.And(nil, q, symbol)
