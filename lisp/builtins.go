@@ -2,6 +2,7 @@ package lisp
 
 import (
 	"fmt"
+	"math"
 )
 
 // LBuiltin is a function that performs executes a lisp function.
@@ -38,10 +39,12 @@ var langBuiltins = []*langBuiltin{
 	{"foldl", builtinFoldLeft},
 	{"foldr", builtinFoldRight},
 	{"list", builtinList},
+	{"cons", builtinCons},
 	{"not", builtinNot},
 	{">", builtinGT},
 	{"<", builtinLT},
 	{"=", builtinEqNum},
+	{"**", builtinPow},
 	{"+", builtinAdd},
 	{"-", builtinSub},
 	{"/", builtinDiv},
@@ -246,6 +249,18 @@ func builtinList(env *LEnv, v *LVal) *LVal {
 	return q
 }
 
+func builtinCons(env *LEnv, args *LVal) *LVal {
+	if len(args.Cells) != 2 {
+		return berrf("cons", "two arguments expected (got %d)", len(args.Cells))
+	}
+	if args.Cells[1].Type != LSExpr {
+		return berrf("cons", "second argument is not a list: %s", args.Cells[1].Type)
+	}
+	args.Cells = append(args.Cells[:1], args.Cells[1].Cells...)
+	args.Quoted = true
+	return args
+}
+
 func builtinNot(env *LEnv, v *LVal) *LVal {
 	if len(v.Cells) != 1 {
 		return berrf("not", "too many arguments provided: %d", len(v.Cells))
@@ -308,7 +323,47 @@ func builtinEqNum(env *LEnv, args *LVal) *LVal {
 	if bothInt(a, b) {
 		return Bool(a.Int == b.Int)
 	}
+
+	// If the following is true then either we have equal floats or both
+	// numbers are zero (and thus equivalent).
 	return Bool(a.Float == b.Float)
+}
+
+func builtinPow(env *LEnv, args *LVal) *LVal {
+	if len(args.Cells) != 2 {
+		berrf("**", "two arguments expected (got %d)", len(args.Cells))
+	}
+	a, b := args.Cells[0], args.Cells[1]
+	if a.IsNumeric() {
+		berrf("**", "first argument is not a number: %s", a.Type)
+	}
+	if b.IsNumeric() {
+		berrf("**", "second argument is not a number: %s", b.Type)
+	}
+	if bothInt(a, b) {
+		return powInt(a.Int, b.Int)
+	}
+	return Float(math.Pow(toFloat(a), toFloat(b)))
+}
+
+func powInt(a, b int) *LVal {
+	if b == 0 {
+		return Int(1)
+	}
+	if b < 0 {
+		return Float(math.Pow(float64(a), float64(b)))
+	}
+	n := 1
+	atob := a
+	for 2*n < b {
+		atob *= atob
+		n *= 2
+	}
+	for n < b {
+		atob *= a
+		n++
+	}
+	return Int(atob)
 }
 
 func builtinAdd(env *LEnv, v *LVal) *LVal {
@@ -469,6 +524,16 @@ func numericListType(cells []*LVal) LValType {
 		}
 	}
 	return t
+}
+
+func toFloat(x *LVal) float64 {
+	if !x.IsNumeric() {
+		panic("toFloat called with non-numeric argument")
+	}
+	if x.Type == LInt {
+		return float64(x.Int)
+	}
+	return x.Float
 }
 
 func berrf(bname string, format string, v ...interface{}) *LVal {
