@@ -39,10 +39,14 @@ var langBuiltins = []*langBuiltin{
 	{"foldr", builtinFoldRight},
 	{"list", builtinList},
 	{"not", builtinNot},
+	{">", builtinGT},
+	{"<", builtinLT},
+	{"=", builtinEqNum},
 	{"+", builtinAdd},
 	{"-", builtinSub},
 	{"/", builtinDiv},
 	{"*", builtinMul},
+	{"debug-print", builtinDebugPrint},
 }
 
 // DefaultBuiltins returns the default set of LBuiltinDefs added to LEnv
@@ -256,6 +260,54 @@ func builtinNot(env *LEnv, v *LVal) *LVal {
 	return Nil()
 }
 
+func builtinLT(env *LEnv, args *LVal) *LVal {
+	if len(args.Cells) != 2 {
+		berrf("<", "two arguments expected (got %d)", len(args.Cells))
+	}
+	if args.Cells[0].Type != LNumber {
+		berrf("<", "first argument is not a number: %s", args.Cells[0].Type)
+	}
+	if args.Cells[1].Type != LNumber {
+		berrf("<", "second argument is not a number: %s", args.Cells[1].Type)
+	}
+	if args.Cells[0].Num < args.Cells[1].Num {
+		return Symbol("t")
+	}
+	return Nil()
+}
+
+func builtinGT(env *LEnv, args *LVal) *LVal {
+	if len(args.Cells) != 2 {
+		berrf(">", "two arguments expected (got %d)", len(args.Cells))
+	}
+	if args.Cells[0].Type != LNumber {
+		berrf(">", "first argument is not a number: %s", args.Cells[0].Type)
+	}
+	if args.Cells[1].Type != LNumber {
+		berrf(">", "second argument is not a number: %s", args.Cells[1].Type)
+	}
+	if args.Cells[0].Num > args.Cells[1].Num {
+		return Symbol("t")
+	}
+	return Nil()
+}
+
+func builtinEqNum(env *LEnv, args *LVal) *LVal {
+	if len(args.Cells) != 2 {
+		berrf("==", "two arguments expected (got %d)", len(args.Cells))
+	}
+	if args.Cells[0].Type != LNumber {
+		berrf("==", "first argument is not a number: %s", args.Cells[0].Type)
+	}
+	if args.Cells[1].Type != LNumber {
+		berrf("==", "second argument is not a number: %s", args.Cells[1].Type)
+	}
+	if args.Cells[0].Num == args.Cells[1].Num {
+		return Symbol("t")
+	}
+	return Nil()
+}
+
 func builtinAdd(env *LEnv, v *LVal) *LVal {
 	sum := 0
 	for _, c := range v.Cells {
@@ -315,6 +367,19 @@ func builtinMul(env *LEnv, v *LVal) *LVal {
 		prod *= c.Num
 	}
 	return Number(prod)
+}
+
+func builtinDebugPrint(env *LEnv, v *LVal) *LVal {
+	if len(v.Cells) == 0 {
+		fmt.Println()
+		return Nil()
+	}
+	args := make([]interface{}, len(v.Cells))
+	for i := range v.Cells {
+		args[i] = v.Cells[i]
+	}
+	fmt.Println(args...)
+	return Nil()
 }
 
 func berrf(bname string, format string, v ...interface{}) *LVal {
