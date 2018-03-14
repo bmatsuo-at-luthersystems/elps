@@ -5,6 +5,8 @@ var langMacros = []*langBuiltin{
 	{"defun", macroDefun},
 	{"quote", macroQuote},
 	{"quasiquote", macroQuasiquote},
+	{"let*", macroLetSeq},
+	{"let", macroLet},
 	{"progn", macroProgn},
 	{"if", macroIf},
 }
@@ -103,6 +105,55 @@ func findAndUnquote(env *LEnv, v *LVal) *LVal {
 		v.Cells[i] = findAndUnquote(env, v.Cells[i])
 	}
 	return v
+}
+
+func macroLetSeq(env *LEnv, args *LVal) *LVal {
+	letenv := NewEnv(env)
+	bindlist := args.Cells[0]
+	args.Cells = args.Cells[1:] // decap so we can call builtinProgn on args.
+	if bindlist.Type != LSExpr {
+		return berrf("let*", "first argument is not a list: %s", bindlist.Type)
+	}
+	for _, bind := range bindlist.Cells {
+		if bind.Type != LSExpr {
+			return berrf("let*", "first argument is not a list of pairs")
+		}
+		if len(bind.Cells) != 2 {
+			return berrf("let*", "first argument is not a list of pairs")
+		}
+		val := letenv.Eval(bind.Cells[1])
+		if val.Type == LError {
+			return val
+		}
+		letenv.Put(bind.Cells[0], val)
+	}
+	return macroProgn(letenv, args)
+}
+
+func macroLet(env *LEnv, args *LVal) *LVal {
+	letenv := NewEnv(env)
+	bindlist := args.Cells[0]
+	args.Cells = args.Cells[1:] // decap so we can call builtinProgn on args.
+	if bindlist.Type != LSExpr {
+		return berrf("let", "first argument is not a list: %s", bindlist.Type)
+	}
+	vals := make([]*LVal, len(bindlist.Cells))
+	for i, bind := range bindlist.Cells {
+		if bind.Type != LSExpr {
+			return berrf("let", "first argument is not a list of pairs")
+		}
+		if len(bind.Cells) != 2 {
+			return berrf("let", "first argument is not a list of pairs")
+		}
+		vals[i] = letenv.Eval(bind.Cells[1])
+		if vals[i].Type == LError {
+			return vals[i]
+		}
+	}
+	for i, bind := range bindlist.Cells {
+		letenv.Put(bind.Cells[0], vals[i])
+	}
+	return macroProgn(letenv, args)
 }
 
 func macroProgn(env *LEnv, args *LVal) *LVal {
