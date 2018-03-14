@@ -9,7 +9,6 @@ import (
 type LBuiltin func(env *LEnv, args *LVal) *LVal
 
 // LBuiltinDef is a built-in function
-// XXX: LBuiltinDef ... LBuiltInDef ... ?
 type LBuiltinDef interface {
 	Name() string
 	Eval(env *LEnv, args *LVal) *LVal
