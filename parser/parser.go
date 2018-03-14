@@ -40,7 +40,7 @@ var nodeTypeStrings = []string{
 }
 
 // Parse parses a lisp expression.
-func Parse(env *lisp.LEnv, text []byte) (bool, error) {
+func Parse(env *lisp.LEnv, print bool, text []byte) (bool, error) {
 	s := parsec.NewScanner(text)
 	openP := parsec.Atom("(", "OPENP")
 	closeP := parsec.Atom(")", "CLOSEP")
@@ -66,7 +66,7 @@ func Parse(env *lisp.LEnv, text []byte) (bool, error) {
 		evaled = true
 		// TODO:  Only dump the root if a verbosity flag is set
 		//dumpParsecNode(root, "")
-		evalParsecRoot(env, root)
+		evalParsecRoot(env, print, root)
 		root, s = expr(s)
 	}
 	return evaled, nil
@@ -177,11 +177,13 @@ func dumpParsecNode(node parsec.ParsecNode, indent string) {
 	}
 }
 
-func evalParsecRoot(env *lisp.LEnv, root parsec.ParsecNode) {
+func evalParsecRoot(env *lisp.LEnv, print bool, root parsec.ParsecNode) {
 	nodes := cleanParsecNodeList([]parsec.ParsecNode{root})
 	lval, ok := nodes[0].(*lisp.LVal)
 	if !ok {
 		panic("did not get an lval")
 	}
-	fmt.Println(env.Eval(lval))
+	if print {
+		fmt.Println(env.Eval(lval))
+	}
 }

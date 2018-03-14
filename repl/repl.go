@@ -41,7 +41,7 @@ func RunRepl(prompt string) {
 			rl.SetPrompt(prompt)
 		}
 		if len(line) != 0 {
-			complete, err := parser.Parse(env, line)
+			complete, err := parser.Parse(env, true, line)
 			if err != nil {
 				errln(err)
 				continue
