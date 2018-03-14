@@ -86,7 +86,7 @@ func findAndUnquote(env *LEnv, v *LVal) *LVal {
 	if v.Type != LSExpr {
 		return v
 	}
-	if len(v.Cells) > 0 && v.Cells[0].Type == LSymbol && v.Cells[0].Sym == "unquote" {
+	if len(v.Cells) > 0 && v.Cells[0].Type == LSymbol && v.Cells[0].Str == "unquote" {
 		// The v looks like ``(unquote EXPR)''
 		v.Cells = v.Cells[1:]
 		if len(v.Cells) != 1 {

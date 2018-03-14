@@ -38,10 +38,10 @@ func (env *LEnv) Get(k *LVal) *LVal {
 	if k.Type != LSymbol && k.Type != LQSymbol {
 		return Nil()
 	}
-	if k.Sym == "t" {
+	if k.Str == "t" {
 		return Symbol("t")
 	}
-	v, ok := env.Scope[k.Sym]
+	v, ok := env.Scope[k.Str]
 	if ok {
 		return v.Copy()
 	}
@@ -56,13 +56,13 @@ func (env *LEnv) Put(k, v *LVal) {
 	if k.Type != LSymbol && k.Type != LQSymbol {
 		return
 	}
-	if k.Sym == "t" {
+	if k.Str == "t" {
 		panic("constant value")
 	}
 	if v == nil {
 		panic("nil value")
 	}
-	env.Scope[k.Sym] = v.Copy()
+	env.Scope[k.Str] = v.Copy()
 }
 
 // GetGlobal takes LSymbol k and returns the value it is bound to in the root
@@ -206,7 +206,7 @@ func (env *LEnv) Call(fun *LVal, args *LVal) *LVal {
 				nargs, len(args.Cells))
 		}
 		argSym := fun.Formals.Cells[0]
-		if argSym.Sym == "&" {
+		if argSym.Str == "&" {
 			if len(fun.Formals.Cells) == 1 {
 				return Errorf("function argument format list ends with symbol ``&''")
 			}
@@ -220,7 +220,7 @@ func (env *LEnv) Call(fun *LVal, args *LVal) *LVal {
 		fun.Env.Put(argSym, v)
 	}
 	if len(fun.Formals.Cells) != 0 {
-		if fun.Formals.Cells[0].Sym != "&" {
+		if fun.Formals.Cells[0].Str != "&" {
 			return fun
 		}
 		if len(fun.Formals.Cells) != 2 {

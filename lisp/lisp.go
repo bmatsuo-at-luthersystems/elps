@@ -20,6 +20,7 @@ const (
 	LSExpr
 	LFun
 	LQuote
+	LString
 )
 
 var lvalTypeStrings = []string{
@@ -31,6 +32,7 @@ var lvalTypeStrings = []string{
 	LSExpr:   "sexpr",
 	LFun:     "function",
 	LQuote:   "quoted",
+	LString:  "string",
 }
 
 func (t LValType) String() string {
@@ -69,7 +71,7 @@ func (n Errno) String() string {
 type LVal struct {
 	Type   LValType
 	Num    int
-	Sym    string
+	Str    string
 	Err    error
 	Cells  []*LVal
 	Quoted bool // flag indicating a single level of quoting
@@ -90,11 +92,19 @@ func Number(x int) *LVal {
 	}
 }
 
+// String returns an LVal representing the string str.
+func String(str string) *LVal {
+	return &LVal{
+		Type: LString,
+		Str:  str,
+	}
+}
+
 // Symbol returns an LVal resprenting the symbol s
 func Symbol(s string) *LVal {
 	return &LVal{
 		Type: LSymbol,
-		Sym:  s,
+		Str:  s,
 	}
 }
 
@@ -102,7 +112,7 @@ func Symbol(s string) *LVal {
 func QSymbol(s string) *LVal {
 	return &LVal{
 		Type: LQSymbol,
-		Sym:  s,
+		Str:  s,
 	}
 }
 
@@ -244,13 +254,15 @@ func (v *LVal) str(onTheRecord bool) string {
 	switch v.Type {
 	case LNumber:
 		return quote + strconv.Itoa(v.Num)
+	case LString:
+		return quote + fmt.Sprintf("%q", v.Str)
 	case LError:
 		return quote + v.Err.Error()
 	case LSymbol:
 		if v.Quoted {
 			quote = QUOTE
 		}
-		return quote + v.Sym
+		return quote + v.Str
 	case LSExpr:
 		if v.Quoted {
 			quote = QUOTE

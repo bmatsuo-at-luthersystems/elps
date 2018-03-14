@@ -51,9 +51,9 @@ func Parse(env *lisp.LEnv, print bool, text []byte) (bool, error) {
 	symbol := parsec.Token(`(?:\pL|[_+\-*/\=<>!&])+`, "SYMBOL")
 	//qsymbol := parsec.And(nil, q, symbol)
 	term := parsec.OrdChoice(astNode(nodeTerm), // terminal token
+		parsec.String(),
 		number,
 		symbol, // symbol comes last because it swallows anything
-		//qsymbol,
 	)
 	var expr parsec.Parser // forward declaration allows for recursive parsing
 	exprList := parsec.Kleene(nil, &expr)
@@ -89,18 +89,22 @@ func newAST(typ nodeType, nodes []parsec.ParsecNode) parsec.ParsecNode {
 	switch typ {
 	case nodeTerm:
 		var lval *lisp.LVal
-		term := nodes[0].(*parsec.Terminal)
-		switch term.Name {
-		case "NUMBER":
-			x, err := strconv.Atoi(term.Value)
-			if err != nil {
-				// FIXME:  error location metadata totally escapes here
-				lval = lisp.Errorf("bad number")
-			} else {
-				lval = lisp.Number(x)
+		switch term := nodes[0].(type) {
+		case string:
+			lval = lisp.String(unquoteString(term))
+		case *parsec.Terminal:
+			switch term.Name {
+			case "NUMBER":
+				x, err := strconv.Atoi(term.Value)
+				if err != nil {
+					// FIXME:  error location metadata totally escapes here
+					lval = lisp.Errorf("bad number")
+				} else {
+					lval = lisp.Number(x)
+				}
+			case "SYMBOL":
+				lval = lisp.Symbol(term.Value)
 			}
-		case "SYMBOL":
-			lval = lisp.Symbol(term.Value)
 		}
 		return lval
 	case nodeSExpr:
@@ -190,4 +194,8 @@ func evalParsecRoot(env *lisp.LEnv, print bool, root parsec.ParsecNode) bool {
 		fmt.Println(env.Eval(lval))
 	}
 	return true
+}
+
+func unquoteString(s string) string {
+	return s[1 : len(s)-1]
 }
