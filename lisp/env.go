@@ -1,9 +1,19 @@
 package lisp
 
-import "fmt"
+import (
+	"fmt"
+	"sync/atomic"
+)
+
+var envCount uint64
+
+func getEnvID() uint {
+	return uint(atomic.AddUint64(&envCount, 1))
+}
 
 // LEnv is a lisp environment.
 type LEnv struct {
+	ID     uint
 	Scope  map[string]*LVal
 	Parent *LEnv
 }
@@ -11,9 +21,14 @@ type LEnv struct {
 // NewEnv returns initializes and returns a new LEnv.
 func NewEnv(parent *LEnv) *LEnv {
 	return &LEnv{
+		ID:     getEnvID(),
 		Scope:  make(map[string]*LVal),
 		Parent: parent,
 	}
+}
+
+func (env *LEnv) getFID() string {
+	return fmt.Sprintf("_G-%d", env.ID)
 }
 
 // Copy returns a new LEnv with a copy of env.Scope but a shared parent (not
@@ -95,7 +110,8 @@ func (env *LEnv) AddMacros(macs ...LBuiltinDef) {
 		if !exist.IsNil() && exist.Type != LError { // LError is ubound symbol
 			panic(fmt.Sprintf("macro already defined: %v (= %v)", k, exist))
 		}
-		env.Put(k, Macro(macs[i].Eval))
+		id := fmt.Sprintf("<builtin-macro ``%s''>", mac.Name())
+		env.Put(k, Macro(id, macs[i].Eval))
 	}
 }
 
@@ -105,9 +121,10 @@ func (env *LEnv) AddBuiltins(funs ...LBuiltinDef) {
 	if len(funs) == 0 {
 		funs = DefaultBuiltins()
 	}
-	for i := range funs {
-		k := Symbol(funs[i].Name())
-		v := Fun(funs[i].Eval)
+	for _, f := range funs {
+		k := Symbol(f.Name())
+		id := fmt.Sprintf("<builtin-function ``%s''>", f.Name())
+		v := Fun(id, f.Eval)
 		env.Put(k, v)
 	}
 }
@@ -235,8 +252,10 @@ func (env *LEnv) Call(fun *LVal, args *LVal) *LVal {
 		}
 		fun.Formals.Cells = nil
 	}
-	// NOTE: The bugs suggestion of chaining env here seems like dynamic
+	// NOTE:  The book's suggestion of chaining env here seems like dynamic
 	// scoping.
+	// NOTE:  This is indeed where you would chain environments to create
+	// dynamic scope.
 	//		fun.Env.Parent = env
 	s := SExpr()
 	s.Cells = append(s.Cells, fun.Body.Cells...)

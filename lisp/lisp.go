@@ -85,6 +85,7 @@ type LVal struct {
 	Env     *LEnv
 	Formals *LVal
 	Body    *LVal
+	FID     string
 }
 
 // Bool returns an LVal with truthiness identical to b.
@@ -157,19 +158,21 @@ func QExpr() *LVal {
 }
 
 // Fun returns an LVal representing a function
-func Fun(fn LBuiltin) *LVal {
+func Fun(fid string, fn LBuiltin) *LVal {
 	return &LVal{
 		Type:    LFun,
 		Builtin: fn,
+		FID:     fid,
 	}
 }
 
 // Macro returns an LVal representing a macro
-func Macro(fn LBuiltin) *LVal {
+func Macro(fid string, fn LBuiltin) *LVal {
 	return &LVal{
 		Type:    LFun,
 		Macro:   true,
 		Builtin: fn,
+		FID:     fid,
 	}
 }
 
@@ -182,11 +185,13 @@ func Lambda(formals *LVal, body *LVal) *LVal {
 	if formals.Type != LSExpr {
 		return Errorf("body is not a list: %v", body.Type)
 	}
+	env := NewEnv(nil)
 	return &LVal{
 		Type:    LFun,
-		Env:     NewEnv(nil),
+		Env:     env,
 		Formals: formals,
 		Body:    body,
+		FID:     env.getFID(),
 	}
 }
 
