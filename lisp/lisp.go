@@ -13,7 +13,8 @@ type LValType uint
 // Possible LValType values
 const (
 	LInvalid LValType = iota
-	LNumber
+	LInt
+	LFloat
 	LError
 	LSymbol
 	LQSymbol
@@ -25,7 +26,8 @@ const (
 
 var lvalTypeStrings = []string{
 	LInvalid: "INVALID",
-	LNumber:  "number",
+	LInt:     "int",
+	LFloat:   "float",
 	LError:   "error",
 	LSymbol:  "symbol",
 	LQSymbol: "qsymbol",
@@ -70,7 +72,8 @@ func (n Errno) String() string {
 // LVal is a lisp value
 type LVal struct {
 	Type   LValType
-	Num    int
+	Int    int
+	Float  float64
 	Str    string
 	Err    error
 	Cells  []*LVal
@@ -84,11 +87,27 @@ type LVal struct {
 	Body    *LVal
 }
 
-// Number returns an LVal representing the number x.
-func Number(x int) *LVal {
+// Bool returns an LVal with truthiness identical to b.
+func Bool(b bool) *LVal {
+	if b {
+		return Symbol("t")
+	}
+	return Nil()
+}
+
+// Int returns an LVal representing the number x.
+func Int(x int) *LVal {
 	return &LVal{
-		Type: LNumber,
-		Num:  x,
+		Type: LInt,
+		Int:  x,
+	}
+}
+
+// Float returns an LVal representation of the number x
+func Float(x float64) *LVal {
+	return &LVal{
+		Type:  LFloat,
+		Float: x,
 	}
 }
 
@@ -210,6 +229,17 @@ func (v *LVal) IsNil() bool {
 	return false
 }
 
+// IsNumeric returns true if v has a primitive numeric type (int, float64).
+func (v *LVal) IsNumeric() bool {
+	switch v.Type {
+	case LInt:
+		return true
+	case LFloat:
+		return true
+	}
+	return false
+}
+
 // Copy creates a deep copy of the receiver.
 func (v *LVal) Copy() *LVal {
 	if v == nil {
@@ -252,8 +282,10 @@ func (v *LVal) str(onTheRecord bool) string {
 		quote = QUOTE
 	}
 	switch v.Type {
-	case LNumber:
-		return quote + strconv.Itoa(v.Num)
+	case LInt:
+		return quote + strconv.Itoa(v.Int)
+	case LFloat:
+		return quote + strconv.FormatFloat(v.Float, 'g', -1, 64)
 	case LString:
 		return quote + fmt.Sprintf("%q", v.Str)
 	case LError:

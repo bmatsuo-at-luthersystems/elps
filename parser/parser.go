@@ -14,6 +14,7 @@ package parser
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/bmatsuo/somelisp/lisp"
 	parsec "github.com/prataprc/goparsec"
@@ -46,13 +47,13 @@ func Parse(env *lisp.LEnv, print bool, text []byte) (bool, error) {
 	closeP := parsec.Atom(")", "CLOSEP")
 	q := parsec.Atom("'", "QUOTE")
 	comment := parsec.Token(`;([^\n]*[^\s])?`, "COMMENT")
-	number := parsec.Token(`[+-]?[0-9]+`, "NUMBER")
+	decimal := parsec.Token(`[+-]?[0-9]+(.[0-9]+)?([eE][+-]?[0-9]+)?`, "DECIMAL")
 	//symbol := parsec.Token(`[^\s()']+`, "SYMBOL")
 	symbol := parsec.Token(`(?:\pL|[_+\-*/\=<>!&])+`, "SYMBOL")
 	//qsymbol := parsec.And(nil, q, symbol)
 	term := parsec.OrdChoice(astNode(nodeTerm), // terminal token
 		parsec.String(),
-		number,
+		decimal,
 		symbol, // symbol comes last because it swallows anything
 	)
 	var expr parsec.Parser // forward declaration allows for recursive parsing
@@ -94,13 +95,23 @@ func newAST(typ nodeType, nodes []parsec.ParsecNode) parsec.ParsecNode {
 			lval = lisp.String(unquoteString(term))
 		case *parsec.Terminal:
 			switch term.Name {
-			case "NUMBER":
-				x, err := strconv.Atoi(term.Value)
-				if err != nil {
-					// FIXME:  error location metadata totally escapes here
-					lval = lisp.Errorf("bad number")
+			case "DECIMAL":
+				if strings.ContainsAny(term.Value, ".eE") {
+					f, err := strconv.ParseFloat(term.Value, 64)
+					if err != nil {
+						// FIXME:  error location metadata totally escapes here
+						lval = lisp.Errorf("bad number: %v (%s)", err, term.Value)
+					} else {
+						lval = lisp.Float(f)
+					}
 				} else {
-					lval = lisp.Number(x)
+					x, err := strconv.Atoi(term.Value)
+					if err != nil {
+						// FIXME:  error location metadata totally escapes here
+						lval = lisp.Errorf("bad number: %v (%s)", err, term.Value)
+					} else {
+						lval = lisp.Int(x)
+					}
 				}
 			case "SYMBOL":
 				lval = lisp.Symbol(term.Value)

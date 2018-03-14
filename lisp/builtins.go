@@ -264,109 +264,163 @@ func builtinLT(env *LEnv, args *LVal) *LVal {
 	if len(args.Cells) != 2 {
 		berrf("<", "two arguments expected (got %d)", len(args.Cells))
 	}
-	if args.Cells[0].Type != LNumber {
-		berrf("<", "first argument is not a number: %s", args.Cells[0].Type)
+	a, b := args.Cells[0], args.Cells[1]
+	if a.IsNumeric() {
+		berrf("<", "first argument is not a number: %s", a.Type)
 	}
-	if args.Cells[1].Type != LNumber {
-		berrf("<", "second argument is not a number: %s", args.Cells[1].Type)
+	if b.IsNumeric() {
+		berrf("<", "second argument is not a number: %s", b.Type)
 	}
-	if args.Cells[0].Num < args.Cells[1].Num {
-		return Symbol("t")
+	if bothInt(a, b) {
+		return Bool(a.Int < b.Int)
 	}
-	return Nil()
+	return Bool(a.Float < b.Float)
 }
 
 func builtinGT(env *LEnv, args *LVal) *LVal {
 	if len(args.Cells) != 2 {
 		berrf(">", "two arguments expected (got %d)", len(args.Cells))
 	}
-	if args.Cells[0].Type != LNumber {
-		berrf(">", "first argument is not a number: %s", args.Cells[0].Type)
+	a, b := args.Cells[0], args.Cells[1]
+	if a.IsNumeric() {
+		berrf(">", "first argument is not a number: %s", a.Type)
 	}
-	if args.Cells[1].Type != LNumber {
-		berrf(">", "second argument is not a number: %s", args.Cells[1].Type)
+	if b.IsNumeric() {
+		berrf(">", "second argument is not a number: %s", b.Type)
 	}
-	if args.Cells[0].Num > args.Cells[1].Num {
-		return Symbol("t")
+	if bothInt(a, b) {
+		return Bool(a.Int > b.Int)
 	}
-	return Nil()
+	return Bool(a.Float > b.Float)
 }
 
 func builtinEqNum(env *LEnv, args *LVal) *LVal {
 	if len(args.Cells) != 2 {
-		berrf("==", "two arguments expected (got %d)", len(args.Cells))
+		berrf("=", "two arguments expected (got %d)", len(args.Cells))
 	}
-	if args.Cells[0].Type != LNumber {
-		berrf("==", "first argument is not a number: %s", args.Cells[0].Type)
+	a, b := args.Cells[0], args.Cells[1]
+	if a.IsNumeric() {
+		berrf("=", "first argument is not a number: %s", a.Type)
 	}
-	if args.Cells[1].Type != LNumber {
-		berrf("==", "second argument is not a number: %s", args.Cells[1].Type)
+	if b.IsNumeric() {
+		berrf("=", "second argument is not a number: %s", b.Type)
 	}
-	if args.Cells[0].Num == args.Cells[1].Num {
-		return Symbol("t")
+	if bothInt(a, b) {
+		return Bool(a.Int == b.Int)
 	}
-	return Nil()
+	return Bool(a.Float == b.Float)
 }
 
 func builtinAdd(env *LEnv, v *LVal) *LVal {
-	sum := 0
+	if len(v.Cells) == 0 {
+		return Int(0)
+	}
 	for _, c := range v.Cells {
-		if c.Type != LNumber {
+		if !c.IsNumeric() {
 			return berrf("+", "argument is not a number: %v", c.Type)
 		}
-		sum += c.Num
 	}
-	return Number(sum)
+	elemt := numericListType(v.Cells)
+	if elemt == LInt {
+		sum := 0
+		for _, c := range v.Cells {
+			sum += c.Int
+		}
+		return Int(sum)
+	}
+	sum := 1.0
+	for _, c := range v.Cells {
+		if c.Type == LInt {
+			sum += float64(c.Int)
+		} else {
+			sum += c.Float
+		}
+	}
+	return Float(sum)
 }
 
 func builtinSub(env *LEnv, v *LVal) *LVal {
-	diff := 0
-	if len(v.Cells) > 1 {
-		if v.Cells[0].Type != LNumber {
-			return berrf("-", "argument is not a number: %v", v.Cells[0].Type)
-		}
-		diff = v.Cells[0].Num
-		v.Cells = v.Cells[1:]
+	if len(v.Cells) < 0 {
+		return Int(0)
 	}
+
 	for _, c := range v.Cells {
-		if c.Type != LNumber {
-			return berrf("-", "argument is not a number: %v", c.Type)
+		if !c.IsNumeric() {
+			return berrf("*", "argument is not a number: %v", c.Type)
 		}
-		diff -= c.Num
 	}
-	return Number(diff)
+	elemt := numericListType(v.Cells)
+	if elemt == LInt {
+		diff := v.Cells[0].Int
+		for _, c := range v.Cells[1:] {
+			diff -= c.Int
+		}
+		return Int(diff)
+	}
+	diff := v.Cells[0].Float
+	for _, c := range v.Cells[1:] {
+		if c.Type == LInt {
+			diff -= float64(c.Int)
+		} else {
+			diff -= c.Float
+		}
+	}
+	return Float(diff)
 }
 
 func builtinDiv(env *LEnv, v *LVal) *LVal {
-	div := 1
-	if len(v.Cells) > 1 {
-		if v.Cells[0].Type != LNumber {
-			return berrf("/", "argument is not a number: %v", v.Cells[0].Type)
-		}
-		div = v.Cells[0].Num
-		v.Cells = v.Cells[1:]
+	if len(v.Cells) < 0 {
+		return Int(0)
 	}
+
 	for _, c := range v.Cells {
-		if c.Type != LNumber {
-			return berrf("/", "argument is not a number: %v", c.Type)
+		if !c.IsNumeric() {
+			return berrf("*", "argument is not a number: %v", c.Type)
 		}
-		if c.Num == 0 {
-			return berrf("/", "argument is not a number: %v", c.Type)
-		}
-		div /= c.Num
 	}
-	return Number(div)
+	// Never perform integer division with the function ``/''.  Integer
+	// division needs to a separate function to reduce the number of bugs
+	// caused from people doing an integer division unintentionally.
+	div := v.Cells[0].Float
+	if v.Cells[0].Type == LInt {
+		div = float64(v.Cells[0].Int)
+	}
+	for _, c := range v.Cells[1:] {
+		if c.Type == LInt {
+			div /= float64(c.Int)
+		} else {
+			div /= c.Float
+		}
+	}
+	return Float(div)
 }
 
 func builtinMul(env *LEnv, v *LVal) *LVal {
-	prod := 1
+	if len(v.Cells) < 0 {
+		return Int(1)
+	}
 	for _, c := range v.Cells {
-		if c.Type != LNumber {
+		if !c.IsNumeric() {
 			return berrf("*", "argument is not a number: %v", c.Type)
 		}
-		prod *= c.Num
 	}
-	return Number(prod)
+	elemt := numericListType(v.Cells)
+	if elemt == LInt {
+		prod := 1
+		for _, c := range v.Cells {
+			prod *= c.Int
+		}
+		return Int(prod)
+	}
+	prod := 1.0
+	for _, c := range v.Cells {
+		if c.Type == LInt {
+			prod *= float64(c.Int)
+		} else {
+			prod *= c.Float
+		}
+	}
+	return Float(prod)
 }
 
 func builtinDebugPrint(env *LEnv, v *LVal) *LVal {
@@ -380,6 +434,41 @@ func builtinDebugPrint(env *LEnv, v *LVal) *LVal {
 	}
 	fmt.Println(args...)
 	return Nil()
+}
+
+func bothInt(a, b *LVal) bool {
+	if a.Type == LInt && b.Type == LInt {
+		return true
+	}
+	return false
+}
+
+func allInt(vs []*LVal) bool {
+	for _, v := range vs {
+		if v.Type != LInt {
+			return false
+		}
+	}
+	return true
+}
+
+func numericListType(cells []*LVal) LValType {
+	if len(cells) == 0 {
+		return LInvalid
+	}
+	if !cells[0].IsNumeric() {
+		return cells[0].Type
+	}
+	t := cells[0].Type
+	for _, c := range cells[1:] {
+		if t == c.Type {
+			continue
+		}
+		if c.IsNumeric() {
+			t = LFloat
+		}
+	}
+	return t
 }
 
 func berrf(bname string, format string, v ...interface{}) *LVal {
