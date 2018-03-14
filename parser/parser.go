@@ -45,6 +45,7 @@ func Parse(env *lisp.LEnv, print bool, text []byte) (bool, error) {
 	openP := parsec.Atom("(", "OPENP")
 	closeP := parsec.Atom(")", "CLOSEP")
 	q := parsec.Atom("'", "QUOTE")
+	comment := parsec.Token(`;([^\n]*[^\s])?`, "COMMENT")
 	number := parsec.Token(`[+-]?[0-9]+`, "NUMBER")
 	//symbol := parsec.Token(`[^\s()']+`, "SYMBOL")
 	symbol := parsec.Token(`(?:\pL|[_+\-*/\=<>!&])+`, "SYMBOL")
@@ -58,15 +59,12 @@ func Parse(env *lisp.LEnv, print bool, text []byte) (bool, error) {
 	exprList := parsec.Kleene(nil, &expr)
 	sexpr := parsec.And(astNode(nodeSExpr), openP, exprList, closeP)
 	qexpr := parsec.And(astNode(nodeQExpr), q, &expr)
-	expr = parsec.OrdChoice(nil, term, sexpr, qexpr)
+	expr = parsec.OrdChoice(nil, comment, term, sexpr, qexpr)
 
 	evaled := false
 	root, s := expr(s)
 	for root != nil {
-		evaled = true
-		// TODO:  Only dump the root if a verbosity flag is set
-		//dumpParsecNode(root, "")
-		evalParsecRoot(env, print, root)
+		evaled = evalParsecRoot(env, print, root)
 		root, s = expr(s)
 	}
 	return evaled, nil
@@ -177,13 +175,19 @@ func dumpParsecNode(node parsec.ParsecNode, indent string) {
 	}
 }
 
-func evalParsecRoot(env *lisp.LEnv, print bool, root parsec.ParsecNode) {
+func evalParsecRoot(env *lisp.LEnv, print bool, root parsec.ParsecNode) bool {
 	nodes := cleanParsecNodeList([]parsec.ParsecNode{root})
+	if len(nodes) == 0 {
+		// we can be here if there is only whitespace on a line
+		return false
+	}
 	lval, ok := nodes[0].(*lisp.LVal)
 	if !ok {
-		panic("did not get an lval")
+		// we can be here if there is only a comment on a line
+		return false
 	}
 	if print {
 		fmt.Println(env.Eval(lval))
 	}
+	return true
 }

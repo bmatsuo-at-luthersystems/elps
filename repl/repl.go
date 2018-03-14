@@ -36,6 +36,7 @@ func RunRepl(prompt string) {
 			rl.SetPrompt(prompt)
 		}
 		if len(buf) != 0 {
+			buf = append(buf, '\n')
 			line = append(buf, line...)
 			buf = nil
 			rl.SetPrompt(prompt)
