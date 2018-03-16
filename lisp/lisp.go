@@ -44,6 +44,16 @@ func (t LType) String() string {
 	return lvalTypeStrings[t]
 }
 
+// LFunType denotes special functions, either macros or special operators.
+type LFunType uint
+
+// LFunType constants.  LFunNone indicates a normal function.
+const (
+	LFunNone = iota
+	LFunMacro
+	LFunSpecialOp
+)
+
 // LVal is a lisp value
 type LVal struct {
 	Type   LType
@@ -56,6 +66,7 @@ type LVal struct {
 
 	// Variables needed for function values
 	Macro   bool
+	FunType LFunType
 	Builtin LBuiltin
 	Env     *LEnv
 	Formals *LVal
@@ -145,7 +156,20 @@ func Fun(fid string, fn LBuiltin) *LVal {
 func Macro(fid string, fn LBuiltin) *LVal {
 	return &LVal{
 		Type:    LFun,
-		Macro:   true,
+		FunType: LFunMacro,
+		Builtin: fn,
+		FID:     fid,
+	}
+}
+
+// SpecialOp returns an LVal representing a special operator.  Special
+// operators are function which receive unevaluated results, like macros.
+// However values returned by special operations do not require further
+// evaluation, unlike macros.
+func SpecialOp(fid string, fn LBuiltin) *LVal {
+	return &LVal{
+		Type:    LFun,
+		FunType: LFunSpecialOp,
 		Builtin: fn,
 		FID:     fid,
 	}
@@ -198,6 +222,24 @@ func Errorf(format string, v ...interface{}) *LVal {
 		Type: LError,
 		Err:  fmt.Errorf(format, v...),
 	}
+}
+
+// IsSpecialFun returns true if v is a special function.  IsSpecialFun doesn't
+// actually check v.Type, only v.FunType.
+func (v *LVal) IsSpecialFun() bool {
+	return v.FunType != LFunNone
+}
+
+// IsMacro returns true if v is a macro function.  IsMacro doesn't
+// actually check v.Type, only v.FunType.
+func (v *LVal) IsMacro() bool {
+	return v.FunType == LFunMacro
+}
+
+// IsSpecialOp returns true if v is a special operator.  IsMacro doesn't
+// actually check v.Type, only v.FunType.
+func (v *LVal) IsSpecialOp() bool {
+	return v.FunType == LFunSpecialOp
 }
 
 // IsNil returns true if v represents a nil value.

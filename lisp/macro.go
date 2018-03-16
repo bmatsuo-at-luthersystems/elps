@@ -5,24 +5,38 @@ import (
 	"os"
 )
 
+var langSpecialOps = []*langBuiltin{
+	{"lambda", builtinLambda},
+	{"let*", macroLetSeq},
+	{"let", macroLet},
+	{"progn", macroProgn},
+	{"if", macroIf},
+}
+
 var langMacros = []*langBuiltin{
 	{"defmacro", macroDefmacro},
 	{"defun", macroDefun},
 	{"quote", macroQuote},
 	{"quasiquote", macroQuasiquote},
-	{"let*", macroLetSeq},
-	{"let", macroLet},
 	{"trace", macroTrace},
-	{"progn", macroProgn},
-	{"if", macroIf},
 }
 
-// DefaultMacros returns the default set of LMacroDefs added to LEnv objects
+// DefaultMacros returns the default set of LBuiltinDef added to LEnv objects
 // when LEnv.AddMacros is called without arguments.
 func DefaultMacros() []LBuiltinDef {
 	macros := make([]LBuiltinDef, len(langMacros))
 	for i := range macros {
 		macros[i] = langMacros[i]
+	}
+	return macros
+}
+
+// DefaultSpecialOps returns the default set of LBuiltinDef added to LEnv
+// objects when LEnv.AddSpecialOps is called without arguments.
+func DefaultSpecialOps() []LBuiltinDef {
+	macros := make([]LBuiltinDef, len(langSpecialOps))
+	for i := range macros {
+		macros[i] = langSpecialOps[i]
 	}
 	return macros
 }
@@ -43,8 +57,8 @@ func macroDefmacro(env *LEnv, args *LVal) *LVal {
 	if fun.Type == LError {
 		return fun
 	}
-	fun.Macro = true     // evaluate as a macro
-	fun.Env.Parent = env // function definitions get a lexical scope
+	fun.FunType = LFunMacro // evaluate as a macro
+	fun.Env.Parent = env    // function definitions get a lexical scope
 	env.PutGlobal(sym, fun)
 	return Nil()
 }
@@ -171,11 +185,14 @@ func macroTrace(env *LEnv, args *LVal) *LVal {
 }
 
 func macroProgn(env *LEnv, args *LVal) *LVal {
-	val := Nil()
+	if len(args.Cells) == 0 {
+		return Nil()
+	}
+	var val *LVal
 	for _, c := range args.Cells {
 		val = env.Eval(c)
 	}
-	return Quote(val)
+	return val
 }
 
 // (if test-form then-form else-form)
@@ -190,10 +207,8 @@ func macroIf(env *LEnv, s *LVal) *LVal {
 	ok := r.IsNil()
 	if ok {
 		// test-form evaluated to nil (false)
-		//s.Cells[2].Quoted = false
-		return s.Cells[2]
+		return env.Eval(s.Cells[2])
 	}
 	// test-form evaluated to something non-nil (true)
-	//s.Cells[1].Quoted = false
-	return s.Cells[1]
+	return env.Eval(s.Cells[1])
 }

@@ -15,6 +15,7 @@ import (
 func RunRepl(prompt string) {
 	env := lisp.NewEnv(nil)
 	env.AddBuiltins()
+	env.AddSpecialOps()
 	env.AddMacros()
 
 	rl, err := readline.New(prompt)

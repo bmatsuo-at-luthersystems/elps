@@ -104,14 +104,31 @@ func (env *LEnv) AddMacros(macs ...LBuiltinDef) {
 	if len(macs) == 0 {
 		macs = DefaultMacros()
 	}
-	for i, mac := range macs {
+	for _, mac := range macs {
 		k := Symbol(mac.Name())
 		exist := env.Get(k)
 		if !exist.IsNil() && exist.Type != LError { // LError is ubound symbol
 			panic(fmt.Sprintf("macro already defined: %v (= %v)", k, exist))
 		}
 		id := fmt.Sprintf("<builtin-macro ``%s''>", mac.Name())
-		env.Put(k, Macro(id, macs[i].Eval))
+		env.Put(k, Macro(id, mac.Eval))
+	}
+}
+
+// AddSpecialOps binds the given special operators to their names in env.  When
+// called with no arguments AddSpecialOps adds the DefaultSpecialOps to env.
+func (env *LEnv) AddSpecialOps(ops ...LBuiltinDef) {
+	if len(ops) == 0 {
+		ops = DefaultSpecialOps()
+	}
+	for _, op := range ops {
+		k := Symbol(op.Name())
+		exist := env.Get(k)
+		if !exist.IsNil() && exist.Type != LError { // LError is ubound symbol
+			panic(fmt.Sprintf("macro already defined: %v (= %v)", k, exist))
+		}
+		id := fmt.Sprintf("<builtin-macro ``%s''>", op.Name())
+		env.Put(k, SpecialOp(id, op.Eval))
 	}
 }
 
@@ -168,7 +185,7 @@ func (env *LEnv) EvalSExpr(s *LVal) *LVal {
 	if f.Type != LFun {
 		return Errorf("first element of expression is not a function: %v", f)
 	}
-	if f.Macro {
+	if f.IsSpecialFun() {
 		// Argument to a macro a not evaluated but they aren't quoted either.
 		// This behavior is what allows ``unquote'' to properly resolve macro
 		// arguments symbols during and still produce valid code during macro
@@ -196,25 +213,20 @@ func (env *LEnv) EvalSExpr(s *LVal) *LVal {
 	if r.Type == LError {
 		return r
 	}
-	if !f.Macro {
+	if !f.IsMacro() {
 		return r
 	}
-	// This is a lazy unquote.  Some builtin macros need return the quoted
-	// result of an evaluation (probably because they are supposed to be
-	// special operators, not macros).  Unquoting in this way appears to allow
-	// the upcoming evaluation to produce the correct value for user defined
-	// macros, which are typically using quasiquote.  Builtin macros can be
-	// massaged to return a proper value.  I'm sure there is a bug where
-	// something is unintentionally unquoted.  I will deal with implementing a
-	// proper system for special operators at that point.
-	//
-	// NOTE:  As far as I have reasoned a special operator is like a macro, in
-	// that it receives unevaluated arguments, but it is like a function in
-	// that its return value is not expected to require another evaluation.
-	r.Quoted = false
 	// TODO:  Turn macro expansion into a loop instead of a recursive process.
 	// A real program will probably exhaust system memory with the call stack
 	// when expanding macros.
+
+	// This is a lazy unquote.  Unquoting in this way appears to allow the
+	// upcoming evaluation to produce the correct value for user defined
+	// macros, which are typically using quasiquote.  Builtin macros can be
+	// massaged to return a proper value.  I'm sure there is a bug where
+	// something is unintentionally unquoted.  I will deal with
+	// implementing a proper system for special operators at that point.
+	r.Quoted = false
 	return env.Eval(r)
 }
 

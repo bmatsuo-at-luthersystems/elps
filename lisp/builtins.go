@@ -29,7 +29,6 @@ func (fun *langBuiltin) Eval(env *LEnv, args *LVal) *LVal {
 
 var langBuiltins = []*langBuiltin{
 	{"set", builtinSet},
-	{"lambda", builtinLambda},
 	{"eval", builtinEval},
 	{"car", builtinCAR},
 	{"cdr", builtinCDR},

@@ -13,16 +13,17 @@ func TestEval_simple(t *testing.T) {
 		result string
 	}
 	tests := []struct {
+		name string
 		testexpr
 	}{
-		{testexpr{
+		{"quotes", testexpr{
 			{"3", "3"},
 			// a single quote on a self-evaluating expression does not show up.
 			{"'3", "3"},
 			// a double quotes on a self-evaluating expression both show up.
 			{"''3", "''3"},
 		}},
-		{testexpr{
+		{"symbols", testexpr{
 			{"()", "()"},
 			{"'t", "'t"},
 			{"t", "t"},
@@ -30,11 +31,11 @@ func TestEval_simple(t *testing.T) {
 			// test later if problematic.
 			{"a", "unbound symbol: a"},
 		}},
-		{testexpr{
+		{"lists basics", testexpr{
 			{"'()", "'()"},
 			{"'(1 2 3)", "'(1 2 3)"},
 		}},
-		{testexpr{
+		{"arithmetic", testexpr{
 			// arithmetic functions w/o args
 			{"(+)", "0"},
 			{"(-)", "0"},
@@ -65,7 +66,7 @@ func TestEval_simple(t *testing.T) {
 			{"(% -1 3)", "-1"},
 			{"(% -5 3)", "-2"},
 		}},
-		{testexpr{
+		{"logic", testexpr{
 			{"(not t)", "()"},
 			{"(not ())", "t"},
 			{"(= 1 1.0)", "t"},
@@ -97,24 +98,22 @@ func TestEval_simple(t *testing.T) {
 			{"(>= 2 1)", "t"},
 			{"(>= 2.0 1)", "t"},
 		}},
-		{testexpr{
+		{"lists", testexpr{
 			{"(cons 1 (cons 2 (cons 3 ())))", "'(1 2 3)"},
 			{"(list 1 2 3)", "'(1 2 3)"},
 			{"(concat (list 1 2) (list 3))", "'(1 2 3)"},
-		}},
-		{testexpr{
 			{"(cons 1 (cons 2 (cons 3 ())))", "'(1 2 3)"},
 			{"(list 1 2 3)", "'(1 2 3)"},
 			{"(reverse (list 1 2 3))", "'(3 2 1)"},
 			{"(reverse (list 1 2))", "'(2 1)"},
 			{"(concat (list 1 2) (list 3))", "'(1 2 3)"},
 		}},
-		{testexpr{
-			{"((lambda () '(+ 1 1)))", "2"},
-			{"((lambda '(n) '(+ n 1)) 1)", "2"},
-			{"((lambda '(x y) '(+ x y)) 1 2)", "3"},
+		{"function basics", testexpr{
+			{"((lambda () (+ 1 1)))", "2"},
+			{"((lambda (n) (+ n 1)) 1)", "2"},
+			{"((lambda (x y) (+ x y)) 1 2)", "3"},
 		}},
-		{testexpr{
+		{"defun", testexpr{
 			// defun macro
 			{"(defun fn0 () (+ 1 1))", "()"},
 			{"(defun fn1 (n) (+ n 1))", "()"},
@@ -123,7 +122,7 @@ func TestEval_simple(t *testing.T) {
 			{"(fn1 1)", "2"},
 			{"(fn2 1 2)", "3"},
 		}},
-		{testexpr{
+		{"if", testexpr{
 			// if operator
 			{"(if () 1 2)", "2"},
 			{"(if t 1 2)", "1"},
@@ -134,7 +133,7 @@ func TestEval_simple(t *testing.T) {
 			{"(if '(()) 1 2)", "1"},
 			{`(if "false" 1 2)`, "1"},
 		}},
-		{testexpr{
+		{"lexical scope", testexpr{
 			// simple lexical scoping tests
 			{"(let ((x 1)) x)", "1"},
 			{"x", "unbound symbol: x"},
@@ -143,15 +142,15 @@ func TestEval_simple(t *testing.T) {
 			{"x", "1"},
 			{"(let ((x 3)) (defun fn (y) (+ x y)))", "()"},
 			{"(let ((x 2)) (fn 2))", "5"},
-			{"(((lambda '(x) '(lambda () '(+ x 2))) 3))", "5"},
+			{"(((lambda (x) (lambda () (+ x 2))) 3))", "5"},
 		}},
-		{testexpr{
-			{"(map (lambda '(x) '(+ x x)) '(1 2 3))", "'(2 4 6)"},
+		{"fp", testexpr{
+			{"(map (lambda (x) (+ x x)) '(1 2 3))", "'(2 4 6)"},
 			{"(defun flip (fn x y) (fn y x))", "()"},
 			{"(foldl (flip cons) () '(1 2 3))", "'(3 2 1)"},
 			{"(foldr cons () '(1 2 3))", "'(1 2 3)"},
 		}},
-		{testexpr{
+		{"defmacro", testexpr{
 			{"(defmacro m0 () (quasiquote (+ 1 1)))", "()"},
 			{"(defmacro m1 (x) (quasiquote (+ (unquote x) 1)))", "()"},
 			{"(defmacro m2 (x y) (quasiquote (+ (unquote x) (unquote y))))", "()"},
@@ -159,17 +158,17 @@ func TestEval_simple(t *testing.T) {
 			{"(m1 1)", "2"},
 			{"(m2 1 2)", "3"},
 		}},
-		{testexpr{
+		{"defmacro advanced 1", testexpr{
 			{"(defmacro m1 (x) (quasiquote (let ((y (+ (unquote x) 1))) (+ y y))))", "()"},
 			{"(set 'z 1)", "1"},
 			{"(m1 z)", "4"},
 		}},
-		{testexpr{
+		{"defmacro advanced 2", testexpr{
 			{"(defmacro m1 (x) (quasiquote (let ((y (+ (unquote x) 1))) (+ y y))))", "()"},
 			{"(set 'z 1)", "1"},
 			{"(m1 z)", "4"},
 		}},
-		//{testexpr{
+		//{"defmacro advanced 3", testexpr{
 		//	{`(defmacro ~>> (x & chain)
 		//		(let ((c chain))
 		//			(if c
@@ -183,24 +182,25 @@ func TestEval_simple(t *testing.T) {
 	for i, test := range tests {
 		env := lisp.NewEnv(nil)
 		env.AddBuiltins()
+		env.AddSpecialOps()
 		env.AddMacros()
 		for j, expr := range test.testexpr {
 			v, _, err := parser.ParseLVal([]byte(expr.expr))
 			if err != nil {
-				t.Errorf("test %d: expr %d: parse error: %v", i, j, err)
+				t.Errorf("test %d %q: expr %d: parse error: %v", i, test.name, j, err)
 				continue
 			}
 			if len(v) == 0 {
-				t.Errorf("test %d: expr %d: no expression parsed", i, j)
+				t.Errorf("test %d %q: expr %d: no expression parsed", i, test.name, j)
 				continue
 			}
 			if len(v) != 1 {
-				t.Errorf("test %d: expr %d: more than one expression parsed (%d)", i, j, len(v))
+				t.Errorf("test %d %q: expr %d: more than one expression parsed (%d)", i, test.name, j, len(v))
 				continue
 			}
 			result := env.Eval(v[0]).String()
 			if result != expr.result {
-				t.Errorf("test %d: expr %d: expected result %s (got %s)", i, j, expr.result, result)
+				t.Errorf("test %d %q: expr %d: expected result %s (got %s)", i, test.name, j, expr.result, result)
 			}
 		}
 	}
