@@ -79,7 +79,7 @@ func newParsecParser() parsec.Parser {
 	comment := parsec.Token(`;([^\n]*[^\s])?`, "COMMENT")
 	decimal := parsec.Token(`[+-]?[0-9]+([.][0-9]+)?([eE][+-]?[0-9]+)?`, "DECIMAL")
 	//symbol := parsec.Token(`[^\s()']+`, "SYMBOL")
-	symbol := parsec.Token(`(?:\pL|[_+\-*/\=<>!&])(?:\pL|[0-9]|[_+\-*/\=<>!&])*`, "SYMBOL")
+	symbol := parsec.Token(`(?:\pL|[_+\-*/\=<>!&~])(?:\pL|[0-9]|[_+\-*/\=<>!&~])*`, "SYMBOL")
 	//qsymbol := parsec.And(nil, q, symbol)
 	term := parsec.OrdChoice(astNode(nodeTerm), // terminal token
 		parsec.String(),
@@ -177,13 +177,6 @@ func cleanParsecNodeList(lis []parsec.ParsecNode) []parsec.ParsecNode {
 
 func dumpAST(t *ast, indent string) {
 	line := fmt.Sprintf("%sAST NODE type=%v", indent, t.typ)
-	/*
-		if t.typ == nodeTerm {
-			for _, node := range t.children {
-				line += fmt.Sprintf(" %v %v", node.(*parsec.Terminal).GetName(), node.(*parsec.Terminal).GetValue())
-			}
-		}
-	*/
 	fmt.Println(line)
 	for _, c := range t.children {
 		dumpParsecNode(c, indent+"  ")

@@ -130,8 +130,11 @@ func (env *LEnv) AddBuiltins(funs ...LBuiltinDef) {
 }
 
 // Eval evaluates v in the context (scope) of env and returns the resulting
-// LVal.  Eval does not unquote v during evaluation -- a difference between
-// Eval and the ``eval'' builtin function.
+// LVal.
+//
+// NOTE:  Eval shouldn't unquote v during evaluation -- a difference between
+// Eval and the ``eval'' builtin function, but it does.  For some reason macros
+// won't work without this unquoting.
 func (env *LEnv) Eval(v *LVal) *LVal {
 	if v.Quoted {
 		return v
@@ -237,6 +240,7 @@ func (env *LEnv) Call(fun *LVal, args *LVal) *LVal {
 			argSym = fun.Formals.Cells[1]
 			q := QExpr()
 			q.Cells = args.Cells[i:]
+			fun.Formals.Cells = nil
 			fun.Env.Put(argSym, q)
 			break
 		}
@@ -250,6 +254,8 @@ func (env *LEnv) Call(fun *LVal, args *LVal) *LVal {
 		if len(fun.Formals.Cells) != 2 {
 			return Errorf("function argument format list ends with symbol ``&''")
 		}
+		// We never bound the final argument to a value so we do it here.
+		fun.Env.Put(fun.Formals.Cells[1], Nil())
 		fun.Formals.Cells = nil
 	}
 	// NOTE:  The book's suggestion of chaining env here seems like dynamic

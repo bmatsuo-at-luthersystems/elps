@@ -37,6 +37,7 @@ var langBuiltins = []*langBuiltin{
 	{"map", builtinMap},
 	{"foldl", builtinFoldLeft},
 	{"foldr", builtinFoldRight},
+	{"reverse", builtinReverse},
 	{"list", builtinList},
 	{"cons", builtinCons},
 	{"not", builtinNot},
@@ -240,6 +241,15 @@ func builtinFoldRight(env *LEnv, args *LVal) *LVal {
 		acc = fret
 	}
 	return acc
+}
+
+func builtinReverse(env *LEnv, v *LVal) *LVal {
+	q := QExpr()
+	q.Cells = v.Cells
+	for i := 0; i < len(q.Cells)-1; i++ {
+		q.Cells[i] = q.Cells[len(q.Cells)-1-i]
+	}
+	return q
 }
 
 func builtinList(env *LEnv, v *LVal) *LVal {

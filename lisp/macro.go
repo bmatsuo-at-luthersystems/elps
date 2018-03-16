@@ -1,5 +1,10 @@
 package lisp
 
+import (
+	"fmt"
+	"os"
+)
+
 var langMacros = []*langBuiltin{
 	{"defmacro", macroDefmacro},
 	{"defun", macroDefun},
@@ -7,6 +12,7 @@ var langMacros = []*langBuiltin{
 	{"quasiquote", macroQuasiquote},
 	{"let*", macroLetSeq},
 	{"let", macroLet},
+	{"trace", macroTrace},
 	{"progn", macroProgn},
 	{"if", macroIf},
 }
@@ -154,6 +160,14 @@ func macroLet(env *LEnv, args *LVal) *LVal {
 		letenv.Put(bind.Cells[0], vals[i])
 	}
 	return macroProgn(letenv, args)
+}
+
+func macroTrace(env *LEnv, args *LVal) *LVal {
+	if len(args.Cells) != 1 {
+		return berrf("trace", "one argument expected (got %d)", len(args.Cells))
+	}
+	fmt.Fprintln(os.Stderr, args.Cells[0])
+	return args.Cells[0]
 }
 
 func macroProgn(env *LEnv, args *LVal) *LVal {
