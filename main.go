@@ -2,7 +2,7 @@
 
 package main
 
-import "github.com/bmatsuo/somelisp/cmd"
+import "github.com/bmatsuo/elps/cmd"
 
 func main() {
 	cmd.Execute()

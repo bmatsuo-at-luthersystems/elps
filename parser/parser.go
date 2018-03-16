@@ -16,7 +16,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/bmatsuo/somelisp/lisp"
+	"github.com/bmatsuo/elps/lisp"
 	parsec "github.com/prataprc/goparsec"
 )
 

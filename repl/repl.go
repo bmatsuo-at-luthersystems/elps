@@ -6,8 +6,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/bmatsuo/somelisp/lisp"
-	"github.com/bmatsuo/somelisp/parser"
+	"github.com/bmatsuo/elps/lisp"
+	"github.com/bmatsuo/elps/parser"
 	"github.com/chzyer/readline"
 )
 
