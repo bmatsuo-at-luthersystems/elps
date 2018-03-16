@@ -65,6 +65,8 @@ func TestEval_simple(t *testing.T) {
 		{testexpr{
 			{"(cons 1 (cons 2 (cons 3 ())))", "'(1 2 3)"},
 			{"(list 1 2 3)", "'(1 2 3)"},
+			{"(reverse (list 1 2 3))", "'(3 2 1)"},
+			{"(reverse (list 1 2))", "'(2 1)"},
 			{"(concat (list 1 2) (list 3))", "'(1 2 3)"},
 		}},
 		{testexpr{

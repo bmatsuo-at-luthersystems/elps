@@ -243,11 +243,17 @@ func builtinFoldRight(env *LEnv, args *LVal) *LVal {
 	return acc
 }
 
-func builtinReverse(env *LEnv, v *LVal) *LVal {
+func builtinReverse(env *LEnv, args *LVal) *LVal {
+	if len(args.Cells) != 1 {
+		return berrf("reverse", "one argument expected (got %d)", len(args.Cells))
+	}
+	if args.Cells[0].Type != LSExpr {
+		return berrf("reverse", "first argument is not a list: %v", args.Cells[0].Type)
+	}
 	q := QExpr()
-	q.Cells = v.Cells
+	q.Cells = args.Cells[0].Cells
 	for i := 0; i < len(q.Cells)-1; i++ {
-		q.Cells[i] = q.Cells[len(q.Cells)-1-i]
+		q.Cells[i], q.Cells[len(q.Cells)-1-i] = q.Cells[len(q.Cells)-1-i], q.Cells[i]
 	}
 	return q
 }
