@@ -13,6 +13,7 @@ package parser
 
 import (
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
 
@@ -43,13 +44,42 @@ var nodeTypeStrings = []string{
 // Parse parses a lisp expression.
 func Parse(env *lisp.LEnv, print bool, text []byte) (bool, error) {
 	s := parsec.NewScanner(text)
+	parser := newParsecParser()
+
+	evaled := false
+	root, s := parser(s)
+	for root != nil {
+		evaled = evalParsecRoot(env, print, root)
+		root, s = parser(s)
+	}
+	return evaled, nil
+}
+
+// ParseLVal parses LVal values from text and returns them.  The number of
+// bytes read is returned along with any error that was encountered in parsing.
+func ParseLVal(text []byte) ([]*lisp.LVal, int, error) {
+	var v []*lisp.LVal
+	s := parsec.NewScanner(text)
+	parser := newParsecParser()
+	root, s := parser(s)
+	for root != nil {
+		v = append(v, getLVal(root))
+		root, s = parser(s)
+	}
+	if !s.Endof() {
+		return v, s.GetCursor(), io.ErrUnexpectedEOF
+	}
+	return v, s.GetCursor(), nil
+}
+
+func newParsecParser() parsec.Parser {
 	openP := parsec.Atom("(", "OPENP")
 	closeP := parsec.Atom(")", "CLOSEP")
 	q := parsec.Atom("'", "QUOTE")
 	comment := parsec.Token(`;([^\n]*[^\s])?`, "COMMENT")
 	decimal := parsec.Token(`[+-]?[0-9]+([.][0-9]+)?([eE][+-]?[0-9]+)?`, "DECIMAL")
 	//symbol := parsec.Token(`[^\s()']+`, "SYMBOL")
-	symbol := parsec.Token(`(?:\pL|[_+\-*/\=<>!&])+`, "SYMBOL")
+	symbol := parsec.Token(`(?:\pL|[_+\-*/\=<>!&])(?:\pL|[0-9]|[_+\-*/\=<>!&])*`, "SYMBOL")
 	//qsymbol := parsec.And(nil, q, symbol)
 	term := parsec.OrdChoice(astNode(nodeTerm), // terminal token
 		parsec.String(),
@@ -61,14 +91,7 @@ func Parse(env *lisp.LEnv, print bool, text []byte) (bool, error) {
 	sexpr := parsec.And(astNode(nodeSExpr), openP, exprList, closeP)
 	qexpr := parsec.And(astNode(nodeQExpr), q, &expr)
 	expr = parsec.OrdChoice(nil, comment, term, sexpr, qexpr)
-
-	evaled := false
-	root, s := expr(s)
-	for root != nil {
-		evaled = evalParsecRoot(env, print, root)
-		root, s = expr(s)
-	}
-	return evaled, nil
+	return expr
 }
 
 type nodeType uint
@@ -190,19 +213,27 @@ func dumpParsecNode(node parsec.ParsecNode, indent string) {
 	}
 }
 
-func evalParsecRoot(env *lisp.LEnv, print bool, root parsec.ParsecNode) bool {
+func getLVal(root parsec.ParsecNode) *lisp.LVal {
 	nodes := cleanParsecNodeList([]parsec.ParsecNode{root})
 	if len(nodes) == 0 {
 		// we can be here if there is only whitespace on a line
-		return false
+		return nil
 	}
 	lval, ok := nodes[0].(*lisp.LVal)
 	if !ok {
 		// we can be here if there is only a comment on a line
+		return nil
+	}
+	return lval
+}
+
+func evalParsecRoot(env *lisp.LEnv, print bool, root parsec.ParsecNode) bool {
+	v := getLVal(root)
+	if v == nil {
 		return false
 	}
 	if print {
-		fmt.Println(env.Eval(lval))
+		fmt.Println(env.Eval(v))
 	}
 	return true
 }

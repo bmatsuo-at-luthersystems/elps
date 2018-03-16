@@ -382,7 +382,7 @@ func builtinAdd(env *LEnv, v *LVal) *LVal {
 		}
 		return Int(sum)
 	}
-	sum := 1.0
+	sum := 0.0
 	for _, c := range v.Cells {
 		if c.Type == LInt {
 			sum += float64(c.Int)
@@ -394,8 +394,13 @@ func builtinAdd(env *LEnv, v *LVal) *LVal {
 }
 
 func builtinSub(env *LEnv, v *LVal) *LVal {
-	if len(v.Cells) < 0 {
+	if len(v.Cells) == 0 {
 		return Int(0)
+	}
+	if len(v.Cells) == 1 {
+		v.Cells[0].Int = -v.Cells[0].Int
+		v.Cells[0].Float = -v.Cells[0].Float
+		return v.Cells[0]
 	}
 
 	for _, c := range v.Cells {
@@ -423,8 +428,15 @@ func builtinSub(env *LEnv, v *LVal) *LVal {
 }
 
 func builtinDiv(env *LEnv, v *LVal) *LVal {
-	if len(v.Cells) < 0 {
-		return Int(0)
+	if len(v.Cells) == 0 {
+		return Int(1)
+	}
+	if len(v.Cells) == 1 {
+		if v.Cells[0].Type == LInt {
+			return Float(1 / float64(v.Cells[0].Int))
+		}
+		v.Cells[0].Float = 1 / v.Cells[0].Float
+		return v.Cells[0]
 	}
 
 	for _, c := range v.Cells {
@@ -432,6 +444,7 @@ func builtinDiv(env *LEnv, v *LVal) *LVal {
 			return berrf("*", "argument is not a number: %v", c.Type)
 		}
 	}
+
 	// Never perform integer division with the function ``/''.  Integer
 	// division needs to a separate function to reduce the number of bugs
 	// caused from people doing an integer division unintentionally.
@@ -450,7 +463,7 @@ func builtinDiv(env *LEnv, v *LVal) *LVal {
 }
 
 func builtinMul(env *LEnv, v *LVal) *LVal {
-	if len(v.Cells) < 0 {
+	if len(v.Cells) == 0 {
 		return Int(1)
 	}
 	for _, c := range v.Cells {
