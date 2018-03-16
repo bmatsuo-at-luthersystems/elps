@@ -11,6 +11,8 @@ var langSpecialOps = []*langBuiltin{
 	{"let", macroLet},
 	{"progn", macroProgn},
 	{"if", macroIf},
+	{"or", opOr},
+	{"and", opAnd},
 }
 
 var langMacros = []*langBuiltin{
@@ -193,6 +195,34 @@ func macroProgn(env *LEnv, args *LVal) *LVal {
 		val = env.Eval(c)
 	}
 	return val
+}
+
+func opOr(env *LEnv, s *LVal) *LVal {
+	for _, c := range s.Cells {
+		r := env.Eval(c)
+		if r.Type == LError {
+			return r
+		}
+		ok := r.IsNil()
+		if ok {
+			return Bool(true)
+		}
+	}
+	return Bool(false)
+}
+
+func opAnd(env *LEnv, s *LVal) *LVal {
+	for _, c := range s.Cells {
+		r := env.Eval(c)
+		if r.Type == LError {
+			return r
+		}
+		ok := r.IsNil()
+		if !ok {
+			return Bool(false)
+		}
+	}
+	return Bool(true)
 }
 
 // (if test-form then-form else-form)
