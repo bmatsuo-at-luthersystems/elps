@@ -41,10 +41,13 @@ var langBuiltins = []*langBuiltin{
 	{"list", builtinList},
 	{"cons", builtinCons},
 	{"not", builtinNot},
+	{">=", builtinGEq},
 	{">", builtinGT},
+	{"<=", builtinLEq},
 	{"<", builtinLT},
 	{"=", builtinEqNum},
 	{"**", builtinPow},
+	{"%", builtinMod},
 	{"+", builtinAdd},
 	{"-", builtinSub},
 	{"/", builtinDiv},
@@ -290,6 +293,23 @@ func builtinNot(env *LEnv, v *LVal) *LVal {
 	return Nil()
 }
 
+func builtinLEq(env *LEnv, args *LVal) *LVal {
+	if len(args.Cells) != 2 {
+		berrf("<", "two arguments expected (got %d)", len(args.Cells))
+	}
+	a, b := args.Cells[0], args.Cells[1]
+	if a.IsNumeric() {
+		berrf("<", "first argument is not a number: %s", a.Type)
+	}
+	if b.IsNumeric() {
+		berrf("<", "second argument is not a number: %s", b.Type)
+	}
+	if bothInt(a, b) {
+		return Bool(a.Int <= b.Int)
+	}
+	return Bool(toFloat(a) <= toFloat(b))
+}
+
 func builtinLT(env *LEnv, args *LVal) *LVal {
 	if len(args.Cells) != 2 {
 		berrf("<", "two arguments expected (got %d)", len(args.Cells))
@@ -304,7 +324,24 @@ func builtinLT(env *LEnv, args *LVal) *LVal {
 	if bothInt(a, b) {
 		return Bool(a.Int < b.Int)
 	}
-	return Bool(a.Float < b.Float)
+	return Bool(toFloat(a) < toFloat(b))
+}
+
+func builtinGEq(env *LEnv, args *LVal) *LVal {
+	if len(args.Cells) != 2 {
+		berrf(">=", "two arguments expected (got %d)", len(args.Cells))
+	}
+	a, b := args.Cells[0], args.Cells[1]
+	if a.IsNumeric() {
+		berrf(">=", "first argument is not a number: %s", a.Type)
+	}
+	if b.IsNumeric() {
+		berrf(">=", "second argument is not a number: %s", b.Type)
+	}
+	if bothInt(a, b) {
+		return Bool(a.Int >= b.Int)
+	}
+	return Bool(toFloat(a) >= toFloat(b))
 }
 
 func builtinGT(env *LEnv, args *LVal) *LVal {
@@ -321,7 +358,7 @@ func builtinGT(env *LEnv, args *LVal) *LVal {
 	if bothInt(a, b) {
 		return Bool(a.Int > b.Int)
 	}
-	return Bool(a.Float > b.Float)
+	return Bool(toFloat(a) > toFloat(b))
 }
 
 func builtinEqNum(env *LEnv, args *LVal) *LVal {
@@ -339,9 +376,8 @@ func builtinEqNum(env *LEnv, args *LVal) *LVal {
 		return Bool(a.Int == b.Int)
 	}
 
-	// If the following is true then either we have equal floats or both
-	// numbers are zero (and thus equivalent).
-	return Bool(a.Float == b.Float)
+	// This may not be correct
+	return Bool(toFloat(a) == toFloat(b))
 }
 
 func builtinPow(env *LEnv, args *LVal) *LVal {
@@ -379,6 +415,20 @@ func powInt(a, b int) *LVal {
 		n++
 	}
 	return Int(atob)
+}
+
+func builtinMod(env *LEnv, args *LVal) *LVal {
+	if len(args.Cells) != 2 {
+		berrf("%", "two arguments expected (got %d)", len(args.Cells))
+	}
+	a, b := args.Cells[0], args.Cells[1]
+	if a.Type != LInt {
+		berrf("%", "first argument is not an int: %s", a.Type)
+	}
+	if b.Type != LInt {
+		berrf("%", "second argument is not an int: %s", b.Type)
+	}
+	return Int(a.Int % b.Int)
 }
 
 func builtinAdd(env *LEnv, v *LVal) *LVal {
