@@ -7,12 +7,12 @@ import (
 	"strconv"
 )
 
-// LValType is the type of an LVal
-type LValType uint
+// LType is the type of an LVal
+type LType uint
 
 // Possible LValType values
 const (
-	LInvalid LValType = iota
+	LInvalid LType = iota
 	LInt
 	LFloat
 	LError
@@ -37,7 +37,7 @@ var lvalTypeStrings = []string{
 	LString:  "string",
 }
 
-func (t LValType) String() string {
+func (t LType) String() string {
 	if int(t) >= len(lvalTypeStrings) {
 		return lvalTypeStrings[LInvalid]
 	}
@@ -71,7 +71,7 @@ func (n Errno) String() string {
 
 // LVal is a lisp value
 type LVal struct {
-	Type   LValType
+	Type   LType
 	Int    int
 	Float  float64
 	Str    string
