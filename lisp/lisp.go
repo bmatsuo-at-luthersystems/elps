@@ -44,31 +44,6 @@ func (t LType) String() string {
 	return lvalTypeStrings[t]
 }
 
-// Errno is an error code
-type Errno int
-
-// Posible Errno values
-const (
-	ErrnoPanic Errno = iota
-	ErrnoDivZero
-	ErrnoNoSym
-	ErrnoBadNum
-)
-
-var errnoStrings = []string{
-	ErrnoPanic:   "PANIC",
-	ErrnoDivZero: "division by zero",
-	ErrnoNoSym:   "no such symbol",
-	ErrnoBadNum:  "bad number",
-}
-
-func (n Errno) String() string {
-	if int(n) >= len(errnoStrings) {
-		return errnoStrings[ErrnoPanic]
-	}
-	return errnoStrings[n]
-}
-
 // LVal is a lisp value
 type LVal struct {
 	Type   LType
