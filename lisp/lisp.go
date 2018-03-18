@@ -22,19 +22,23 @@ const (
 	LFun
 	LQuote
 	LString
+	LMarkTailRec
+	LMarkMacExpand
 )
 
 var lvalTypeStrings = []string{
-	LInvalid: "INVALID",
-	LInt:     "int",
-	LFloat:   "float",
-	LError:   "error",
-	LSymbol:  "symbol",
-	LQSymbol: "qsymbol",
-	LSExpr:   "sexpr",
-	LFun:     "function",
-	LQuote:   "quoted",
-	LString:  "string",
+	LInvalid:       "INVALID",
+	LInt:           "int",
+	LFloat:         "float",
+	LError:         "error",
+	LSymbol:        "symbol",
+	LQSymbol:       "qsymbol",
+	LSExpr:         "sexpr",
+	LFun:           "function",
+	LQuote:         "quoted",
+	LString:        "string",
+	LMarkTailRec:   "marker-tail-recursion",
+	LMarkMacExpand: "marker-macro-expansion",
 }
 
 func (t LType) String() string {
@@ -56,13 +60,14 @@ const (
 
 // LVal is a lisp value
 type LVal struct {
-	Type   LType
-	Int    int
-	Float  float64
-	Str    string
-	Err    error
-	Cells  []*LVal
-	Quoted bool // flag indicating a single level of quoting
+	Type     LType
+	Int      int
+	Float    float64
+	Str      string
+	Err      error
+	Cells    []*LVal
+	Quoted   bool // flag indicating a single level of quoting
+	Terminal bool // LVal is the terminal expression in a function call
 
 	// Variables needed for function values
 	Macro   bool
@@ -224,6 +229,20 @@ func Errorf(format string, v ...interface{}) *LVal {
 	}
 }
 
+func markTailRec(npop int, fun *LVal, args *LVal) *LVal {
+	return &LVal{
+		Type:  LMarkTailRec,
+		Cells: []*LVal{Int(npop), fun, args},
+	}
+}
+
+func markMacExpand(expr *LVal) *LVal {
+	return &LVal{
+		Type:  LMarkMacExpand,
+		Cells: []*LVal{expr},
+	}
+}
+
 // IsSpecialFun returns true if v is a special function.  IsSpecialFun doesn't
 // actually check v.Type, only v.FunType.
 func (v *LVal) IsSpecialFun() bool {
@@ -334,8 +353,12 @@ func (v *LVal) str(onTheRecord bool) string {
 	case LQuote:
 		// TODO: make more efficient
 		return QUOTE + v.Body.str(true)
+	case LMarkTailRec:
+		return quote + fmt.Sprintf("<tail-recursion frames=%d (%s %s)>", v.Cells[0].Int, v.Cells[1], v.Cells[2])
+	case LMarkMacExpand:
+		return quote + fmt.Sprintf("<macro-expansion %s)>", v.Cells[0])
 	default:
-		return quote + fmt.Sprintf("%#v", v)
+		return quote + fmt.Sprintf("<%s %#v>", v.Type, v)
 	}
 }
 

@@ -61,6 +61,7 @@ func macroDefmacro(env *LEnv, args *LVal) *LVal {
 	}
 	fun.FunType = LFunMacro // evaluate as a macro
 	fun.Env.Parent = env    // function definitions get a lexical scope
+	fun.Env.Stack = env.Stack
 	env.PutGlobal(sym, fun)
 	return Nil()
 }
@@ -82,6 +83,7 @@ func macroDefun(env *LEnv, args *LVal) *LVal {
 		return fun
 	}
 	fun.Env.Parent = env // function definitions get a lexical scope
+	fun.Env.Stack = env.Stack
 	env.PutGlobal(sym, fun)
 	return Nil()
 }
@@ -190,6 +192,7 @@ func macroProgn(env *LEnv, args *LVal) *LVal {
 	if len(args.Cells) == 0 {
 		return Nil()
 	}
+	args.Cells[len(args.Cells)-1].Terminal = true
 	var val *LVal
 	for _, c := range args.Cells {
 		val = env.Eval(c)
@@ -198,6 +201,9 @@ func macroProgn(env *LEnv, args *LVal) *LVal {
 }
 
 func opOr(env *LEnv, s *LVal) *LVal {
+	if len(s.Cells) > 0 {
+		s.Cells[len(s.Cells)-1].Terminal = true
+	}
 	for _, c := range s.Cells {
 		r := env.Eval(c)
 		if r.Type == LError {
@@ -212,6 +218,9 @@ func opOr(env *LEnv, s *LVal) *LVal {
 }
 
 func opAnd(env *LEnv, s *LVal) *LVal {
+	if len(s.Cells) > 0 {
+		s.Cells[len(s.Cells)-1].Terminal = true
+	}
 	for _, c := range s.Cells {
 		r := env.Eval(c)
 		if r.Type == LError {
@@ -237,8 +246,10 @@ func macroIf(env *LEnv, s *LVal) *LVal {
 	ok := r.IsNil()
 	if ok {
 		// test-form evaluated to nil (false)
+		s.Cells[2].Terminal = true
 		return env.Eval(s.Cells[2])
 	}
 	// test-form evaluated to something non-nil (true)
+	s.Cells[1].Terminal = true
 	return env.Eval(s.Cells[1])
 }

@@ -52,6 +52,7 @@ var langBuiltins = []*langBuiltin{
 	{"/", builtinDiv},
 	{"*", builtinMul},
 	{"debug-print", builtinDebugPrint},
+	{"debug-stack", builtinDebugStack},
 }
 
 // DefaultBuiltins returns the default set of LBuiltinDefs added to LEnv
@@ -94,6 +95,7 @@ func builtinLambda(env *LEnv, v *LVal) *LVal {
 
 	formals := v.Cells[0]
 	body := v.Cells[1]
+	body.Terminal = true
 
 	for _, sym := range formals.Cells {
 		if sym.Type != LSymbol {
@@ -105,6 +107,7 @@ func builtinLambda(env *LEnv, v *LVal) *LVal {
 	// (I think... -bmatsuo)
 	fun := Lambda(formals, body)
 	fun.Env.Parent = env
+	fun.Env.Stack = env.Stack
 
 	return fun
 }
@@ -555,16 +558,24 @@ func builtinMul(env *LEnv, v *LVal) *LVal {
 	return Float(prod)
 }
 
-func builtinDebugPrint(env *LEnv, v *LVal) *LVal {
-	if len(v.Cells) == 0 {
+func builtinDebugPrint(env *LEnv, args *LVal) *LVal {
+	if len(args.Cells) == 0 {
 		fmt.Println()
 		return Nil()
 	}
-	args := make([]interface{}, len(v.Cells))
-	for i := range v.Cells {
-		args[i] = v.Cells[i]
+	fmtargs := make([]interface{}, len(args.Cells))
+	for i := range args.Cells {
+		fmtargs[i] = args.Cells[i]
 	}
-	fmt.Println(args...)
+	fmt.Println(fmtargs...)
+	return Nil()
+}
+
+func builtinDebugStack(env *LEnv, args *LVal) *LVal {
+	if len(args.Cells) != 0 {
+		return berrf("debug-stack", "no arguments expected (got %d)", len(args.Cells))
+	}
+	env.Stack.DebugPrint()
 	return Nil()
 }
 
@@ -605,7 +616,7 @@ func numericListType(cells []*LVal) LType {
 
 func toFloat(x *LVal) float64 {
 	if !x.IsNumeric() {
-		panic("toFloat called with non-numeric argument")
+		panic("toFloat called with non-numeric argument: " + x.String())
 	}
 	if x.Type == LInt {
 		return float64(x.Int)

@@ -16,23 +16,31 @@ type LEnv struct {
 	ID     uint
 	Scope  map[string]*LVal
 	Parent *LEnv
+	Stack  *CallStack
 }
 
 // NewEnv returns initializes and returns a new LEnv.
 func NewEnv(parent *LEnv) *LEnv {
+	var stack *CallStack
+	if parent != nil {
+		stack = parent.Stack
+	} else {
+		stack = &CallStack{}
+	}
 	return &LEnv{
 		ID:     getEnvID(),
 		Scope:  make(map[string]*LVal),
 		Parent: parent,
+		Stack:  stack,
 	}
 }
 
 func (env *LEnv) getFID() string {
-	return fmt.Sprintf("_G-%d", env.ID)
+	return fmt.Sprintf("anon%d", env.ID)
 }
 
-// Copy returns a new LEnv with a copy of env.Scope but a shared parent (not
-// quite a deep copy).
+// Copy returns a new LEnv with a copy of env.Scope but a shared parent and
+// stack (not quite a deep copy).
 func (env *LEnv) Copy() *LEnv {
 	if env == nil {
 		return nil
@@ -127,7 +135,7 @@ func (env *LEnv) AddSpecialOps(ops ...LBuiltinDef) {
 		if !exist.IsNil() && exist.Type != LError { // LError is ubound symbol
 			panic(fmt.Sprintf("macro already defined: %v (= %v)", k, exist))
 		}
-		id := fmt.Sprintf("<builtin-macro ``%s''>", op.Name())
+		id := fmt.Sprintf("<special-op ``%s''>", op.Name())
 		env.Put(k, SpecialOp(id, op.Eval))
 	}
 }
@@ -153,6 +161,14 @@ func (env *LEnv) AddBuiltins(funs ...LBuiltinDef) {
 // Eval and the ``eval'' builtin function, but it does.  For some reason macros
 // won't work without this unquoting.
 func (env *LEnv) Eval(v *LVal) *LVal {
+eval:
+	if v.Terminal {
+		v.Terminal = false
+		top := env.Stack.Top()
+		if top != nil {
+			top.Terminal = true
+		}
+	}
 	if v.Quoted {
 		return v
 	}
@@ -160,10 +176,16 @@ func (env *LEnv) Eval(v *LVal) *LVal {
 	case LSymbol:
 		return env.Get(v)
 	case LSExpr:
-		return env.EvalSExpr(v)
+		res := env.EvalSExpr(v)
+		if res.Type == LMarkMacExpand {
+			v = res.Cells[0]
+			goto eval
+		}
+		return res
 	case LQuote:
 		// this quote was unquoted... eval the underlying value
-		return env.Eval(v.Body)
+		v = v.Body
+		goto eval
 	default:
 		return v
 	}
@@ -179,12 +201,24 @@ func (env *LEnv) EvalSExpr(s *LVal) *LVal {
 	}
 
 	f := env.Eval(s.Cells[0])
+	s.Cells = s.Cells[1:]
 	if f.Type == LError {
 		return f
 	}
 	if f.Type != LFun {
 		return Errorf("first element of expression is not a function: %v", f)
 	}
+
+	// Check for possible tail recursion before pushing to avoid hitting s when
+	// checking.  But push FID onto the stack before popping to simplify
+	// book-keeping.
+	npop := env.Stack.TerminalFID(f.FID)
+	// Push onto the stack here so that we don't trigger tail recursion while
+	// evaluating the arguments to f -- f has to be the recursive call, if
+	// there is recursion at all.
+	env.Stack.PushFID(f.FID)
+	defer env.Stack.Pop()
+
 	if f.IsSpecialFun() {
 		// Argument to a macro a not evaluated but they aren't quoted either.
 		// This behavior is what allows ``unquote'' to properly resolve macro
@@ -199,27 +233,38 @@ func (env *LEnv) EvalSExpr(s *LVal) *LVal {
 		// expression and produces '(1).
 	} else {
 		// Evaluate arguments before invoking f.
-		for i := 1; i < len(s.Cells); i++ {
+		for i := range s.Cells {
 			s.Cells[i] = env.Eval(s.Cells[i])
 		}
-		for _, c := range s.Cells[1:] {
-			if c.Type == LError {
-				return c
+		for i := range s.Cells {
+			if s.Cells[i].Type == LError {
+				return s.Cells[i]
 			}
 		}
 	}
-	s.Cells = s.Cells[1:]
+	if npop > 0 {
+		return markTailRec(npop, f, s)
+	}
+callf:
 	r := env.Call(f, s)
 	if r.Type == LError {
+		return r
+	}
+	if r.Type == LMarkTailRec {
+		if len(r.Cells) != 3 {
+			panic("invalid mark")
+		}
+		r.Cells[0].Int--
+		if r.Cells[0].Int <= 0 {
+			f = r.Cells[1]
+			s = r.Cells[2]
+			goto callf
+		}
 		return r
 	}
 	if !f.IsMacro() {
 		return r
 	}
-	// TODO:  Turn macro expansion into a loop instead of a recursive process.
-	// A real program will probably exhaust system memory with the call stack
-	// when expanding macros.
-
 	// This is a lazy unquote.  Unquoting in this way appears to allow the
 	// upcoming evaluation to produce the correct value for user defined
 	// macros, which are typically using quasiquote.  Builtin macros can be
@@ -227,7 +272,7 @@ func (env *LEnv) EvalSExpr(s *LVal) *LVal {
 	// something is unintentionally unquoted.  I will deal with
 	// implementing a proper system for special operators at that point.
 	r.Quoted = false
-	return env.Eval(r)
+	return markMacExpand(r)
 }
 
 // Call invokes LFun fun with the list args.
@@ -237,6 +282,7 @@ func (env *LEnv) Call(fun *LVal, args *LVal) *LVal {
 	}
 	// FIXME:  A shallow copy is probably correct here.  We don't want to copy
 	// the Env so that updates to the global scope are reflected.
+
 	fun = fun.Copy()
 	nargs := len(fun.Formals.Cells) // only used when not vargs
 	for i, v := range args.Cells {
@@ -270,12 +316,17 @@ func (env *LEnv) Call(fun *LVal, args *LVal) *LVal {
 		fun.Env.Put(fun.Formals.Cells[1], Nil())
 		fun.Formals.Cells = nil
 	}
+
 	// NOTE:  The book's suggestion of chaining env here seems like dynamic
 	// scoping.
 	// NOTE:  This is indeed where you would chain environments to create
 	// dynamic scope.
 	//		fun.Env.Parent = env
+
+	// NOTE:  When lambda supports multiple body expressions (with an implicit
+	// progn) this may not work correctly anymore.
 	s := SExpr()
+	s.Terminal = true
 	s.Cells = append(s.Cells, fun.Body.Cells...)
 	return fun.Env.Eval(s)
 }
