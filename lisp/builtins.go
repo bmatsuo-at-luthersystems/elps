@@ -32,10 +32,12 @@ var langBuiltins = []*langBuiltin{
 	{"eval", builtinEval},
 	{"car", builtinCAR},
 	{"cdr", builtinCDR},
-	{"concat", builtinConcat},
 	{"map", builtinMap},
 	{"foldl", builtinFoldLeft},
 	{"foldr", builtinFoldRight},
+	{"compose", builtinCompose},
+	{"unpack", builtinUnpack},
+	{"concat", builtinConcat},
 	{"reverse", builtinReverse},
 	{"list", builtinList},
 	{"cons", builtinCons},
@@ -154,17 +156,6 @@ func builtinCDR(env *LEnv, v *LVal) *LVal {
 	return q
 }
 
-func builtinConcat(env *LEnv, v *LVal) *LVal {
-	q := QExpr()
-	for _, c := range v.Cells {
-		if c.Type != LSExpr {
-			return berrf("concat", "argument is not a list: %v", c.Type)
-		}
-		q.Cells = append(q.Cells, c.Cells...)
-	}
-	return q
-}
-
 func builtinMap(env *LEnv, args *LVal) *LVal {
 	if len(args.Cells) != 2 {
 		return berrf("map", "too many arguments provided: %d", len(args.Cells))
@@ -246,6 +237,86 @@ func builtinFoldRight(env *LEnv, args *LVal) *LVal {
 		acc = fret
 	}
 	return acc
+}
+
+// NOTE: Compose requires concat and unpack in order to work with varargs.
+func builtinCompose(env *LEnv, args *LVal) *LVal {
+	if len(args.Cells) != 2 {
+		return berrf("compose", "two argument expected (got %d)", len(args.Cells))
+	}
+	f := args.Cells[0]
+	g := args.Cells[1]
+	if f.Type != LFun {
+		return berrf("compose", "first argument is not a function: %s", f.Type)
+	}
+	if g.Type != LFun {
+		return berrf("compose", "second argument is not a function: %s", g.Type)
+	}
+	formals := g.Formals.Copy()
+	body := args // body.Cells[0] is already set to f
+	gcall := SExpr()
+	gcall.Cells = make([]*LVal, 0, len(formals.Cells)+1)
+	gcall.Cells = append(gcall.Cells, g)
+	var restSym *LVal
+	for i, argSym := range formals.Cells {
+		if argSym.Type != LSymbol {
+			// This should not happen.  The list of formals should be checked
+			// when the g function was created.
+			return berrf("compose", "invalid list of formals: %s", formals)
+		}
+		if argSym.Str == "&" {
+			if len(formals.Cells) != i+2 {
+				// This should not happen.  The list of formals should be checked
+				// when the g function was created.
+				return berrf("compose", "invalid list of formals: %s", formals)
+			}
+			restSym = formals.Cells[i+1]
+			break
+		}
+		gcall.Cells = append(gcall.Cells, argSym)
+	}
+	if restSym != nil {
+		concatPrefix := SExpr()
+		concatPrefix.Cells = gcall.Cells[1:]
+		concatCall := SExpr()
+		concatCall.Cells = append(concatCall.Cells, Symbol("concat"))
+		concatCall.Cells = append(concatCall.Cells, concatPrefix)
+		concatCall.Cells = append(concatCall.Cells, restSym.Copy())
+		unpackCall := SExpr()
+		unpackCall.Cells = append(unpackCall.Cells, Symbol("unpack"))
+		unpackCall.Cells = append(unpackCall.Cells, g)
+		unpackCall.Cells = append(unpackCall.Cells, concatCall)
+		gcall = unpackCall
+	}
+	body.Cells[1] = gcall
+	newfun := Lambda(formals, body)
+	newfun.Env.Parent = env
+	return newfun
+}
+
+func builtinUnpack(env *LEnv, args *LVal) *LVal {
+	if len(args.Cells) != 2 {
+		return berrf("unpack", "two argument expected (got %d)", len(args.Cells))
+	}
+	if args.Cells[0].Type != LFun {
+		return berrf("unpack", "first argument is not a function: %s", args.Cells[0].Type)
+	}
+	if args.Cells[1].Type != LSExpr {
+		return berrf("unpack", "second argument is not a list: %s", args.Cells[1].Type)
+	}
+	args.Cells = append(args.Cells[:1], args.Cells[1].Cells...)
+	return env.Eval(args)
+}
+
+func builtinConcat(env *LEnv, v *LVal) *LVal {
+	q := QExpr()
+	for _, c := range v.Cells {
+		if c.Type != LSExpr {
+			return berrf("concat", "argument is not a list: %v", c.Type)
+		}
+		q.Cells = append(q.Cells, c.Cells...)
+	}
+	return q
 }
 
 func builtinReverse(env *LEnv, args *LVal) *LVal {

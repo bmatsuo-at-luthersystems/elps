@@ -148,6 +148,10 @@ func (env *LEnv) AddBuiltins(funs ...LBuiltinDef) {
 	}
 	for _, f := range funs {
 		k := Symbol(f.Name())
+		exist := env.Get(k)
+		if exist.Type != LError {
+			panic("symbol already defined: " + f.Name())
+		}
 		id := fmt.Sprintf("<builtin-function ``%s''>", f.Name())
 		v := Fun(id, f.Eval)
 		env.Put(k, v)
