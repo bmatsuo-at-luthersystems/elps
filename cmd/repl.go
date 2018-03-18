@@ -4,7 +4,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/bmatsuo/elps/repl"
+	"bitbucket.org/luthersystems/elps/repl"
 	"github.com/spf13/cobra"
 )
 

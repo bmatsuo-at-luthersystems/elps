@@ -2,7 +2,7 @@
 
 package main
 
-import "github.com/bmatsuo/elps/cmd"
+import "bitbucket.org/luthersystems/elps/cmd"
 
 func main() {
 	cmd.Execute()

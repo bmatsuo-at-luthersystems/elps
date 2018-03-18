@@ -3,8 +3,8 @@ package lisptest
 import (
 	"testing"
 
-	"github.com/bmatsuo/elps/lisp"
-	"github.com/bmatsuo/elps/parser"
+	"bitbucket.org/luthersystems/elps/lisp"
+	"bitbucket.org/luthersystems/elps/parser"
 )
 
 func TestEval_simple(t *testing.T) {

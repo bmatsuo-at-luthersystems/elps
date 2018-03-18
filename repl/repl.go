@@ -6,8 +6,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/bmatsuo/elps/lisp"
-	"github.com/bmatsuo/elps/parser"
+	"bitbucket.org/luthersystems/elps/lisp"
+	"bitbucket.org/luthersystems/elps/parser"
 	"github.com/chzyer/readline"
 )
 
