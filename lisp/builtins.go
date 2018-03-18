@@ -37,6 +37,9 @@ var langBuiltins = []*langBuiltin{
 	{"foldr", builtinFoldRight},
 	{"compose", builtinCompose},
 	{"unpack", builtinUnpack},
+	{"assoc!", builtinAssocMutate},
+	{"get", builtinGet},
+	{"sorted-map", builtinSortedMap},
 	{"concat", builtinConcat},
 	{"reverse", builtinReverse},
 	{"list", builtinList},
@@ -306,6 +309,54 @@ func builtinUnpack(env *LEnv, args *LVal) *LVal {
 	}
 	args.Cells = append(args.Cells[:1], args.Cells[1].Cells...)
 	return env.Eval(args)
+}
+
+func builtinAssocMutate(env *LEnv, args *LVal) *LVal {
+	if len(args.Cells) != 3 {
+		return berrf("assoc!", "three arguments expected (got %d)", len(args.Cells))
+	}
+	m := args.Cells[0]
+	k := args.Cells[1]
+	v := args.Cells[2]
+	if m.IsNil() {
+		m = SortedMap()
+	} else if m.Type != LSortMap {
+		return berrf("assoc!", "first argument is not a map: %s", m.Type)
+	}
+	err := mapSet(m, k, v)
+	if !err.IsNil() {
+		return berrf("assoc!", "%s", err)
+	}
+	return m
+}
+
+func builtinGet(env *LEnv, args *LVal) *LVal {
+	if len(args.Cells) != 2 {
+		return berrf("get", "two arguments expected (got %d)", len(args.Cells))
+	}
+	m := args.Cells[0]
+	k := args.Cells[1]
+	if m.Type != LSortMap {
+		return berrf("get", "first argument is not a map: %s", m.Type)
+	}
+	return mapGet(m, k)
+}
+
+func builtinSortedMap(env *LEnv, args *LVal) *LVal {
+	m := SortedMap()
+	if len(args.Cells)%2 != 0 {
+		return berrf("sorted-map", "uneven number of arguments: %d", len(args.Cells))
+	}
+	for len(args.Cells) >= 2 {
+		k := args.Cells[0]
+		v := args.Cells[1]
+		err := mapSet(m, k, v)
+		if !err.IsNil() {
+			return err
+		}
+		args.Cells = args.Cells[2:]
+	}
+	return m
 }
 
 func builtinConcat(env *LEnv, v *LVal) *LVal {

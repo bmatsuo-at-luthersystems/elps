@@ -22,6 +22,7 @@ const (
 	LFun
 	LQuote
 	LString
+	LSortMap
 	LMarkTailRec
 	LMarkMacExpand
 )
@@ -37,6 +38,7 @@ var lvalTypeStrings = []string{
 	LFun:           "function",
 	LQuote:         "quoted",
 	LString:        "string",
+	LSortMap:       "sortmap",
 	LMarkTailRec:   "marker-tail-recursion",
 	LMarkMacExpand: "marker-macro-expansion",
 }
@@ -68,6 +70,7 @@ type LVal struct {
 	Cells    []*LVal
 	Quoted   bool // flag indicating a single level of quoting
 	Terminal bool // LVal is the terminal expression in a function call
+	Map      map[interface{}]*LVal
 
 	// Variables needed for function values
 	Macro   bool
@@ -145,6 +148,14 @@ func QExpr() *LVal {
 	return &LVal{
 		Type:   LSExpr,
 		Quoted: true,
+	}
+}
+
+// SortedMap returns an LVal represented a sorted map
+func SortedMap() *LVal {
+	return &LVal{
+		Type: LSortMap,
+		Map:  make(map[interface{}]*LVal),
 	}
 }
 
@@ -353,6 +364,8 @@ func (v *LVal) str(onTheRecord bool) string {
 	case LQuote:
 		// TODO: make more efficient
 		return QUOTE + v.Body.str(true)
+	case LSortMap:
+		return quote + sortedMapString(v)
 	case LMarkTailRec:
 		return quote + fmt.Sprintf("<tail-recursion frames=%d (%s %s)>", v.Cells[0].Int, v.Cells[1], v.Cells[2])
 	case LMarkMacExpand:
