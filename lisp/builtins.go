@@ -279,7 +279,7 @@ func builtinCompose(env *LEnv, args *LVal) *LVal {
 		gcall.Cells = append(gcall.Cells, argSym)
 	}
 	if restSym != nil {
-		concatPrefix := SExpr()
+		concatPrefix := QExpr()
 		concatPrefix.Cells = gcall.Cells[1:]
 		concatCall := SExpr()
 		concatCall.Cells = append(concatCall.Cells, Symbol("concat"))

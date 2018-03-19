@@ -33,6 +33,7 @@ func TestEval(t *testing.T) {
 		}},
 		{"partial evaluation", TestSequence{
 			{"((lambda (x y) (+ x y)) 1)", "(lambda (y (x 1)) (+ x y))"},
+			{"(((lambda (x y) (+ x y)) 1) 2)", "3"},
 		}},
 		{"lists", TestSequence{
 			{"(cons 1 (cons 2 (cons 3 ())))", "'(1 2 3)"},
