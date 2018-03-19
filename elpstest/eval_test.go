@@ -54,6 +54,9 @@ func TestEval(t *testing.T) {
 			{"(fn1 1)", "2"},
 			{"(fn2 1 2)", "3"},
 		}},
+		{"errors", TestSequence{
+			{`(list 1 2 (error "testerror") 4)`, "testerror"},
+		}},
 	}
 	RunTestSuite(t, tests)
 }

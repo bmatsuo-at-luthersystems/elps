@@ -1,6 +1,8 @@
 package lisp
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
 	"math"
 )
@@ -30,6 +32,7 @@ func (fun *langBuiltin) Eval(env *LEnv, args *LVal) *LVal {
 var langBuiltins = []*langBuiltin{
 	{"set", builtinSet},
 	{"eval", builtinEval},
+	{"error", builtinError},
 	{"car", builtinCAR},
 	{"cdr", builtinCDR},
 	{"map", builtinMap},
@@ -95,6 +98,21 @@ func builtinEval(env *LEnv, args *LVal) *LVal {
 	}
 	v.Quoted = false
 	return env.Eval(v)
+}
+
+func builtinError(env *LEnv, args *LVal) *LVal {
+	var buf bytes.Buffer
+	for i, arg := range args.Cells {
+		if i > 0 {
+			buf.WriteString(" ")
+		}
+		if arg.Type == LString {
+			buf.WriteString(arg.Str)
+		} else {
+			buf.WriteString(arg.String())
+		}
+	}
+	return Error(errors.New(buf.String()))
 }
 
 func builtinCAR(env *LEnv, v *LVal) *LVal {
