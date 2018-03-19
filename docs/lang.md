@@ -7,11 +7,11 @@ utf-8 text.
 
 ##Expressions
 
-An expression is either an atom or a sequence of atoms delimited by parenthesis
-`(...)`.  An environment evaluates one expression at a time, evaluating each
-sub-expression before evaluating the main expression.  Expressions may also be
-*quoted* by prefixing it with an single quote `'`.  Quoted expressions are
-discussed in depth along with [expression
+An expression is either an atom or a sequence of expressions delimited by
+parenthesis `(...)`.  An environment evaluates one expression at a time,
+evaluating each sub-expression before evaluating the main expression.
+Expressions may also be *quoted* by prefixing it with an single quote `'`.
+Quoted expressions are discussed in depth along with [expression
 evaluation](#markdown-header-expression-evaluation).
 
 ##Atoms
@@ -47,8 +47,9 @@ value (while anything non-nil represents a true boolean value).
 
 ###Atomic Expressions
 
-Symbols evaluate to the last value bound to that symbol at the deepest scope at
-which that symbol is bound.  Numbers and strings evaluate to themselves.
+Symbols evaluate to the last value bound to that symbol at the deepest
+[scope](#markdown-header-scope) at which that symbol is bound.  Numbers and
+strings evaluate to themselves.
 
 ###Quoted Expressions
 
@@ -177,3 +178,17 @@ higher scope the symbol will be *shadowed* inside the `let` expression.
 (add-y 3)               ; evaluates to 5
 (add-x 3)               ; evaluates to 4
 ```
+
+The scope of a function is created when the function itself is created.  In the
+above example the functions `add-y` and `add-x` always use values bound by
+their arguments or by the let which contains the function definition
+
+```lisp
+(let ((x 10))
+    (add-x 3))      ; still evaluates to 3
+```
+
+Macros must take care if they directly evaluate an argument that contains a
+lambda (outside of qausiquote/unquote) because the resulting function will
+inherit the scope of the macro and not the scope of the caller, which is
+probably not desired.
