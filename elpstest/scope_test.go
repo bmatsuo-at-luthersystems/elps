@@ -15,8 +15,11 @@ func TestScope(t *testing.T) {
 			{"(let ((x 2)) (fn 2))", "5"},
 			{"(((lambda (x) (lambda () (+ x 2))) 3))", "5"},
 		}},
+		{"special operators", TestSequence{
+			{"(let ((x 1) (y 2)) (if x (+ x y) y))", "3"},
+		}},
 		{"docs", TestSequence{
-			// simple lexical scoping tests
+			// scope example from documentation
 			{"(let ((x 1) (y 2)) (defun add-y (x) (+ x y)))", "()"},
 			{"(add-y 3)", "5"},
 		}},

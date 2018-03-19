@@ -85,38 +85,6 @@ func builtinSet(env *LEnv, v *LVal) *LVal {
 	return env.GetGlobal(v.Cells[0])
 }
 
-func builtinLambda(env *LEnv, v *LVal) *LVal {
-	if len(v.Cells) < 2 {
-		return berrf("lambda", "too few arguments provided: %d", len(v.Cells))
-	}
-	if len(v.Cells) > 2 {
-		return berrf("lambda", "too many arguments provided: %d", len(v.Cells))
-	}
-	for _, q := range v.Cells {
-		if q.Type != LSExpr {
-			return berrf("lambda", "argument is not a list: %v", q.Type)
-		}
-	}
-
-	formals := v.Cells[0]
-	body := v.Cells[1]
-	body.Terminal = true
-
-	for _, sym := range formals.Cells {
-		if sym.Type != LSymbol {
-			return berrf("lambda", "first argument contains a non-symbol: %v", sym.Type)
-		}
-	}
-
-	// Construct the LVal and add env to the LEnv chain to get lexical scoping
-	// (I think... -bmatsuo)
-	fun := Lambda(formals, body)
-	fun.Env.Parent = env
-	fun.Env.Stack = env.Stack
-
-	return fun
-}
-
 func builtinEval(env *LEnv, args *LVal) *LVal {
 	if len(args.Cells) > 1 {
 		return berrf("eval", "too many arguments provided: %d", len(args.Cells))
