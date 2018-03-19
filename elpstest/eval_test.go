@@ -1,4 +1,4 @@
-package lisptest
+package elpstest
 
 import (
 	"testing"
