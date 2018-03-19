@@ -66,7 +66,6 @@ type LVal struct {
 	Int      int
 	Float    float64
 	Str      string
-	Err      error
 	Cells    []*LVal
 	Quoted   bool // flag indicating a single level of quoting
 	Spliced  bool // denote the value as needing to be spliced into a parent value
@@ -213,9 +212,19 @@ func Lambda(formals *LVal, body *LVal) *LVal {
 
 // Error returns an LVal representing the error corresponding to err.
 func Error(err error) *LVal {
+	// TODO:  Add somewhere to store the original error so that the embedding
+	// program can potentially pick it out and inspect it.
 	return &LVal{
 		Type: LError,
-		Err:  err,
+		Str:  err.Error(),
+	}
+}
+
+// Errorf returns an LVal representing with a formatted error message.
+func Errorf(format string, v ...interface{}) *LVal {
+	return &LVal{
+		Type: LError,
+		Str:  fmt.Sprintf(format, v...),
 	}
 }
 
@@ -231,14 +240,6 @@ func Quote(v *LVal) *LVal {
 		Body:   v,
 	}
 	return quote
-}
-
-// Errorf returns an LVal representing with a formatted error message.
-func Errorf(format string, v ...interface{}) *LVal {
-	return &LVal{
-		Type: LError,
-		Err:  fmt.Errorf(format, v...),
-	}
 }
 
 func markTailRec(npop int, fun *LVal, args *LVal) *LVal {
@@ -396,7 +397,7 @@ func (v *LVal) str(onTheRecord bool) string {
 	case LString:
 		return quote + fmt.Sprintf("%q", v.Str)
 	case LError:
-		return quote + v.Err.Error()
+		return quote + v.Str
 	case LSymbol:
 		if v.Quoted {
 			quote = QUOTE

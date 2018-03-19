@@ -24,7 +24,7 @@ func GoValue(v *LVal) interface{} {
 	}
 	switch v.Type {
 	case LError:
-		return v.Err
+		return (error)((*ErrorVal)(v))
 	case LSymbol, LString:
 		return v.Str
 	case LInt:
@@ -41,6 +41,15 @@ func GoValue(v *LVal) interface{} {
 		return m
 	}
 	return v
+}
+
+// GoError returns an error that represents v.  If v is not LError then nil is
+// returned.
+func GoError(v *LVal) error {
+	if v.Type != LError {
+		return nil
+	}
+	return (*ErrorVal)(v)
 }
 
 // GoString returns the string that v represents and the value true.  If v does
