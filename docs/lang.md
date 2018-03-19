@@ -142,3 +142,38 @@ A special operator is like a macro, in that it receives unevaluated arguments,
 but the result of a special operator will not be subsequently evaluated.
 Examples of special operators are `if`, `lambda`, and `quasiquote`.  There is
 no facility within the language for defining special operators.
+
+##Scope
+
+All symbol expressions are lexically scoped and resolve to the deepest binding
+of that symbol.  Functions natually create a lexical scope that binds their
+argument symbols.  The other way to create a lexical scope is through the use
+of `let` and `let*` which take as their first argument a list of bindings
+following by expressions which are executed in a nested scope containing those
+bindings.
+
+```lisp
+(defun foo (x)
+    (+ x 1))        ; x evaluates to the value bound in foo's scope
+
+(let ((x 1))
+    (+ x 1))        ; x evaluates to the value bound in the let's scope
+
+(let ((x 1))
+    (let ((y 2))
+        (+ x 1)))   ; x evaluates to the value bound in the first let
+```
+
+If a function or `let` expression binds a symbol which was already bound in a
+higher scope the symbol will be *shadowed* inside the `let` expression.
+
+```lisp
+(let ((x 1) (y 2))
+    (defun add-y (x)    ; the argument x shadows the value bound by the let
+        (+ x y))
+    (defun add-x (y)    ; the argument y shadows the value bound by the let
+        (+ x y))
+
+(add-y 3)               ; evaluates to 5
+(add-x 3)               ; evaluates to 4
+```
