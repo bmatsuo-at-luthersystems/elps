@@ -54,23 +54,6 @@ func TestEval(t *testing.T) {
 			{"(fn1 1)", "2"},
 			{"(fn2 1 2)", "3"},
 		}},
-		{"if", TestSequence{
-			// if operator
-			{"(if () 1 2)", "2"},
-			{"(if t 1 2)", "1"},
-			{"(if t (set 'x 1) (set 'x 2))", "1"},
-			{"x", "1"},
-			{"(if () (set 'x 1) (set 'x 2))", "2"},
-			{"x", "2"},
-			{"(if '(()) 1 2)", "1"},
-			{`(if "false" 1 2)`, "1"},
-		}},
-		{"fp", TestSequence{
-			{"(map (lambda (x) (+ x x)) '(1 2 3))", "'(2 4 6)"},
-			{"(defun flip (fn x y) (fn y x))", "()"},
-			{"(foldl (flip cons) () '(1 2 3))", "'(3 2 1)"},
-			{"(foldr cons () '(1 2 3))", "'(1 2 3)"},
-		}},
 	}
 	RunTestSuite(t, tests)
 }

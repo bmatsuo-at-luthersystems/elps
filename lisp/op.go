@@ -6,6 +6,7 @@ var langSpecialOps = []*langBuiltin{
 	{"let*", opLetSeq},
 	{"let", opLet},
 	{"progn", opProgn},
+	{"cond", opCond},
 	{"if", opIf},
 	{"or", opOr},
 	{"and", opAnd},
@@ -131,6 +132,37 @@ func opProgn(env *LEnv, args *LVal) *LVal {
 		val = env.Eval(c)
 	}
 	return val
+}
+
+// (cond (test-form then-form)*)
+func opCond(env *LEnv, args *LVal) *LVal {
+	last := len(args.Cells) - 1
+	for i, branch := range args.Cells {
+		if branch.Type != LSExpr {
+			return berrf("cond", "argument is not a list: %v", branch.Type)
+		}
+		if len(branch.Cells) != 2 {
+			return berrf("cond", "argument is not a pair (length %d)", len(branch.Cells))
+		}
+		var test *LVal
+		if branch.Cells[0].Type == LSymbol && branch.Cells[0].Str == "else" {
+			if i != last {
+				return berrf("cond", "invalid syntax: else")
+			}
+			test = branch.Cells[0] // the value here doesn't matter as long as it isn't nil
+		} else {
+			test = env.Eval(branch.Cells[0])
+		}
+		if test.Type == LError {
+			return test
+		}
+		if test.IsNil() {
+			continue
+		}
+		branch.Cells[1].Terminal = true
+		return env.Eval(branch.Cells[1])
+	}
+	return Nil()
 }
 
 // (if test-form then-form else-form)
