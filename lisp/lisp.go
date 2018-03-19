@@ -255,6 +255,11 @@ func markMacExpand(expr *LVal) *LVal {
 	}
 }
 
+// Len returns the length of the list v.
+func (v *LVal) Len() int {
+	return len(v.Cells)
+}
+
 // MapGet returns the value corresponding to k in v or an LError if k is not
 // present in v.  MapGet panics if v.Type is not LSortMap.
 func (v *LVal) MapGet(k interface{}) *LVal {
@@ -335,12 +340,25 @@ func (v *LVal) Copy() *LVal {
 		return nil
 	}
 	cp := &LVal{}
-	*cp = *v                 // shallow copy of all fields
+	*cp = *v                 // shallow copy of all fields including Map
 	cp.Cells = v.copyCells() // deep copy of v.Cells
 	cp.Env = v.Env.Copy()    // deepish copy of v.Env
 	cp.Formals = v.Formals.Copy()
 	cp.Body = v.Body.Copy()
 	return cp
+}
+
+func (v *LVal) copyMap() map[interface{}]*LVal {
+	if v.Map == nil {
+		return nil
+	}
+	m := make(map[interface{}]*LVal, len(v.Map))
+	for k, v := range v.Map {
+		// Is v.Copy() really necessary here? It seems like things get copied
+		// on mapGet anyway..
+		m[k] = v.Copy()
+	}
+	return m
 }
 
 func (v *LVal) copyCells() []*LVal {

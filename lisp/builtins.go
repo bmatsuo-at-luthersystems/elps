@@ -40,12 +40,14 @@ var langBuiltins = []*langBuiltin{
 	{"foldr", builtinFoldRight},
 	{"compose", builtinCompose},
 	{"unpack", builtinUnpack},
+	{"assoc", builtinAssoc},
 	{"assoc!", builtinAssocMutate},
 	{"get", builtinGet},
 	{"sorted-map", builtinSortedMap},
 	{"concat", builtinConcat},
 	{"reverse", builtinReverse},
 	{"list", builtinList},
+	{"length", builtinLength},
 	{"cons", builtinCons},
 	{"not", builtinNot},
 	{">=", builtinGEq},
@@ -297,6 +299,28 @@ func builtinUnpack(env *LEnv, args *LVal) *LVal {
 	return env.Eval(args)
 }
 
+func builtinAssoc(env *LEnv, args *LVal) *LVal {
+	if len(args.Cells) != 3 {
+		return berrf("assoc", "three arguments expected (got %d)", len(args.Cells))
+	}
+	m := args.Cells[0]
+	k := args.Cells[1]
+	v := args.Cells[2]
+	if m.IsNil() {
+		m = SortedMap()
+	} else if m.Type != LSortMap {
+		return berrf("assoc", "first argument is not a map: %s", m.Type)
+	} else {
+		m = m.Copy()
+		m.Map = m.copyMap()
+	}
+	err := mapSet(m, k, v, false)
+	if !err.IsNil() {
+		return berrf("assoc", "%s", err)
+	}
+	return m
+}
+
 func builtinAssocMutate(env *LEnv, args *LVal) *LVal {
 	if len(args.Cells) != 3 {
 		return berrf("assoc!", "three arguments expected (got %d)", len(args.Cells))
@@ -305,7 +329,7 @@ func builtinAssocMutate(env *LEnv, args *LVal) *LVal {
 	k := args.Cells[1]
 	v := args.Cells[2]
 	if m.IsNil() {
-		m = SortedMap()
+		return berrf("assoc!", "first argument is nil", m.Type)
 	} else if m.Type != LSortMap {
 		return berrf("assoc!", "first argument is not a map: %s", m.Type)
 	}
@@ -375,6 +399,17 @@ func builtinList(env *LEnv, v *LVal) *LVal {
 	q := QExpr()
 	q.Cells = v.Cells
 	return q
+}
+
+func builtinLength(env *LEnv, args *LVal) *LVal {
+	if args.Len() != 1 {
+		return berrf("length", "one argument expected (got %d)", args.Len())
+	}
+	lis := args.Cells[0]
+	if lis.Type != LSExpr {
+		return berrf("length", "first argument is not a list: %v", lis.Type)
+	}
+	return Int(lis.Len())
 }
 
 func builtinCons(env *LEnv, args *LVal) *LVal {

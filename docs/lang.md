@@ -192,3 +192,40 @@ Macros must take care if they directly evaluate an argument that contains a
 lambda (outside of qausiquote/unquote) because the resulting function will
 inherit the scope of the macro and not the scope of the caller, which is
 probably not desired.
+
+##Data Structures
+
+###Lists
+
+The only primative data structure is a list, a quoted s-expression.
+
+```
+'(1 2 3 4 "hello" ok)
+```
+
+Lists can be nested (it is not necessary to quote inner lists).
+
+```
+'(1 2 (3 4 ()))
+```
+
+###Sorted Maps
+
+A sorted map is a mapping between keys and values which ensures that key
+traversal is always done in sorted, increasing order.  Sorted maps can contain
+keys that are either symbols or strings.  Looking up values by key can be done
+with either a string or a symbol, regardless which type was used to insert/set
+the value originally.
+
+```
+(let ((m (sorted-map 'alice 0 'bob 1 'carol 2)))
+    (get m "carol"))    ; evaluates to 2
+```
+
+Maps are mutable values and can be updated with the `assoc!` function.
+
+```
+(let ((m (sorted-map 'alice 0 'bob 1)))
+    (assoc! m 'carol 2)
+    (get m 'carol))     ; evaluates to 2
+```
