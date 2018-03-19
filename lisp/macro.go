@@ -6,6 +6,7 @@ import (
 	"os"
 )
 
+var userMacros []*langBuiltin
 var langMacros = []*langBuiltin{
 	{"defmacro", macroDefmacro},
 	{"defun", macroDefun},
@@ -13,14 +14,24 @@ var langMacros = []*langBuiltin{
 	{"trace", macroTrace},
 }
 
+// RegisterDefaultMacro adds the given function to the list returned by
+// DefaultMacros.
+func RegisterDefaultMacro(name string, fn LBuiltin) {
+	userMacros = append(userMacros, &langBuiltin{name, fn})
+}
+
 // DefaultMacros returns the default set of LBuiltinDef added to LEnv objects
 // when LEnv.AddMacros is called without arguments.
 func DefaultMacros() []LBuiltinDef {
-	macros := make([]LBuiltinDef, len(langMacros))
-	for i := range macros {
-		macros[i] = langMacros[i]
+	ops := make([]LBuiltinDef, len(langMacros)+len(userMacros))
+	for i := range langMacros {
+		ops[i] = langMacros[i]
 	}
-	return macros
+	offset := len(langMacros)
+	for i := range userMacros {
+		ops[offset+i] = langMacros[i]
+	}
+	return ops
 }
 
 func macroDefmacro(env *LEnv, args *LVal) *LVal {

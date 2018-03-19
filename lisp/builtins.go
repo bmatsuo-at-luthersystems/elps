@@ -29,6 +29,7 @@ func (fun *langBuiltin) Eval(env *LEnv, args *LVal) *LVal {
 	return fun.fun(env, args)
 }
 
+var userBuiltins []*langBuiltin
 var langBuiltins = []*langBuiltin{
 	{"set", builtinSet},
 	{"eval", builtinEval},
@@ -65,14 +66,24 @@ var langBuiltins = []*langBuiltin{
 	{"debug-stack", builtinDebugStack},
 }
 
+// RegisterDefaultBuiltin adds the given function to the list returned by
+// DefaultBuiltins.
+func RegisterDefaultBuiltin(name string, fn LBuiltin) {
+	userBuiltins = append(userBuiltins, &langBuiltin{name, fn})
+}
+
 // DefaultBuiltins returns the default set of LBuiltinDefs added to LEnv
 // objects when LEnv.AddBuiltins is called without arguments.
 func DefaultBuiltins() []LBuiltinDef {
-	funs := make([]LBuiltinDef, len(langBuiltins))
-	for i := range funs {
-		funs[i] = langBuiltins[i]
+	ops := make([]LBuiltinDef, len(langBuiltins)+len(userBuiltins))
+	for i := range langBuiltins {
+		ops[i] = langBuiltins[i]
 	}
-	return funs
+	offset := len(langBuiltins)
+	for i := range userBuiltins {
+		ops[offset+i] = langBuiltins[i]
+	}
+	return ops
 }
 
 func builtinSet(env *LEnv, v *LVal) *LVal {

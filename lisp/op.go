@@ -1,5 +1,6 @@
 package lisp
 
+var userSpecialOps []*langBuiltin
 var langSpecialOps = []*langBuiltin{
 	{"quasiquote", opQuasiquote},
 	{"lambda", opLambda},
@@ -12,14 +13,24 @@ var langSpecialOps = []*langBuiltin{
 	{"and", opAnd},
 }
 
+// RegisterDefaultSpecialOp adds the given function to the list returned by
+// DefaultSpecialOps.
+func RegisterDefaultSpecialOp(name string, fn LBuiltin) {
+	userSpecialOps = append(userSpecialOps, &langBuiltin{name, fn})
+}
+
 // DefaultSpecialOps returns the default set of LBuiltinDef added to LEnv
 // objects when LEnv.AddSpecialOps is called without arguments.
 func DefaultSpecialOps() []LBuiltinDef {
-	macros := make([]LBuiltinDef, len(langSpecialOps))
-	for i := range macros {
-		macros[i] = langSpecialOps[i]
+	ops := make([]LBuiltinDef, len(langSpecialOps)+len(userSpecialOps))
+	for i := range langSpecialOps {
+		ops[i] = langSpecialOps[i]
 	}
-	return macros
+	offset := len(langSpecialOps)
+	for i := range userSpecialOps {
+		ops[offset+i] = langSpecialOps[i]
+	}
+	return ops
 }
 
 func opQuasiquote(env *LEnv, args *LVal) *LVal {
