@@ -4,6 +4,13 @@ import "testing"
 
 func TestMacros(t *testing.T) {
 	tests := TestSuite{
+		{"quasiquote", TestSequence{
+			{"(quasiquote (reverse '(1 2 3)))", "'(reverse '(1 2 3))"},
+			{"(quasiquote (unquote (reverse '(1 2 3))))", "'(3 2 1)"},
+			{"(quasiquote (unquote '(reverse '(1 2 3))))", "'(reverse '(1 2 3))"},
+			{"(quasiquote (1 2 (unquote-splicing '(3 4)) 5))", "'(1 2 3 4 5)"},
+			{"(let ((xs '(2 1))) (quasiquote (concat '(1 2) (unquote xs))))", "'(concat '(1 2) '(2 1))"},
+		}},
 		{"defmacro", TestSequence{
 			{"(defmacro m0 () (quasiquote (+ 1 1)))", "()"},
 			{"(defmacro m1 (x) (quasiquote (+ (unquote x) 1)))", "()"},

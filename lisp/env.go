@@ -166,6 +166,9 @@ func (env *LEnv) AddBuiltins(funs ...LBuiltinDef) {
 // won't work without this unquoting.
 func (env *LEnv) Eval(v *LVal) *LVal {
 eval:
+	if v.Spliced {
+		return Errorf("spliced value used as expression")
+	}
 	if v.Terminal {
 		v.Terminal = false
 		top := env.Stack.Top()
@@ -267,6 +270,12 @@ callf:
 		return r
 	}
 	if !f.IsMacro() {
+		if r.Type == LSExpr && !r.IsNil() {
+			// This has a really bad smell to it.  But I can't get quasiquote
+			// to work as expected without checking for unquoted s-expressions
+			// here.
+			r.Quoted = true
+		}
 		return r
 	}
 	// This is a lazy unquote.  Unquoting in this way appears to allow the

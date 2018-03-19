@@ -69,6 +69,7 @@ type LVal struct {
 	Err      error
 	Cells    []*LVal
 	Quoted   bool // flag indicating a single level of quoting
+	Spliced  bool // denote the value as needing to be spliced into a parent value
 	Terminal bool // LVal is the terminal expression in a function call
 	Map      map[interface{}]*LVal
 

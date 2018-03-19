@@ -28,6 +28,7 @@ func RunTestSuite(t *testing.T, tests TestSuite) {
 		env.AddSpecialOps()
 		env.AddMacros()
 		for j, expr := range test.TestSequence {
+			//log.Printf("test %d %q: expr %d evaluating", i, test.Name, j)
 			v, _, err := parser.ParseLVal([]byte(expr.Expr))
 			if err != nil {
 				t.Errorf("test %d %q: expr %d: parse error: %v", i, test.Name, j, err)
