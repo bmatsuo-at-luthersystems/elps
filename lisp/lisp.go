@@ -376,9 +376,11 @@ func (v *LVal) str(onTheRecord bool) string {
 }
 
 func lambdaVars(formals *LVal, bound *LVal) *LVal {
-	q := QExpr()
-	q.Cells = []*LVal{formals, bound}
-	return builtinConcat(nil, q)
+	s := SExpr()
+	s.Cells = []*LVal{formals, bound}
+	s = builtinConcat(nil, s)
+	s.Quoted = false
+	return s
 }
 
 func boundVars(v *LVal) *LVal {
@@ -390,9 +392,9 @@ func boundVars(v *LVal) *LVal {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
-	bound := QExpr()
+	bound := SExpr()
 	for i := range keys {
-		q := QExpr()
+		q := SExpr()
 		q.Cells = append(q.Cells, Symbol(keys[i]))
 		q.Cells = append(q.Cells, v.Env.Get(Symbol(keys[i])))
 		bound.Cells = append(bound.Cells, q)
