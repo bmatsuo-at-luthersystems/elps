@@ -255,6 +255,42 @@ func markMacExpand(expr *LVal) *LVal {
 	}
 }
 
+// MapGet returns the value corresponding to k in v or an LError if k is not
+// present in v.  MapGet panics if v.Type is not LSortMap.
+func (v *LVal) MapGet(k interface{}) *LVal {
+	if v.Type != LSortMap {
+		panic("not sortmap: " + v.Type.String())
+	}
+	switch k := k.(type) {
+	case *LVal:
+		return mapGet(v, k)
+	case string:
+		return mapGet(v, String(k))
+	// numerics unsupported
+	default:
+		return Errorf("invalid key type: %T", k)
+	}
+}
+
+// MapSet sets k to val in v.  MapSet panics if v.Type is not LSortMap.  If k
+// is a string (not LString) then MapSet will try to associate either an
+// existing LString key or an existing LSymbol key with val before associating
+// a new LString key with val.
+func (v *LVal) MapSet(k interface{}, val *LVal) *LVal {
+	if v.Type != LSortMap {
+		panic("not sortmap: " + v.Type.String())
+	}
+	switch k := k.(type) {
+	case *LVal:
+		return mapSet(v, k, val, false)
+	case string:
+		return mapSet(v, String(k), val, true)
+	// numerics unsupported
+	default:
+		return Errorf("invalid key type: %T", k)
+	}
+}
+
 // IsSpecialFun returns true if v is a special function.  IsSpecialFun doesn't
 // actually check v.Type, only v.FunType.
 func (v *LVal) IsSpecialFun() bool {

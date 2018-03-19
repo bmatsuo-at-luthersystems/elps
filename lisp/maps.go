@@ -38,46 +38,86 @@ func mapGet(m *LVal, key *LVal) *LVal {
 	if k == nil {
 		return Errorf("unhashable type: %s", key.Type)
 	}
-	v := m.Map[k]
-	if v != nil {
-		return v.Copy()
+	switch k := k.(type) {
+	case string:
+		v := m.Map[k]
+		if v != nil {
+			return v.Copy()
+		}
+		v = m.Map[mapSymbol(k)]
+		if v != nil {
+			return v.Copy()
+		}
+	case mapSymbol:
+		v := m.Map[k]
+		if v != nil {
+			return v.Copy()
+		}
+		v = m.Map[string(k)]
+		if v != nil {
+			return v.Copy()
+		}
 	}
 	return Errorf("key not found: %s", key)
 }
 
-func mapSet(m *LVal, key *LVal, val *LVal) *LVal {
+func mapSet(m *LVal, key *LVal, val *LVal, coerce bool) *LVal {
 	k := toSortedMapKey(key)
 	if k == nil {
 		return Errorf("unhashable type: %s", key.Type)
+	}
+	switch _k := k.(type) {
+	case string:
+		_, ok := m.Map[mapSymbol(_k)]
+		if ok {
+			if coerce {
+				k = mapSymbol(_k)
+			} else {
+				return Errorf("map contains both symbol and string key: %s", k)
+			}
+		}
+	case mapSymbol:
+		_, ok := m.Map[string(_k)]
+		if ok {
+			if coerce {
+				k = string(_k)
+			} else {
+				return Errorf("map contains both symbol and string key: %s", k)
+			}
+		}
 	}
 	m.Map[k] = val
 	return Nil()
 }
 
+// BUG:  Numbers cannot be used as map keys because there is no simple way to
+// retain their input type while also checking for equality using a builtin
+// (golang) map.  This is not considered a limitation for now because it
+// doesn't hinder JSON serialization.
 func toSortedMapKey(v *LVal) interface{} {
 	switch v.Type {
+	//case LInt:
+	//	return v.Int
+	//case LFloat:
+	//	return v.Float
 	case LString:
 		return v.Str
 	case LSymbol:
 		return mapSymbol(v.Str)
-	case LInt:
-		return v.Int
-	case LFloat:
-		return v.Float
 	}
 	return nil
 }
 
 func sortedMapKey(k interface{}) *LVal {
 	switch v := k.(type) {
+	//case int:
+	//	return Int(v)
+	//case float64:
+	//	return Float(v)
 	case string:
 		return String(v)
 	case mapSymbol:
 		return Symbol(string(v))
-	case int:
-		return Int(v)
-	case float64:
-		return Float(v)
 	}
 	return Error(fmt.Errorf("invalid key type: %T", k))
 }

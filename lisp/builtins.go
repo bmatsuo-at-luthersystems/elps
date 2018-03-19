@@ -291,7 +291,7 @@ func builtinAssocMutate(env *LEnv, args *LVal) *LVal {
 	} else if m.Type != LSortMap {
 		return berrf("assoc!", "first argument is not a map: %s", m.Type)
 	}
-	err := mapSet(m, k, v)
+	err := mapSet(m, k, v, false)
 	if !err.IsNil() {
 		return berrf("assoc!", "%s", err)
 	}
@@ -318,7 +318,7 @@ func builtinSortedMap(env *LEnv, args *LVal) *LVal {
 	for len(args.Cells) >= 2 {
 		k := args.Cells[0]
 		v := args.Cells[1]
-		err := mapSet(m, k, v)
+		err := mapSet(m, k, v, false)
 		if !err.IsNil() {
 			return err
 		}
