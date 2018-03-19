@@ -11,7 +11,8 @@ An expression is either an atom or a sequence of atoms delimited by parenthesis
 `(...)`.  An environment evaluates one expression at a time, evaluating each
 sub-expression before evaluating the main expression.  Expressions may also be
 *quoted* by prefixing it with an single quote `'`.  Quoted expressions are
-discussed in depth in the section about evaluation.
+discussed in depth along with [expression
+evaluation](#markdown-header-expression-evaluation).
 
 ##Atoms
 
@@ -82,7 +83,8 @@ argument symbols.
 
 The above expression evaluates to an anonymous function (a lambda function)
 which has one argument `x` and evaluates to the expression `(- x)` when x is
-bound to a value through [expression evaluation](#Expression_Evaluation).
+bound to a value through [expression
+evaluation](#markdown-header-expression-evaluation).
 
 ```lisp
 ((lambda (x) (- x)) 3)  ; evaluates to -3 
