@@ -119,7 +119,7 @@ func (env *LEnv) AddMacros(macs ...LBuiltinDef) {
 			panic(fmt.Sprintf("macro already defined: %v (= %v)", k, exist))
 		}
 		id := fmt.Sprintf("<builtin-macro ``%s''>", mac.Name())
-		env.Put(k, Macro(id, mac.Eval))
+		env.Put(k, Macro(id, mac.Formals(), mac.Eval))
 	}
 }
 
@@ -136,7 +136,7 @@ func (env *LEnv) AddSpecialOps(ops ...LBuiltinDef) {
 			panic(fmt.Sprintf("macro already defined: %v (= %v)", k, exist))
 		}
 		id := fmt.Sprintf("<special-op ``%s''>", op.Name())
-		env.Put(k, SpecialOp(id, op.Eval))
+		env.Put(k, SpecialOp(id, op.Formals(), op.Eval))
 	}
 }
 
@@ -153,7 +153,7 @@ func (env *LEnv) AddBuiltins(funs ...LBuiltinDef) {
 			panic("symbol already defined: " + f.Name())
 		}
 		id := fmt.Sprintf("<builtin-function ``%s''>", f.Name())
-		v := Fun(id, f.Eval)
+		v := Fun(id, f.Formals(), f.Eval)
 		env.Put(k, v)
 	}
 }
@@ -290,44 +290,57 @@ callf:
 
 // Call invokes LFun fun with the list args.
 func (env *LEnv) Call(fun *LVal, args *LVal) *LVal {
-	if fun.Builtin != nil {
-		return fun.Builtin(env, args)
-	}
-	// FIXME:  A shallow copy is probably correct here.  We don't want to copy
-	// the Env so that updates to the global scope are reflected.
+	// FIXME:  A shallow copy is probably correct here.(?)  We don't want to
+	// copy the Env so that updates to the global scope are reflected.
 
 	fun = fun.Copy()
+	putArg := func(k, v *LVal) {
+		fun.Env.Put(k, v)
+	}
+	putVarArg := func(k *LVal, v *LVal) {
+		fun.Env.Put(k, v)
+	}
+	if fun.Env == nil {
+		// FIXME?: Builtins don't have lexical envs.  We just store the args in
+		// the cells for builtin functions.
+		putArg = func(k, v *LVal) {
+			fun.Cells = append(fun.Cells, v)
+		}
+		putVarArg = func(k *LVal, v *LVal) {
+			fun.Cells = append(fun.Cells, v.Cells...)
+		}
+	}
 	formals := fun.Cells[0]
 	nargs := len(formals.Cells) // only used when not vargs
 	for i, v := range args.Cells {
 		if len(formals.Cells) == 0 {
-			return Errorf("function expects %d arguments (got %d)",
-				nargs, len(args.Cells))
+			return Errorf("%s: function expects %d arguments (got %d)", fun.FID, nargs, len(args.Cells))
 		}
 		argSym := formals.Cells[0]
-		if argSym.Str == "&" {
+		if argSym.Str == VarArgSymbol {
 			if len(formals.Cells) == 1 {
-				return Errorf("function argument format list ends with symbol ``&''")
+				return Errorf("%s: function argument format list ends with symbol ``%s''", fun.FID, VarArgSymbol)
 			}
 			argSym = formals.Cells[1]
-			q := QExpr()
-			q.Cells = args.Cells[i:]
+			q := QExpr(args.Cells[i:])
 			formals.Cells = nil
-			fun.Env.Put(argSym, q)
+			putVarArg(argSym, q)
 			break
 		}
 		formals.Cells = formals.Cells[1:]
-		fun.Env.Put(argSym, v)
+		putArg(argSym, v)
 	}
 	if len(formals.Cells) != 0 {
-		if formals.Cells[0].Str != "&" {
+		if formals.Cells[0].Str != VarArgSymbol {
+			// Return the partially bound, unevaluated function so additional
+			// arguments can be curried.
 			return fun
 		}
 		if len(formals.Cells) != 2 {
-			return Errorf("function argument format list ends with symbol ``&''")
+			return Errorf("function argument format list ends with symbol ``%s''", VarArgSymbol)
 		}
 		// We never bound the final argument to a value so we do it here.
-		fun.Env.Put(formals.Cells[1], Nil())
+		putVarArg(formals.Cells[1], Nil())
 		formals.Cells = nil
 	}
 
@@ -337,10 +350,12 @@ func (env *LEnv) Call(fun *LVal, args *LVal) *LVal {
 	// dynamic scope.
 	//		fun.Env.Parent = env
 
-	// NOTE:  When lambda supports multiple body expressions (with an implicit
-	// progn) this may not work correctly anymore.
-	s := SExpr()
-	s.Terminal = true
+	if fun.Builtin != nil {
+		// FIXME:  I think fun.Env is probably correct here.  But it wouldn't
+		// surprise me if at least one builtin breaks when it switches.
+		return fun.Builtin(env, QExpr(fun.Cells[1:]))
+	}
+
 	body := fun.Cells[1:]
 	if len(body) > 0 {
 		body[len(body)-1].Terminal = true

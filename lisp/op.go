@@ -8,22 +8,22 @@ import (
 
 var userSpecialOps []*langBuiltin
 var langSpecialOps = []*langBuiltin{
-	{"quasiquote", opQuasiquote},
-	{"lambda", opLambda},
-	{"expr", opExpr},
-	{"let*", opLetSeq},
-	{"let", opLet},
-	{"progn", opProgn},
-	{"cond", opCond},
-	{"if", opIf},
-	{"or", opOr},
-	{"and", opAnd},
+	{"quasiquote", Formals("expr"), opQuasiquote},
+	{"lambda", Formals("formals", VarArgSymbol, "expr"), opLambda},
+	{"expr", Formals("pattern"), opExpr},
+	{"let*", Formals("bindings", VarArgSymbol, "expr"), opLetSeq},
+	{"let", Formals("bindings", VarArgSymbol, "expr"), opLet},
+	{"progn", Formals(VarArgSymbol, "expr"), opProgn},
+	{"cond", Formals(VarArgSymbol, "branch"), opCond},
+	{"if", Formals("condition", "then", "else"), opIf},
+	{"or", Formals(VarArgSymbol, "expr"), opOr},
+	{"and", Formals(VarArgSymbol, "expr"), opAnd},
 }
 
 // RegisterDefaultSpecialOp adds the given function to the list returned by
 // DefaultSpecialOps.
-func RegisterDefaultSpecialOp(name string, fn LBuiltin) {
-	userSpecialOps = append(userSpecialOps, &langBuiltin{name, fn})
+func RegisterDefaultSpecialOp(name string, formals *LVal, fn LBuiltin) {
+	userSpecialOps = append(userSpecialOps, &langBuiltin{name, formals.Copy(), fn})
 }
 
 // DefaultSpecialOps returns the default set of LBuiltinDef added to LEnv
@@ -103,7 +103,7 @@ func opExpr(env *LEnv, args *LVal) *LVal {
 	if err != nil {
 		return berrf("expr", "%s", err)
 	}
-	formals := SExpr()
+	formals := SExpr(nil)
 	if short {
 		formals.Cells = make([]*LVal, 1, 3)
 		formals.Cells[0] = Symbol("%")
@@ -114,7 +114,7 @@ func opExpr(env *LEnv, args *LVal) *LVal {
 		}
 	}
 	if vargs {
-		formals.Cells = append(formals.Cells, Symbol("&"), Symbol("%&"))
+		formals.Cells = append(formals.Cells, Symbol(VarArgSymbol), Symbol("%&"))
 	}
 	fun := Lambda(formals, []*LVal{body})
 	fun.Env.Parent = env
@@ -132,7 +132,7 @@ func countExprArgs(expr *LVal) (nargs int, short bool, vargs bool, err error) {
 		if numStr == "" {
 			return 1, true, false, nil
 		}
-		if numStr == "&" {
+		if numStr == VarArgSymbol {
 			return 0, false, true, nil
 		}
 		num, err := strconv.Atoi(numStr)
@@ -159,7 +159,7 @@ func countExprArgs(expr *LVal) (nargs int, short bool, vargs bool, err error) {
 				}
 				continue
 			}
-			if numStr == "&" {
+			if numStr == VarArgSymbol {
 				vargs = true
 				continue
 			}

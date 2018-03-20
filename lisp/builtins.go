@@ -13,16 +13,22 @@ type LBuiltin func(env *LEnv, args *LVal) *LVal
 // LBuiltinDef is a built-in function
 type LBuiltinDef interface {
 	Name() string
+	Formals() *LVal
 	Eval(env *LEnv, args *LVal) *LVal
 }
 
 type langBuiltin struct {
-	name string
-	fun  LBuiltin
+	name    string
+	formals *LVal
+	fun     LBuiltin
 }
 
 func (fun *langBuiltin) Name() string {
 	return fun.name
+}
+
+func (fun *langBuiltin) Formals() *LVal {
+	return fun.formals
 }
 
 func (fun *langBuiltin) Eval(env *LEnv, args *LVal) *LVal {
@@ -31,45 +37,45 @@ func (fun *langBuiltin) Eval(env *LEnv, args *LVal) *LVal {
 
 var userBuiltins []*langBuiltin
 var langBuiltins = []*langBuiltin{
-	{"set", builtinSet},
-	{"eval", builtinEval},
-	{"error", builtinError},
-	{"car", builtinCAR},
-	{"cdr", builtinCDR},
-	{"map", builtinMap},
-	{"foldl", builtinFoldLeft},
-	{"foldr", builtinFoldRight},
-	{"compose", builtinCompose},
-	{"unpack", builtinUnpack},
-	{"assoc", builtinAssoc},
-	{"assoc!", builtinAssocMutate},
-	{"get", builtinGet},
-	{"sorted-map", builtinSortedMap},
-	{"concat", builtinConcat},
-	{"reverse", builtinReverse},
-	{"list", builtinList},
-	{"length", builtinLength},
-	{"cons", builtinCons},
-	{"not", builtinNot},
-	{">=", builtinGEq},
-	{">", builtinGT},
-	{"<=", builtinLEq},
-	{"<", builtinLT},
-	{"=", builtinEqNum},
-	{"**", builtinPow},
-	{"%", builtinMod},
-	{"+", builtinAdd},
-	{"-", builtinSub},
-	{"/", builtinDiv},
-	{"*", builtinMul},
-	{"debug-print", builtinDebugPrint},
-	{"debug-stack", builtinDebugStack},
+	{"set", Formals("sym", "val"), builtinSet},
+	{"eval", Formals("expr"), builtinEval},
+	{"error", Formals(VarArgSymbol, "args"), builtinError},
+	{"car", Formals("lis"), builtinCAR},
+	{"cdr", Formals("lis"), builtinCDR},
+	{"map", Formals("fn", "lis"), builtinMap},
+	{"foldl", Formals("fn", "z", "lis"), builtinFoldLeft},
+	{"foldr", Formals("fn", "z", "lis"), builtinFoldRight},
+	{"compose", Formals("f", "g"), builtinCompose},
+	{"unpack", Formals("f", "lis"), builtinUnpack},
+	{"assoc", Formals("m", "k", "v"), builtinAssoc},
+	{"assoc!", Formals("m", "k", "v"), builtinAssocMutate},
+	{"get", Formals("m", "k"), builtinGet},
+	{"sorted-map", Formals(VarArgSymbol, "args"), builtinSortedMap},
+	{"concat", Formals(VarArgSymbol, "args"), builtinConcat},
+	{"reverse", Formals("lis"), builtinReverse},
+	{"list", Formals(VarArgSymbol, "args"), builtinList},
+	{"length", Formals("lis"), builtinLength},
+	{"cons", Formals("head", "tail"), builtinCons},
+	{"not", Formals("expr"), builtinNot},
+	{">=", Formals("a", "b"), builtinGEq},
+	{">", Formals("a", "b"), builtinGT},
+	{"<=", Formals("a", "b"), builtinLEq},
+	{"<", Formals("a", "b"), builtinLT},
+	{"=", Formals("a", "b"), builtinEqNum},
+	{"**", Formals("a", "b"), builtinPow},
+	{"%", Formals("a", "b"), builtinMod},
+	{"+", Formals(VarArgSymbol, "x"), builtinAdd},
+	{"-", Formals(VarArgSymbol, "x"), builtinSub},
+	{"/", Formals(VarArgSymbol, "x"), builtinDiv},
+	{"*", Formals(VarArgSymbol, "x"), builtinMul},
+	{"debug-print", Formals(VarArgSymbol, "args"), builtinDebugPrint},
+	{"debug-stack", Formals(), builtinDebugStack},
 }
 
 // RegisterDefaultBuiltin adds the given function to the list returned by
 // DefaultBuiltins.
-func RegisterDefaultBuiltin(name string, fn LBuiltin) {
-	userBuiltins = append(userBuiltins, &langBuiltin{name, fn})
+func RegisterDefaultBuiltin(name string, formals *LVal, fn LBuiltin) {
+	userBuiltins = append(userBuiltins, &langBuiltin{name, formals.Copy(), fn})
 }
 
 // DefaultBuiltins returns the default set of LBuiltinDefs added to LEnv
@@ -87,12 +93,6 @@ func DefaultBuiltins() []LBuiltinDef {
 }
 
 func builtinSet(env *LEnv, v *LVal) *LVal {
-	if len(v.Cells) < 2 {
-		return berrf("set", "too few arguments provided: %d", len(v.Cells))
-	}
-	if len(v.Cells) > 2 {
-		return berrf("set", "too many arguments provided: %d", len(v.Cells))
-	}
 	if v.Cells[0].Type != LSymbol {
 		return berrf("set", "first argument is not a symbol: %v", v.Cells[0].Type)
 	}
@@ -102,9 +102,6 @@ func builtinSet(env *LEnv, v *LVal) *LVal {
 }
 
 func builtinEval(env *LEnv, args *LVal) *LVal {
-	if len(args.Cells) > 1 {
-		return berrf("eval", "too many arguments provided: %d", len(args.Cells))
-	}
 	v := args.Cells[0]
 	if v.Type == LQuote {
 		return v.Cells[0]
@@ -129,9 +126,6 @@ func builtinError(env *LEnv, args *LVal) *LVal {
 }
 
 func builtinCAR(env *LEnv, v *LVal) *LVal {
-	if len(v.Cells) != 1 {
-		return berrf("car", "too many arguments provided: %d", len(v.Cells))
-	}
 	if v.Cells[0].Type != LSExpr {
 		return berrf("car", "argument is not a list: %v", v.Cells[0].Type)
 	}
@@ -143,9 +137,6 @@ func builtinCAR(env *LEnv, v *LVal) *LVal {
 }
 
 func builtinCDR(env *LEnv, v *LVal) *LVal {
-	if len(v.Cells) != 1 {
-		return berrf("cdr", "too many arguments provided: %d", len(v.Cells))
-	}
 	if v.Cells[0].Type != LSExpr {
 		return berrf("cdr", "argument is not a list %v", v.Cells[0].Type)
 	}
@@ -153,15 +144,11 @@ func builtinCDR(env *LEnv, v *LVal) *LVal {
 		// Maybe this should just return v?
 		return berrf("cdr", "argument is empty")
 	}
-	q := QExpr()
-	q.Cells = v.Cells[0].Cells[1:]
+	q := QExpr(v.Cells[0].Cells[1:])
 	return q
 }
 
 func builtinMap(env *LEnv, args *LVal) *LVal {
-	if len(args.Cells) != 2 {
-		return berrf("map", "too many arguments provided: %d", len(args.Cells))
-	}
 	f := args.Cells[0]
 	if f.Type != LFun {
 		return berrf("map", "first argument is not a function: %s", f.Type)
@@ -171,8 +158,7 @@ func builtinMap(env *LEnv, args *LVal) *LVal {
 		return berrf("map", "second argument is not a list: %s", lis.Type)
 	}
 	for i, c := range lis.Cells {
-		fargs := QExpr()
-		fargs.Cells = []*LVal{c}
+		fargs := QExpr([]*LVal{c})
 		fret := env.Call(f, fargs)
 		if fret.Type == LError {
 			return fret
@@ -183,9 +169,6 @@ func builtinMap(env *LEnv, args *LVal) *LVal {
 }
 
 func builtinFoldLeft(env *LEnv, args *LVal) *LVal {
-	if len(args.Cells) != 3 {
-		return berrf("foldl", "too many arguments provided: %d", len(args.Cells))
-	}
 	f := args.Cells[0]
 	if f.Type != LFun {
 		return berrf("foldl", "first argument is not a function: %s", f.Type)
@@ -196,12 +179,11 @@ func builtinFoldLeft(env *LEnv, args *LVal) *LVal {
 		return berrf("foldl", "third argument is not a list: %s", lis.Type)
 	}
 	for _, c := range lis.Cells {
-		fargs := QExpr()
-		fargs.Cells = []*LVal{
+		fargs := QExpr([]*LVal{
 			// args reversed from foldr function invocation
 			acc,
 			c,
-		}
+		})
 		fret := env.Call(f, fargs)
 		if fret.Type == LError {
 			return fret
@@ -212,9 +194,6 @@ func builtinFoldLeft(env *LEnv, args *LVal) *LVal {
 }
 
 func builtinFoldRight(env *LEnv, args *LVal) *LVal {
-	if len(args.Cells) != 3 {
-		return berrf("foldr", "too many arguments provided: %d", len(args.Cells))
-	}
 	f := args.Cells[0]
 	if f.Type != LFun {
 		return berrf("foldr", "first argument is not a function: %s", f.Type)
@@ -226,12 +205,11 @@ func builtinFoldRight(env *LEnv, args *LVal) *LVal {
 	}
 	for i := len(lis.Cells) - 1; i >= 0; i-- {
 		c := lis.Cells[i]
-		fargs := QExpr()
-		fargs.Cells = []*LVal{
+		fargs := QExpr([]*LVal{
 			// args reversed from foldl function invocation
 			c,
 			acc,
-		}
+		})
 		fret := env.Call(f, fargs)
 		if fret.Type == LError {
 			return fret
@@ -243,9 +221,6 @@ func builtinFoldRight(env *LEnv, args *LVal) *LVal {
 
 // NOTE: Compose requires concat and unpack in order to work with varargs.
 func builtinCompose(env *LEnv, args *LVal) *LVal {
-	if len(args.Cells) != 2 {
-		return berrf("compose", "two argument expected (got %d)", len(args.Cells))
-	}
 	f := args.Cells[0]
 	g := args.Cells[1]
 	if f.Type != LFun {
@@ -256,8 +231,8 @@ func builtinCompose(env *LEnv, args *LVal) *LVal {
 	}
 	formals := g.Cells[0].Copy()
 	body := args // body.Cells[0] is already set to f
-	gcall := SExpr()
-	gcall.Cells = make([]*LVal, 0, len(formals.Cells)+1)
+	body.Quoted = false
+	gcall := SExpr(make([]*LVal, 0, len(formals.Cells)+1))
 	gcall.Cells = append(gcall.Cells, g)
 	var restSym *LVal
 	for i, argSym := range formals.Cells {
@@ -266,7 +241,7 @@ func builtinCompose(env *LEnv, args *LVal) *LVal {
 			// when the g function was created.
 			return berrf("compose", "invalid list of formals: %s", formals)
 		}
-		if argSym.Str == "&" {
+		if argSym.Str == VarArgSymbol {
 			if len(formals.Cells) != i+2 {
 				// This should not happen.  The list of formals should be checked
 				// when the g function was created.
@@ -278,13 +253,12 @@ func builtinCompose(env *LEnv, args *LVal) *LVal {
 		gcall.Cells = append(gcall.Cells, argSym)
 	}
 	if restSym != nil {
-		concatPrefix := QExpr()
-		concatPrefix.Cells = gcall.Cells[1:]
-		concatCall := SExpr()
+		concatPrefix := QExpr(gcall.Cells[1:])
+		concatCall := SExpr(nil)
 		concatCall.Cells = append(concatCall.Cells, Symbol("concat"))
 		concatCall.Cells = append(concatCall.Cells, concatPrefix)
 		concatCall.Cells = append(concatCall.Cells, restSym.Copy())
-		unpackCall := SExpr()
+		unpackCall := SExpr(nil)
 		unpackCall.Cells = append(unpackCall.Cells, Symbol("unpack"))
 		unpackCall.Cells = append(unpackCall.Cells, g)
 		unpackCall.Cells = append(unpackCall.Cells, concatCall)
@@ -297,9 +271,6 @@ func builtinCompose(env *LEnv, args *LVal) *LVal {
 }
 
 func builtinUnpack(env *LEnv, args *LVal) *LVal {
-	if len(args.Cells) != 2 {
-		return berrf("unpack", "two argument expected (got %d)", len(args.Cells))
-	}
 	if args.Cells[0].Type != LFun {
 		return berrf("unpack", "first argument is not a function: %s", args.Cells[0].Type)
 	}
@@ -307,13 +278,11 @@ func builtinUnpack(env *LEnv, args *LVal) *LVal {
 		return berrf("unpack", "second argument is not a list: %s", args.Cells[1].Type)
 	}
 	args.Cells = append(args.Cells[:1], args.Cells[1].Cells...)
+	args.Quoted = false
 	return env.Eval(args)
 }
 
 func builtinAssoc(env *LEnv, args *LVal) *LVal {
-	if len(args.Cells) != 3 {
-		return berrf("assoc", "three arguments expected (got %d)", len(args.Cells))
-	}
 	m := args.Cells[0]
 	k := args.Cells[1]
 	v := args.Cells[2]
@@ -333,9 +302,6 @@ func builtinAssoc(env *LEnv, args *LVal) *LVal {
 }
 
 func builtinAssocMutate(env *LEnv, args *LVal) *LVal {
-	if len(args.Cells) != 3 {
-		return berrf("assoc!", "three arguments expected (got %d)", len(args.Cells))
-	}
 	m := args.Cells[0]
 	k := args.Cells[1]
 	v := args.Cells[2]
@@ -352,9 +318,6 @@ func builtinAssocMutate(env *LEnv, args *LVal) *LVal {
 }
 
 func builtinGet(env *LEnv, args *LVal) *LVal {
-	if len(args.Cells) != 2 {
-		return berrf("get", "two arguments expected (got %d)", len(args.Cells))
-	}
 	m := args.Cells[0]
 	k := args.Cells[1]
 	if m.Type != LSortMap {
@@ -381,7 +344,7 @@ func builtinSortedMap(env *LEnv, args *LVal) *LVal {
 }
 
 func builtinConcat(env *LEnv, v *LVal) *LVal {
-	q := QExpr()
+	q := QExpr(nil)
 	for _, c := range v.Cells {
 		if c.Type != LSExpr {
 			return berrf("concat", "argument is not a list: %v", c.Type)
@@ -392,14 +355,10 @@ func builtinConcat(env *LEnv, v *LVal) *LVal {
 }
 
 func builtinReverse(env *LEnv, args *LVal) *LVal {
-	if len(args.Cells) != 1 {
-		return berrf("reverse", "one argument expected (got %d)", len(args.Cells))
-	}
 	if args.Cells[0].Type != LSExpr {
 		return berrf("reverse", "first argument is not a list: %v", args.Cells[0].Type)
 	}
-	q := QExpr()
-	q.Cells = args.Cells[0].Cells
+	q := QExpr(args.Cells[0].Cells)
 	for i := 0; i < len(q.Cells)-1; i++ {
 		q.Cells[i], q.Cells[len(q.Cells)-1-i] = q.Cells[len(q.Cells)-1-i], q.Cells[i]
 	}
@@ -407,15 +366,10 @@ func builtinReverse(env *LEnv, args *LVal) *LVal {
 }
 
 func builtinList(env *LEnv, v *LVal) *LVal {
-	q := QExpr()
-	q.Cells = v.Cells
-	return q
+	return QExpr(v.Cells)
 }
 
 func builtinLength(env *LEnv, args *LVal) *LVal {
-	if args.Len() != 1 {
-		return berrf("length", "one argument expected (got %d)", args.Len())
-	}
 	lis := args.Cells[0]
 	if lis.Type != LSExpr {
 		return berrf("length", "first argument is not a list: %v", lis.Type)
@@ -424,9 +378,6 @@ func builtinLength(env *LEnv, args *LVal) *LVal {
 }
 
 func builtinCons(env *LEnv, args *LVal) *LVal {
-	if len(args.Cells) != 2 {
-		return berrf("cons", "two arguments expected (got %d)", len(args.Cells))
-	}
 	if args.Cells[1].Type != LSExpr {
 		return berrf("cons", "second argument is not a list: %s", args.Cells[1].Type)
 	}
@@ -436,9 +387,6 @@ func builtinCons(env *LEnv, args *LVal) *LVal {
 }
 
 func builtinNot(env *LEnv, v *LVal) *LVal {
-	if len(v.Cells) != 1 {
-		return berrf("not", "too many arguments provided: %d", len(v.Cells))
-	}
 	switch v.Cells[0].Type {
 	case LSExpr:
 		if len(v.Cells[0].Cells) == 0 {
@@ -450,9 +398,6 @@ func builtinNot(env *LEnv, v *LVal) *LVal {
 }
 
 func builtinLEq(env *LEnv, args *LVal) *LVal {
-	if len(args.Cells) != 2 {
-		berrf("<", "two arguments expected (got %d)", len(args.Cells))
-	}
 	a, b := args.Cells[0], args.Cells[1]
 	if a.IsNumeric() {
 		berrf("<", "first argument is not a number: %s", a.Type)
@@ -467,9 +412,6 @@ func builtinLEq(env *LEnv, args *LVal) *LVal {
 }
 
 func builtinLT(env *LEnv, args *LVal) *LVal {
-	if len(args.Cells) != 2 {
-		berrf("<", "two arguments expected (got %d)", len(args.Cells))
-	}
 	a, b := args.Cells[0], args.Cells[1]
 	if a.IsNumeric() {
 		berrf("<", "first argument is not a number: %s", a.Type)
@@ -484,9 +426,6 @@ func builtinLT(env *LEnv, args *LVal) *LVal {
 }
 
 func builtinGEq(env *LEnv, args *LVal) *LVal {
-	if len(args.Cells) != 2 {
-		berrf(">=", "two arguments expected (got %d)", len(args.Cells))
-	}
 	a, b := args.Cells[0], args.Cells[1]
 	if a.IsNumeric() {
 		berrf(">=", "first argument is not a number: %s", a.Type)
@@ -501,9 +440,6 @@ func builtinGEq(env *LEnv, args *LVal) *LVal {
 }
 
 func builtinGT(env *LEnv, args *LVal) *LVal {
-	if len(args.Cells) != 2 {
-		berrf(">", "two arguments expected (got %d)", len(args.Cells))
-	}
 	a, b := args.Cells[0], args.Cells[1]
 	if a.IsNumeric() {
 		berrf(">", "first argument is not a number: %s", a.Type)
@@ -518,9 +454,6 @@ func builtinGT(env *LEnv, args *LVal) *LVal {
 }
 
 func builtinEqNum(env *LEnv, args *LVal) *LVal {
-	if len(args.Cells) != 2 {
-		berrf("=", "two arguments expected (got %d)", len(args.Cells))
-	}
 	a, b := args.Cells[0], args.Cells[1]
 	if a.IsNumeric() {
 		berrf("=", "first argument is not a number: %s", a.Type)
@@ -537,9 +470,6 @@ func builtinEqNum(env *LEnv, args *LVal) *LVal {
 }
 
 func builtinPow(env *LEnv, args *LVal) *LVal {
-	if len(args.Cells) != 2 {
-		berrf("**", "two arguments expected (got %d)", len(args.Cells))
-	}
 	a, b := args.Cells[0], args.Cells[1]
 	if a.IsNumeric() {
 		berrf("**", "first argument is not a number: %s", a.Type)
@@ -574,9 +504,6 @@ func powInt(a, b int) *LVal {
 }
 
 func builtinMod(env *LEnv, args *LVal) *LVal {
-	if len(args.Cells) != 2 {
-		berrf("%", "two arguments expected (got %d)", len(args.Cells))
-	}
 	a, b := args.Cells[0], args.Cells[1]
 	if a.Type != LInt {
 		berrf("%", "first argument is not an int: %s", a.Type)
@@ -726,9 +653,6 @@ func builtinDebugPrint(env *LEnv, args *LVal) *LVal {
 }
 
 func builtinDebugStack(env *LEnv, args *LVal) *LVal {
-	if len(args.Cells) != 0 {
-		return berrf("debug-stack", "no arguments expected (got %d)", len(args.Cells))
-	}
 	env.Stack.DebugPrint()
 	return Nil()
 }

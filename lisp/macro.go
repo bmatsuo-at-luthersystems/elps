@@ -2,22 +2,21 @@ package lisp
 
 import (
 	"fmt"
-	"log"
 	"os"
 )
 
 var userMacros []*langBuiltin
 var langMacros = []*langBuiltin{
-	{"defmacro", macroDefmacro},
-	{"defun", macroDefun},
-	{"quote", macroQuote},
-	{"trace", macroTrace},
+	{"defmacro", Formals("name", "formals", "expr"), macroDefmacro},
+	{"defun", Formals("name", "formals", VarArgSymbol, "expr"), macroDefun},
+	{"quote", Formals("expr"), macroQuote},
+	{"trace", Formals("expr"), macroTrace},
 }
 
 // RegisterDefaultMacro adds the given function to the list returned by
 // DefaultMacros.
-func RegisterDefaultMacro(name string, fn LBuiltin) {
-	userMacros = append(userMacros, &langBuiltin{name, fn})
+func RegisterDefaultMacro(name string, formals *LVal, fn LBuiltin) {
+	userMacros = append(userMacros, &langBuiltin{name, formals.Copy(), fn})
 }
 
 // DefaultMacros returns the default set of LBuiltinDef added to LEnv objects
@@ -145,7 +144,6 @@ func findAndUnquote(env *LEnv, v *LVal) *LVal {
 	// ``unquote-splicing''
 	for i := len(v.Cells) - 1; i >= 0; i-- {
 		if v.Cells[i].Spliced {
-			log.Printf("splice detected")
 			splice := v.Cells[i]
 			if splice.Type != LSExpr {
 				// TODO:  I believe it is incorrect to error out here.  But

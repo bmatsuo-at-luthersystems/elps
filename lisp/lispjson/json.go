@@ -70,8 +70,7 @@ func (s *Serializer) loadInterface(x interface{}) *lisp.LVal {
 		}
 		return m
 	case []interface{}:
-		lis := lisp.QExpr()
-		lis.Cells = make([]*lisp.LVal, len(x))
+		lis := lisp.QExpr(make([]*lisp.LVal, len(x)))
 		for i, v := range x {
 			lis.Cells[i] = s.loadInterface(v)
 			if lis.Cells[i].Type == lisp.LError {

@@ -130,22 +130,24 @@ func QSymbol(s string) *LVal {
 
 // Nil returns an LVal representing nil, an empty list, an absent value.
 func Nil() *LVal {
-	return SExpr()
+	return SExpr(nil)
 }
 
 // SExpr returns an LVal representing an S-expression, a symbolic expression.
-func SExpr() *LVal {
+func SExpr(cells []*LVal) *LVal {
 	return &LVal{
-		Type: LSExpr,
+		Type:  LSExpr,
+		Cells: cells,
 	}
 }
 
 // QExpr returns an LVal representing an Q-expression, a quoted expression, a
 // list.
-func QExpr() *LVal {
+func QExpr(cells []*LVal) *LVal {
 	return &LVal{
 		Type:   LSExpr,
 		Quoted: true,
+		Cells:  cells,
 	}
 }
 
@@ -158,21 +160,23 @@ func SortedMap() *LVal {
 }
 
 // Fun returns an LVal representing a function
-func Fun(fid string, fn LBuiltin) *LVal {
+func Fun(fid string, formals *LVal, fn LBuiltin) *LVal {
 	return &LVal{
 		Type:    LFun,
 		Builtin: fn,
 		FID:     fid,
+		Cells:   []*LVal{formals},
 	}
 }
 
 // Macro returns an LVal representing a macro
-func Macro(fid string, fn LBuiltin) *LVal {
+func Macro(fid string, formals *LVal, fn LBuiltin) *LVal {
 	return &LVal{
 		Type:    LFun,
 		FunType: LFunMacro,
 		Builtin: fn,
 		FID:     fid,
+		Cells:   []*LVal{formals},
 	}
 }
 
@@ -180,12 +184,13 @@ func Macro(fid string, fn LBuiltin) *LVal {
 // operators are function which receive unevaluated results, like macros.
 // However values returned by special operations do not require further
 // evaluation, unlike macros.
-func SpecialOp(fid string, fn LBuiltin) *LVal {
+func SpecialOp(fid string, formals *LVal, fn LBuiltin) *LVal {
 	return &LVal{
 		Type:    LFun,
 		FunType: LFunSpecialOp,
 		Builtin: fn,
 		FID:     fid,
+		Cells:   []*LVal{formals},
 	}
 }
 
@@ -242,6 +247,21 @@ func Quote(v *LVal) *LVal {
 		Cells:  []*LVal{v},
 	}
 	return quote
+}
+
+// Formals returns an LVal reprsenting a function's formal argument list
+// containing symbols with the given names.
+func Formals(argSymbols ...string) *LVal {
+	s := QExpr(make([]*LVal, len(argSymbols)))
+	for i, name := range argSymbols {
+		if name == VarArgSymbol {
+			if i != len(argSymbols)-2 {
+				return Errorf("invalid formal arguments: misplaced %s", VarArgSymbol)
+			}
+		}
+		s.Cells[i] = Symbol(name)
+	}
+	return s
 }
 
 func markTailRec(npop int, fun *LVal, args *LVal) *LVal {
@@ -441,8 +461,7 @@ func bodyStr(exprs []*LVal) string {
 }
 
 func lambdaVars(formals *LVal, bound *LVal) *LVal {
-	s := SExpr()
-	s.Cells = []*LVal{formals, bound}
+	s := SExpr([]*LVal{formals, bound})
 	s = builtinConcat(nil, s)
 	s.Quoted = false
 	return s
@@ -457,11 +476,12 @@ func boundVars(v *LVal) *LVal {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
-	bound := SExpr()
+	bound := SExpr(nil)
 	for i := range keys {
-		q := SExpr()
-		q.Cells = append(q.Cells, Symbol(keys[i]))
-		q.Cells = append(q.Cells, v.Env.Get(Symbol(keys[i])))
+		q := SExpr([]*LVal{
+			Symbol(keys[i]),
+			v.Env.Get(Symbol(keys[i])),
+		})
 		bound.Cells = append(bound.Cells, q)
 	}
 	return bound

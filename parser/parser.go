@@ -142,8 +142,8 @@ func newAST(typ nodeType, nodes []parsec.ParsecNode) parsec.ParsecNode {
 		}
 		return lval
 	case nodeSExpr:
-		lval := lisp.SExpr()
 		// We don't want terminal parsec nodes '(' and ')'
+		lval := lisp.SExpr(make([]*lisp.LVal, 0, len(nodes)-2))
 		for _, c := range nodes {
 			switch c.(type) {
 			case *lisp.LVal:
@@ -152,11 +152,9 @@ func newAST(typ nodeType, nodes []parsec.ParsecNode) parsec.ParsecNode {
 		}
 		return lval
 	case nodeQExpr:
-		lval := lisp.QExpr()
 		// We don't want terminal parsec nodes "'(" and ")"
 		c := nodes[1].(*lisp.LVal)
-		lval = lisp.Quote(c)
-		return lval
+		return lisp.Quote(c)
 	default:
 		panic(fmt.Sprintf("unknown nodeType: %s (%d)", typ, typ))
 	}

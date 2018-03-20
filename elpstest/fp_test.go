@@ -10,6 +10,13 @@ func TestFP(t *testing.T) {
 			{"(foldl (flip cons) () '(1 2 3))", "'(3 2 1)"},
 			{"(foldr cons () '(1 2 3))", "'(1 2 3)"},
 		}},
+		{"unpack", TestSequence{
+			{"(defun f (a b) (+ a b))", "()"},
+			{"(unpack f '(1 2))", "3"},
+			{"(unpack (f 1) '(2))", "3"},
+			{"(unpack cons '(1 '(2)))", "'(1 2)"},
+			{"(unpack (cons 1) '('(2)))", "'(1 2)"},
+		}},
 		{"simple composition", TestSequence{
 			{"(defun f (x) (+ x 1))", "()"},
 			{"(defun g (x) (* x 2))", "()"},
@@ -19,6 +26,7 @@ func TestFP(t *testing.T) {
 		{"complex composition", TestSequence{
 			{"(defun g (x & xs) (cons x xs))", "()"},
 			{"(compose reverse g)", "(lambda (x & xs) (<builtin> (unpack (lambda (x & xs) (cons x xs)) (concat '(x) xs))))"},
+			{"((compose reverse list) 1 2 3)", "'(3 2 1)"},
 			{"((compose reverse g) 1 2 3)", "'(3 2 1)"},
 		}},
 	}
