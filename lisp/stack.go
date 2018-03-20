@@ -13,6 +13,7 @@ type CallStack struct {
 // CallFrame is one frame in the CallStack
 type CallFrame struct {
 	FID      string
+	Name     string
 	Terminal bool
 }
 
@@ -51,8 +52,8 @@ func (s *CallStack) TerminalFID(fid string) int {
 }
 
 // PushFID pushes a new stack frame with the given FID onto s.
-func (s *CallStack) PushFID(fid string) {
-	s.Frames = append(s.Frames, CallFrame{FID: fid})
+func (s *CallStack) PushFID(fid string, name string) {
+	s.Frames = append(s.Frames, CallFrame{FID: fid, Name: name})
 }
 
 // Pop removes the top CallFrame from the stack and returns it.  If the stack
@@ -69,12 +70,18 @@ func (s *CallStack) Pop() CallFrame {
 
 // DebugPrint prints s
 func (s *CallStack) DebugPrint() {
+	fmt.Printf("Function call stack [%d frames]:\n", len(s.Frames))
+	indent := "  "
 	for i := len(s.Frames) - 1; i >= 0; i-- {
 		f := s.Frames[i]
 		var mod bytes.Buffer
 		if f.Terminal {
 			mod.WriteString(" [terminal]")
 		}
-		fmt.Printf("height %d: %s%s\n", i, f.FID, mod.String())
+		name := f.FID
+		if f.Name != "" {
+			name = f.Name
+		}
+		fmt.Printf("%sheight %d: %s%s\n", indent, i, name, mod.String())
 	}
 }

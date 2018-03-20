@@ -13,10 +13,11 @@ func getEnvID() uint {
 
 // LEnv is a lisp environment.
 type LEnv struct {
-	ID     uint
-	Scope  map[string]*LVal
-	Parent *LEnv
-	Stack  *CallStack
+	ID      uint
+	Scope   map[string]*LVal
+	FunName map[string]string
+	Parent  *LEnv
+	Stack   *CallStack
 }
 
 // NewEnv returns initializes and returns a new LEnv.
@@ -28,10 +29,11 @@ func NewEnv(parent *LEnv) *LEnv {
 		stack = &CallStack{}
 	}
 	return &LEnv{
-		ID:     getEnvID(),
-		Scope:  make(map[string]*LVal),
-		Parent: parent,
-		Stack:  stack,
+		ID:      getEnvID(),
+		Scope:   make(map[string]*LVal),
+		FunName: make(map[string]string),
+		Parent:  parent,
+		Stack:   stack,
 	}
 }
 
@@ -56,6 +58,17 @@ func (env *LEnv) Copy() *LEnv {
 
 // Get takes an LSymbol k and returns the LVal it is bound to in env.
 func (env *LEnv) Get(k *LVal) *LVal {
+	v := env.get(k)
+	if v.Type == LFun {
+		// Set the function's name here in case the same function is defined
+		// with multiple names.  We want to try and use the name the programmer
+		// used.  The name may even come from a higher scope.
+		env.FunName[v.FID] = k.Str
+	}
+	return v
+}
+
+func (env *LEnv) get(k *LVal) *LVal {
 	// LQSymbols are allowed...
 	if k.Type != LSymbol && k.Type != LQSymbol {
 		return Nil()
@@ -65,12 +78,31 @@ func (env *LEnv) Get(k *LVal) *LVal {
 	}
 	v, ok := env.Scope[k.Str]
 	if ok {
+		if v.Type == LFun {
+			// Set the function's name here in case the same function is
+			// defined with multiple names.  We want to try and use the name
+			// the programmer used.
+			env.FunName[v.FID] = k.Str
+		}
 		return v.Copy()
 	}
 	if env.Parent != nil {
 		return env.Parent.Get(k)
 	}
 	return Errorf("unbound symbol: %v", k)
+}
+
+// GetFunName returns the function name (if any) known to be bound to the given
+// FID.
+func (env *LEnv) GetFunName(fid string) string {
+	name, ok := env.FunName[fid]
+	if ok {
+		return name
+	}
+	if env.Parent != nil {
+		return env.Parent.GetFunName(fid)
+	}
+	return ""
 }
 
 // Put takes an LSymbol k and binds it to v in env.
@@ -84,6 +116,9 @@ func (env *LEnv) Put(k, v *LVal) {
 	if v == nil {
 		panic("nil value")
 	}
+	if v.Type == LFun {
+		env.FunName[v.FID] = k.Str
+	}
 	env.Scope[k.Str] = v.Copy()
 }
 
@@ -96,7 +131,8 @@ func (env *LEnv) GetGlobal(k *LVal) *LVal {
 // PutGlobal takes an LSymbol k and binds it to v in root environment (global
 // scope).
 func (env *LEnv) PutGlobal(k, v *LVal) {
-	env.root().Put(k, v)
+	root := env.root()
+	root.Put(k, v)
 }
 
 func (env *LEnv) root() *LEnv {
@@ -223,7 +259,7 @@ func (env *LEnv) EvalSExpr(s *LVal) *LVal {
 	// Push onto the stack here so that we don't trigger tail recursion while
 	// evaluating the arguments to f -- f has to be the recursive call, if
 	// there is recursion at all.
-	env.Stack.PushFID(f.FID)
+	env.Stack.PushFID(f.FID, env.GetFunName(f.FID))
 	defer env.Stack.Pop()
 
 	if f.IsSpecialFun() {
@@ -351,6 +387,9 @@ func (env *LEnv) Call(fun *LVal, args *LVal) *LVal {
 	//		fun.Env.Parent = env
 
 	if fun.Builtin != nil {
+		// We are definitely working with a non-empty stack here so there is no
+		// nil check.
+		env.Stack.Top().Terminal = true
 		// FIXME:  I think fun.Env is probably correct here.  But it wouldn't
 		// surprise me if at least one builtin breaks when it switches.
 		return fun.Builtin(env, QExpr(fun.Cells[1:]))
