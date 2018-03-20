@@ -131,6 +131,24 @@ value previously given.
 ((add-pair 1) 2)   ; evaluates to 3
 ```
 
+###Unbound expressions
+
+The builtin `expr` function allows for compact construction of simple
+functions.
+
+```lisp
+(expr (+ % 1))      ; evaluates to (lambda (%) (+ % 1))
+```
+
+The special symbol `%` indicates an anonymous function argument.  Functions of
+muiltple arguments can be defined by using the anonymous argument symbols `%1`,
+`%2`, ... or the variadic anonymous argument `%&`.
+
+```lisp
+(expr (+ %1 %2))        ; evaluates to (lambda (%1 %2) (+ %1 %2))
+(expr (reverse %&))     ; evaluates to (lambda (& %&) (reverse %&))
+```
+
 ##Macros
 
 A macro is a special function which receives unevaluated arguments (values are

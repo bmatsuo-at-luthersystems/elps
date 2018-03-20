@@ -21,6 +21,13 @@ func TestSpecialOp(t *testing.T) {
 			{`(cond (t 2) (else 1))`, "2"},
 			{`(cond ((< 1 2) 3) (else 1))`, "3"},
 		}},
+		{"expr", TestSequence{
+			{`((expr ()))`, "()"},
+			{`((expr "hello"))`, `"hello"`},
+			{`((expr %) 123)`, "123"},
+			{`((expr %2) 'a 'b)`, "'b"},
+			{`((expr (reverse %&)) 1 2 3)`, "'(3 2 1)"},
+		}},
 	}
 	RunTestSuite(t, tests)
 }

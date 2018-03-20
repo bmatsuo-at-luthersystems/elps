@@ -1,9 +1,16 @@
 package lisp
 
+import (
+	"fmt"
+	"strconv"
+	"strings"
+)
+
 var userSpecialOps []*langBuiltin
 var langSpecialOps = []*langBuiltin{
 	{"quasiquote", opQuasiquote},
 	{"lambda", opLambda},
+	{"expr", opExpr},
 	{"let*", opLetSeq},
 	{"let", opLet},
 	{"progn", opProgn},
@@ -56,18 +63,20 @@ func opLambda(env *LEnv, v *LVal) *LVal {
 	if len(v.Cells) < 2 {
 		return berrf("lambda", "too few arguments provided: %d", len(v.Cells))
 	}
-	if len(v.Cells) > 2 {
-		return berrf("lambda", "too many arguments provided: %d", len(v.Cells))
-	}
-	for _, q := range v.Cells {
-		if q.Type != LSExpr {
-			return berrf("lambda", "argument is not a list: %v", q.Type)
+	/*
+		if len(v.Cells) > 2 {
+			return berrf("lambda", "too many arguments provided: %d", len(v.Cells))
 		}
-	}
+		for _, q := range v.Cells {
+			if q.Type != LSExpr {
+				return berrf("lambda", "argument is not a list: %v", q.Type)
+			}
+		}
+	*/
 
 	formals := v.Cells[0]
-	body := v.Cells[1]
-	body.Terminal = true
+	body := v.Cells[1:]
+	body[len(body)-1].Terminal = true
 
 	for _, sym := range formals.Cells {
 		if sym.Type != LSymbol {
@@ -82,6 +91,96 @@ func opLambda(env *LEnv, v *LVal) *LVal {
 	fun.Env.Stack = env.Stack
 
 	return fun
+}
+
+func opExpr(env *LEnv, args *LVal) *LVal {
+	if args.Len() != 1 {
+		return berrf("expr", "one argument expected (got %d)", args.Len())
+	}
+	body := args.Cells[0]
+	body.Terminal = true
+	n, short, vargs, err := countExprArgs(body)
+	if err != nil {
+		return berrf("expr", "%s", err)
+	}
+	formals := SExpr()
+	if short {
+		formals.Cells = make([]*LVal, 1, 3)
+		formals.Cells[0] = Symbol("%")
+	} else {
+		formals.Cells = make([]*LVal, n, n+2)
+		for i := range formals.Cells {
+			formals.Cells[i] = Symbol(fmt.Sprintf("%%%d", i+1))
+		}
+	}
+	if vargs {
+		formals.Cells = append(formals.Cells, Symbol("&"), Symbol("%&"))
+	}
+	fun := Lambda(formals, []*LVal{body})
+	fun.Env.Parent = env
+	fun.Env.Stack = env.Stack
+	return fun
+}
+
+func countExprArgs(expr *LVal) (nargs int, short bool, vargs bool, err error) {
+	switch expr.Type {
+	case LSymbol:
+		if !strings.HasPrefix(expr.Str, "%") {
+			return 0, false, false, nil
+		}
+		numStr := expr.Str[1:]
+		if numStr == "" {
+			return 1, true, false, nil
+		}
+		if numStr == "&" {
+			return 0, false, true, nil
+		}
+		num, err := strconv.Atoi(numStr)
+		if err != nil {
+			return 0, false, false, fmt.Errorf("invalid expr argument symbol: %s", expr.Str)
+		}
+		return num, false, false, nil
+	case LSExpr:
+		short := false
+		for _, cell := range expr.Cells {
+			if !strings.HasPrefix(cell.Str, "%") {
+				continue
+			}
+			numStr := cell.Str[1:]
+			if numStr == "" {
+				if !short {
+					if nargs > 0 {
+						err := fmt.Errorf("invalid mixing of expr argument symbols: %s and %s",
+							fmt.Sprintf("%%%d", nargs),
+							cell.Str)
+						return 0, false, false, err
+					}
+					short = true
+				}
+				continue
+			}
+			if numStr == "&" {
+				vargs = true
+				continue
+			}
+			num, err := strconv.Atoi(numStr)
+			if err != nil {
+				return 0, false, false, fmt.Errorf("invalid expr argument symbol: %s", expr.Str)
+			}
+			if short {
+				err := fmt.Errorf("invalid mix of expr argument symbols: %s and %s", "%", cell.Str)
+				return 0, false, false, err
+			}
+			if num > nargs {
+				nargs = num
+			}
+		}
+		return nargs, short, vargs, nil
+	case LInt, LFloat, LString:
+		return 0, false, false, nil
+	default:
+		return 0, false, false, fmt.Errorf("invalid internal expression type: %s", expr.Type)
+	}
 }
 
 func opLet(env *LEnv, args *LVal) *LVal {

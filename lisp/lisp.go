@@ -67,18 +67,16 @@ type LVal struct {
 	Float    float64
 	Str      string
 	Cells    []*LVal
+	Map      map[interface{}]*LVal
 	Quoted   bool // flag indicating a single level of quoting
 	Spliced  bool // denote the value as needing to be spliced into a parent value
 	Terminal bool // LVal is the terminal expression in a function call
-	Map      map[interface{}]*LVal
 
 	// Variables needed for function values
 	Macro   bool
 	FunType LFunType
 	Builtin LBuiltin
 	Env     *LEnv
-	Formals *LVal
-	Body    *LVal
 	FID     string
 }
 
@@ -193,20 +191,24 @@ func SpecialOp(fid string, fn LBuiltin) *LVal {
 
 // Lambda returns anonymous function that has formals as arguments and the
 // given body, which may reference symbols specified in the list of formals.
-func Lambda(formals *LVal, body *LVal) *LVal {
+func Lambda(formals *LVal, body []*LVal) *LVal {
 	if formals.Type != LSExpr {
 		return Errorf("formals is not a list of symbols: %v", formals.Type)
 	}
-	if formals.Type != LSExpr {
-		return Errorf("body is not a list: %v", body.Type)
-	}
+	/*
+		if formals.Type != LSExpr {
+			return Errorf("body is not a list: %v", body.Type)
+		}
+	*/
+	cells := make([]*LVal, 0, len(body)+1)
+	cells = append(cells, formals)
+	cells = append(cells, body...)
 	env := NewEnv(nil)
 	return &LVal{
-		Type:    LFun,
-		Env:     env,
-		Formals: formals,
-		Body:    body,
-		FID:     env.getFID(),
+		Type:  LFun,
+		Env:   env,
+		FID:   env.getFID(),
+		Cells: cells,
 	}
 }
 
@@ -237,7 +239,7 @@ func Quote(v *LVal) *LVal {
 	quote := &LVal{
 		Type:   LQuote,
 		Quoted: true,
-		Body:   v,
+		Cells:  []*LVal{v},
 	}
 	return quote
 }
@@ -344,8 +346,6 @@ func (v *LVal) Copy() *LVal {
 	*cp = *v                 // shallow copy of all fields including Map
 	cp.Cells = v.copyCells() // deep copy of v.Cells
 	cp.Env = v.Env.Copy()    // deepish copy of v.Env
-	cp.Formals = v.Formals.Copy()
-	cp.Body = v.Body.Copy()
 	return cp
 }
 
@@ -376,7 +376,7 @@ func (v *LVal) copyCells() []*LVal {
 func (v *LVal) String() string {
 	const QUOTE = `'`
 	if v.Type == LQuote {
-		return QUOTE + v.Body.str(true)
+		return QUOTE + v.Cells[0].str(true)
 	}
 	return v.str(false)
 }
@@ -415,11 +415,11 @@ func (v *LVal) str(onTheRecord bool) string {
 		if v.Builtin != nil {
 			return fmt.Sprintf("%s<builtin>", quote)
 		}
-		vars := lambdaVars(v.Formals, boundVars(v))
-		return fmt.Sprintf("%s(lambda %v %v)", quote, vars, v.Body)
+		vars := lambdaVars(v.Cells[0], boundVars(v))
+		return fmt.Sprintf("%s(lambda %v%v)", quote, vars, bodyStr(v.Cells[1:]))
 	case LQuote:
 		// TODO: make more efficient
-		return QUOTE + v.Body.str(true)
+		return QUOTE + v.Cells[0].str(true)
 	case LSortMap:
 		return quote + sortedMapString(v)
 	case LMarkTailRec:
@@ -429,6 +429,15 @@ func (v *LVal) str(onTheRecord bool) string {
 	default:
 		return quote + fmt.Sprintf("<%s %#v>", v.Type, v)
 	}
+}
+
+func bodyStr(exprs []*LVal) string {
+	var buf bytes.Buffer
+	for i := range exprs {
+		buf.WriteString(" ")
+		buf.WriteString(exprs[i].String())
+	}
+	return buf.String()
 }
 
 func lambdaVars(formals *LVal, bound *LVal) *LVal {

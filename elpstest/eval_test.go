@@ -26,6 +26,8 @@ func TestEval(t *testing.T) {
 			{"'(1 2 3)", "'(1 2 3)"},
 		}},
 		{"function basics", TestSequence{
+			{"(lambda (x) x)", "(lambda (x) x)"},
+			{"((lambda (x) x) 1)", "1"},
 			{"(lambda (x) (+ x 1))", "(lambda (x) (+ x 1))"},
 			{"((lambda () (+ 1 1)))", "2"},
 			{"((lambda (n) (+ n 1)) 1)", "2"},

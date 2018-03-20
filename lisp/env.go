@@ -191,7 +191,7 @@ eval:
 		return res
 	case LQuote:
 		// this quote was unquoted... eval the underlying value
-		v = v.Body
+		v = v.Cells[0]
 		goto eval
 	default:
 		return v
@@ -297,37 +297,38 @@ func (env *LEnv) Call(fun *LVal, args *LVal) *LVal {
 	// the Env so that updates to the global scope are reflected.
 
 	fun = fun.Copy()
-	nargs := len(fun.Formals.Cells) // only used when not vargs
+	formals := fun.Cells[0]
+	nargs := len(formals.Cells) // only used when not vargs
 	for i, v := range args.Cells {
-		if len(fun.Formals.Cells) == 0 {
+		if len(formals.Cells) == 0 {
 			return Errorf("function expects %d arguments (got %d)",
 				nargs, len(args.Cells))
 		}
-		argSym := fun.Formals.Cells[0]
+		argSym := formals.Cells[0]
 		if argSym.Str == "&" {
-			if len(fun.Formals.Cells) == 1 {
+			if len(formals.Cells) == 1 {
 				return Errorf("function argument format list ends with symbol ``&''")
 			}
-			argSym = fun.Formals.Cells[1]
+			argSym = formals.Cells[1]
 			q := QExpr()
 			q.Cells = args.Cells[i:]
-			fun.Formals.Cells = nil
+			formals.Cells = nil
 			fun.Env.Put(argSym, q)
 			break
 		}
-		fun.Formals.Cells = fun.Formals.Cells[1:]
+		formals.Cells = formals.Cells[1:]
 		fun.Env.Put(argSym, v)
 	}
-	if len(fun.Formals.Cells) != 0 {
-		if fun.Formals.Cells[0].Str != "&" {
+	if len(formals.Cells) != 0 {
+		if formals.Cells[0].Str != "&" {
 			return fun
 		}
-		if len(fun.Formals.Cells) != 2 {
+		if len(formals.Cells) != 2 {
 			return Errorf("function argument format list ends with symbol ``&''")
 		}
 		// We never bound the final argument to a value so we do it here.
-		fun.Env.Put(fun.Formals.Cells[1], Nil())
-		fun.Formals.Cells = nil
+		fun.Env.Put(formals.Cells[1], Nil())
+		formals.Cells = nil
 	}
 
 	// NOTE:  The book's suggestion of chaining env here seems like dynamic
@@ -340,6 +341,16 @@ func (env *LEnv) Call(fun *LVal, args *LVal) *LVal {
 	// progn) this may not work correctly anymore.
 	s := SExpr()
 	s.Terminal = true
-	s.Cells = append(s.Cells, fun.Body.Cells...)
-	return fun.Env.Eval(s)
+	body := fun.Cells[1:]
+	if len(body) > 0 {
+		body[len(body)-1].Terminal = true
+	}
+	var ret *LVal
+	for i := range body {
+		ret = fun.Env.Eval(body[i])
+		if ret.Type == LError {
+			return ret
+		}
+	}
+	return ret
 }

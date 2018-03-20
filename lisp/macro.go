@@ -46,7 +46,7 @@ func macroDefmacro(env *LEnv, args *LVal) *LVal {
 	if v.Type != LError {
 		return berrf("defun", "symbol ``%v'' is already defined: %v", sym, v)
 	}
-	fun := Lambda(args.Cells[1], args.Cells[2])
+	fun := Lambda(args.Cells[1], []*LVal{args.Cells[2]})
 	if fun.Type == LError {
 		return fun
 	}
@@ -58,7 +58,7 @@ func macroDefmacro(env *LEnv, args *LVal) *LVal {
 }
 
 func macroDefun(env *LEnv, args *LVal) *LVal {
-	if len(args.Cells) != 3 {
+	if len(args.Cells) < 3 {
 		return berrf("defun", "three arguments expected (got %d)", len(args.Cells))
 	}
 	sym := args.Cells[0]
@@ -69,7 +69,7 @@ func macroDefun(env *LEnv, args *LVal) *LVal {
 	if v.Type != LError {
 		return berrf("defun", "symbol ``%v'' is already defined: %v", sym, v)
 	}
-	fun := Lambda(args.Cells[1], args.Cells[2])
+	fun := Lambda(args.Cells[1], args.Cells[2:])
 	if fun.Type == LError {
 		return fun
 	}
@@ -125,7 +125,7 @@ func findAndUnquote(env *LEnv, v *LVal) *LVal {
 		// Try to unwrap a quoted expression into x.  If x is not quoted
 		// then we have to evaluate unquote
 		if unquote.Type == LQuote {
-			x = unquote.Body
+			x = unquote.Cells[0]
 		} else if unquote.Quoted {
 			unquote.Quoted = false
 			x = unquote

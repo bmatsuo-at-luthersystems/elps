@@ -32,7 +32,7 @@ func GoValue(v *LVal) interface{} {
 	case LFloat:
 		return v.Float
 	case LQuote:
-		return GoValue(v.Body)
+		return GoValue(v.Cells[0])
 	case LSExpr:
 		s, _ := GoSlice(v)
 		return s

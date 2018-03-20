@@ -107,7 +107,7 @@ func builtinEval(env *LEnv, args *LVal) *LVal {
 	}
 	v := args.Cells[0]
 	if v.Type == LQuote {
-		return v.Body
+		return v.Cells[0]
 	}
 	v.Quoted = false
 	return env.Eval(v)
@@ -254,7 +254,7 @@ func builtinCompose(env *LEnv, args *LVal) *LVal {
 	if g.Type != LFun {
 		return berrf("compose", "second argument is not a function: %s", g.Type)
 	}
-	formals := g.Formals.Copy()
+	formals := g.Cells[0].Copy()
 	body := args // body.Cells[0] is already set to f
 	gcall := SExpr()
 	gcall.Cells = make([]*LVal, 0, len(formals.Cells)+1)
@@ -291,7 +291,7 @@ func builtinCompose(env *LEnv, args *LVal) *LVal {
 		gcall = unpackCall
 	}
 	body.Cells[1] = gcall
-	newfun := Lambda(formals, body)
+	newfun := Lambda(formals, []*LVal{body})
 	newfun.Env.Parent = env
 	return newfun
 }
