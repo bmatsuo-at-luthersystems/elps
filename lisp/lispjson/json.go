@@ -21,7 +21,7 @@ var DefaultSerializer = &Serializer{
 
 // Dump serializes the structure of v as a JSON formatted byte slice.
 func Dump(v *lisp.LVal) ([]byte, error) {
-	return nil, fmt.Errorf("unimplemented")
+	return DefaultSerializer.Dump(v)
 }
 
 // Load parses b as JSON and returns an equivalent LVal.
@@ -81,4 +81,16 @@ func (s *Serializer) loadInterface(x interface{}) *lisp.LVal {
 	default:
 		return lisp.Errorf("unable to load json type: %T", x)
 	}
+}
+
+// Dump serializes v as JSON and returns any error.
+//
+// BUG:  There is no way for Dump to produce boolean values.
+func (s *Serializer) Dump(v *lisp.LVal) ([]byte, error) {
+	m := lisp.GoValue(v)
+	_, badnews := m.(*lisp.LVal)
+	if badnews {
+		return nil, fmt.Errorf("type cannot be converted to json: %v", v.Type)
+	}
+	return json.Marshal(v)
 }
