@@ -1,7 +1,9 @@
 package lisp
 
 import (
+	"bytes"
 	"fmt"
+	"log"
 	"sync/atomic"
 )
 
@@ -191,6 +193,56 @@ func (env *LEnv) AddBuiltins(funs ...LBuiltinDef) {
 		id := fmt.Sprintf("<builtin-function ``%s''>", f.Name())
 		v := Fun(id, f.Formals(), f.Eval)
 		env.Put(k, v)
+	}
+}
+
+// Error returns an LError value with an error message given by rendering msg.
+// Error may be called either with an error or with any number of *LVal values.
+// It is invalid to pass an error argument with any other values and doing so
+// will result in a runtime panic.  The returned LVal contains a copy
+// env.Stack.
+func (env *LEnv) Error(msg ...interface{}) *LVal {
+	fullMsg := ""
+	var buf bytes.Buffer
+	for i, v := range msg {
+		switch v := v.(type) {
+		case *LVal:
+			if i > 0 {
+				buf.WriteString(" ")
+			}
+			if v.Type == LString {
+				buf.WriteString(v.Str)
+			} else {
+				buf.WriteString(v.String())
+			}
+		case error:
+			if len(msg) > 1 {
+				panic("invalid error argument")
+			}
+			// TODO:  Add somewhere to store the original error so that the embedding
+			// program can potentially pick it out and inspect it.
+			fullMsg = v.Error()
+		}
+	}
+	if fullMsg == "" {
+		fullMsg = buf.String()
+	}
+	log.Printf("stack %v", env.Stack.Copy())
+	return &LVal{
+		Type:  LError,
+		Str:   fullMsg,
+		Stack: env.Stack.Copy(),
+	}
+}
+
+// Errorf returns an LError value with a formatted error message.  The returned
+// LVal contains a copy env.Stack.
+func (env *LEnv) Errorf(format string, v ...interface{}) *LVal {
+	log.Printf("stack %v", env.Stack.Copy())
+	return &LVal{
+		Type:  LError,
+		Str:   fmt.Sprintf(format, v...),
+		Stack: env.Stack.Copy(),
 	}
 }
 

@@ -44,7 +44,10 @@ func RunRepl(prompt string) {
 		}
 		if len(line) != 0 {
 			complete, err := parser.Parse(env, true, line)
-			if err != nil {
+			if lisperr, ok := err.(*lisp.ErrorVal); ok {
+				lisperr.WriteTrace(os.Stderr)
+			} else if err != nil {
+				fmt.Fprintf(os.Stderr, "TYPE %T\n", err)
 				errln(err)
 				continue
 			}

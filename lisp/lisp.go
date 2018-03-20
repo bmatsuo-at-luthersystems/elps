@@ -51,7 +51,7 @@ func (t LType) String() string {
 }
 
 // LFunType denotes special functions, either macros or special operators.
-type LFunType uint
+type LFunType uint8
 
 // LFunType constants.  LFunNone indicates a normal function.
 const (
@@ -62,22 +62,39 @@ const (
 
 // LVal is a lisp value
 type LVal struct {
-	Type     LType
-	Int      int
-	Float    float64
-	Str      string
-	Cells    []*LVal
-	Map      map[interface{}]*LVal
+	// Type is the native type for a value in lisp.
+	Type LType
+
+	// Fields used for numeric types
+	Int   int
+	Float float64
+
+	// Str used by LSymbol and LString values
+	Str string
+
+	// Cells used for many values as a storage space for lisp objects.
+	Cells []*LVal
+
+	// Map used for LSortMap values.
+	Map map[interface{}]*LVal
+
+	// Stack set for LError values.
+	//
+	// TODO:  Make the stack a first class type (or some composite type) so
+	// that it could be inspected during a ``catch'' (which doesn't exist yet).
+	Stack *CallStack
+
+	// Variables needed for LFun values
+	// NOTE:  Cells are used to store the list of formal function arguments in
+	// index 0 and the body of non-builtin functions in the remaining cells.
+	FID     string
+	Env     *LEnv
+	Builtin LBuiltin
+	FunType LFunType
+
 	Quoted   bool // flag indicating a single level of quoting
 	Spliced  bool // denote the value as needing to be spliced into a parent value
-	Terminal bool // LVal is the terminal expression in a function call
-
-	// Variables needed for function values
-	Macro   bool
-	FunType LFunType
-	Builtin LBuiltin
-	Env     *LEnv
-	FID     string
+	Terminal bool // LVal is the terminal expression in a function body
 }
 
 // Bool returns an LVal with truthiness identical to b.

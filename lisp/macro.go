@@ -34,19 +34,17 @@ func DefaultMacros() []LBuiltinDef {
 }
 
 func macroDefmacro(env *LEnv, args *LVal) *LVal {
-	if len(args.Cells) != 3 {
-		return berrf("defun", "three arguments expected (got %d)", len(args.Cells))
-	}
 	sym := args.Cells[0]
 	if sym.Type != LSymbol {
-		return berrf("defun", "first argument is not a symbol: %s", sym.Type)
+		return env.Errorf("first argument is not a symbol: %s", sym.Type)
 	}
 	v := env.GetGlobal(sym)
 	if v.Type != LError {
-		return berrf("defun", "symbol ``%v'' is already defined: %v", sym, v)
+		return env.Errorf("symbol ``%v'' is already defined: %v", sym, v)
 	}
 	fun := Lambda(args.Cells[1], []*LVal{args.Cells[2]})
 	if fun.Type == LError {
+		fun.Stack = env.Stack.Copy()
 		return fun
 	}
 	fun.FunType = LFunMacro // evaluate as a macro
@@ -57,19 +55,17 @@ func macroDefmacro(env *LEnv, args *LVal) *LVal {
 }
 
 func macroDefun(env *LEnv, args *LVal) *LVal {
-	if len(args.Cells) < 3 {
-		return berrf("defun", "three arguments expected (got %d)", len(args.Cells))
-	}
 	sym := args.Cells[0]
 	if sym.Type != LSymbol {
-		return berrf("defun", "first argument is not a symbol: %s", sym.Type)
+		return env.Errorf("first argument is not a symbol: %s", sym.Type)
 	}
 	v := env.GetGlobal(sym)
 	if v.Type != LError {
-		return berrf("defun", "symbol ``%v'' is already defined: %v", sym, v)
+		return env.Errorf("symbol ``%v'' is already defined: %v", sym, v)
 	}
 	fun := Lambda(args.Cells[1], args.Cells[2:])
 	if fun.Type == LError {
+		fun.Stack = env.Stack.Copy()
 		return fun
 	}
 	fun.Env.Parent = env // function definitions get a lexical scope
@@ -80,7 +76,7 @@ func macroDefun(env *LEnv, args *LVal) *LVal {
 
 func macroQuote(env *LEnv, args *LVal) *LVal {
 	if len(args.Cells) != 1 {
-		return berrf("quote", "one argument expected (got %d)", len(args.Cells))
+		return env.Errorf("one argument expected (got %d)", len(args.Cells))
 	}
 	// NOTE:  Racket seems to detect nested (quote ...) expressions when
 	// quoting things.  That is, (quote (quote 3)) in Racket evaluates to ''3,
@@ -116,7 +112,7 @@ func findAndUnquote(env *LEnv, v *LVal) *LVal {
 		spliceType := v.Cells[0].Str
 		v.Cells = v.Cells[1:]
 		if len(v.Cells) != 1 {
-			return berrf(v.Cells[0].Str, "one argument expected (got %d)", len(v.Cells))
+			return env.Errorf("%v: one argument expected (got %d)", v.Cells[0].Str, len(v.Cells))
 		}
 		// The v looks like ``(unquote EXPR)'' or ``(unquote-splicing expr)''
 		var x *LVal
@@ -148,7 +144,7 @@ func findAndUnquote(env *LEnv, v *LVal) *LVal {
 			if splice.Type != LSExpr {
 				// TODO:  I believe it is incorrect to error out here.  But
 				// splicing non-lists is not a major concern at the moment.
-				return berrf("unquote-splicing", "cannot splice not list: %s", splice.Type)
+				return env.Errorf("%s: cannot splice non-list: %s", "unquote-splicing", splice.Type)
 			}
 			// TODO:  Be clever and don't force allocation here.  Grow newcells and shift v.Cells[i+1:]
 			newcells := make([]*LVal, 0, len(v.Cells)+len(splice.Cells))
@@ -163,7 +159,7 @@ func findAndUnquote(env *LEnv, v *LVal) *LVal {
 
 func macroTrace(env *LEnv, args *LVal) *LVal {
 	if len(args.Cells) != 1 {
-		return berrf("trace", "one argument expected (got %d)", len(args.Cells))
+		return env.Errorf("one argument expected (got %d)", len(args.Cells))
 	}
 	fmt.Fprintln(os.Stderr, args.Cells[0])
 	return args.Cells[0]

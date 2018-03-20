@@ -3,6 +3,7 @@ package lisp
 import (
 	"bytes"
 	"fmt"
+	"io"
 )
 
 // CallStack is a function call stack.
@@ -15,6 +16,14 @@ type CallFrame struct {
 	FID      string
 	Name     string
 	Terminal bool
+}
+
+// Copy creates a copy of the current stack so that it can be attach to a
+// runtime error.
+func (s *CallStack) Copy() *CallStack {
+	frames := make([]CallFrame, len(s.Frames))
+	copy(frames, s.Frames)
+	return &CallStack{frames}
 }
 
 // Top returns the CallFrame at the top of the stack or nil if none exists.
@@ -69,8 +78,11 @@ func (s *CallStack) Pop() CallFrame {
 }
 
 // DebugPrint prints s
-func (s *CallStack) DebugPrint() {
-	fmt.Printf("Function call stack [%d frames]:\n", len(s.Frames))
+func (s *CallStack) DebugPrint(w io.Writer) (int, error) {
+	n, err := fmt.Fprintf(w, "Stack Trace [%d frames -- entrypoint last]:\n", len(s.Frames))
+	if err != nil {
+		return n, err
+	}
 	indent := "  "
 	for i := len(s.Frames) - 1; i >= 0; i-- {
 		f := s.Frames[i]
@@ -82,6 +94,11 @@ func (s *CallStack) DebugPrint() {
 		if f.Name != "" {
 			name = f.Name
 		}
-		fmt.Printf("%sheight %d: %s%s\n", indent, i, name, mod.String())
+		_n, err := fmt.Fprintf(w, "%sheight %d: %s%s\n", indent, i, name, mod.String())
+		n += _n
+		if err != nil {
+			return n, err
+		}
 	}
+	return n, nil
 }

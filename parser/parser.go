@@ -46,10 +46,14 @@ func Parse(env *lisp.LEnv, print bool, text []byte) (bool, error) {
 	s := parsec.NewScanner(text)
 	parser := newParsecParser()
 
+	var err error
 	evaled := false
 	root, s := parser(s)
 	for root != nil {
-		evaled = evalParsecRoot(env, print, root)
+		evaled, err = evalParsecRoot(env, print, root)
+		if err != nil {
+			return evaled, err
+		}
 		root, s = parser(s)
 	}
 	return evaled, nil
@@ -218,15 +222,20 @@ func getLVal(root parsec.ParsecNode) *lisp.LVal {
 	return lval
 }
 
-func evalParsecRoot(env *lisp.LEnv, print bool, root parsec.ParsecNode) bool {
+func evalParsecRoot(env *lisp.LEnv, print bool, root parsec.ParsecNode) (bool, error) {
 	v := getLVal(root)
 	if v == nil {
-		return false
+		return false, nil
+	}
+	r := env.Eval(v)
+	err := lisp.GoError(r)
+	if err != nil {
+		return true, err
 	}
 	if print {
-		fmt.Println(env.Eval(v))
+		fmt.Println(r)
 	}
-	return true
+	return true, nil
 }
 
 func unquoteString(s string) string {

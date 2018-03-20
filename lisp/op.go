@@ -42,7 +42,7 @@ func DefaultSpecialOps() []LBuiltinDef {
 
 func opQuasiquote(env *LEnv, args *LVal) *LVal {
 	if len(args.Cells) != 1 {
-		return berrf("quasiquote", "one argument expected (got %d)", len(args.Cells))
+		return env.Errorf("one argument expected (got %d)", len(args.Cells))
 	}
 	// We need to find and unquote values in args.Cells[0] (possibly
 	// args.Cells[0] itself).
@@ -61,15 +61,15 @@ func opQuasiquote(env *LEnv, args *LVal) *LVal {
 
 func opLambda(env *LEnv, v *LVal) *LVal {
 	if len(v.Cells) < 2 {
-		return berrf("lambda", "too few arguments provided: %d", len(v.Cells))
+		return env.Errorf("too few arguments provided: %d", len(v.Cells))
 	}
 	/*
 		if len(v.Cells) > 2 {
-			return berrf("lambda", "too many arguments provided: %d", len(v.Cells))
+			return env.Errorf("too many arguments provided: %d", len(v.Cells))
 		}
 		for _, q := range v.Cells {
 			if q.Type != LSExpr {
-				return berrf("lambda", "argument is not a list: %v", q.Type)
+				return env.Errorf("argument is not a list: %v", q.Type)
 			}
 		}
 	*/
@@ -80,7 +80,7 @@ func opLambda(env *LEnv, v *LVal) *LVal {
 
 	for _, sym := range formals.Cells {
 		if sym.Type != LSymbol {
-			return berrf("lambda", "first argument contains a non-symbol: %v", sym.Type)
+			return env.Errorf("first argument contains a non-symbol: %v", sym.Type)
 		}
 	}
 
@@ -95,13 +95,13 @@ func opLambda(env *LEnv, v *LVal) *LVal {
 
 func opExpr(env *LEnv, args *LVal) *LVal {
 	if args.Len() != 1 {
-		return berrf("expr", "one argument expected (got %d)", args.Len())
+		return env.Errorf("one argument expected (got %d)", args.Len())
 	}
 	body := args.Cells[0]
 	body.Terminal = true
 	n, short, vargs, err := countExprArgs(body)
 	if err != nil {
-		return berrf("expr", "%s", err)
+		return env.Errorf("%s", err)
 	}
 	formals := SExpr(nil)
 	if short {
@@ -188,15 +188,15 @@ func opLet(env *LEnv, args *LVal) *LVal {
 	bindlist := args.Cells[0]
 	args.Cells = args.Cells[1:] // decap so we can call builtinProgn on args.
 	if bindlist.Type != LSExpr {
-		return berrf("let", "first argument is not a list: %s", bindlist.Type)
+		return env.Errorf("first argument is not a list: %s", bindlist.Type)
 	}
 	vals := make([]*LVal, len(bindlist.Cells))
 	for i, bind := range bindlist.Cells {
 		if bind.Type != LSExpr {
-			return berrf("let", "first argument is not a list of pairs")
+			return env.Errorf("first argument is not a list of pairs")
 		}
 		if len(bind.Cells) != 2 {
-			return berrf("let", "first argument is not a list of pairs")
+			return env.Errorf("first argument is not a list of pairs")
 		}
 		vals[i] = letenv.Eval(bind.Cells[1])
 		if vals[i].Type == LError {
@@ -214,14 +214,14 @@ func opLetSeq(env *LEnv, args *LVal) *LVal {
 	bindlist := args.Cells[0]
 	args.Cells = args.Cells[1:] // decap so we can call builtinProgn on args.
 	if bindlist.Type != LSExpr {
-		return berrf("let*", "first argument is not a list: %s", bindlist.Type)
+		return env.Errorf("first argument is not a list: %s", bindlist.Type)
 	}
 	for _, bind := range bindlist.Cells {
 		if bind.Type != LSExpr {
-			return berrf("let*", "first argument is not a list of pairs")
+			return env.Errorf("first argument is not a list of pairs")
 		}
 		if len(bind.Cells) != 2 {
-			return berrf("let*", "first argument is not a list of pairs")
+			return env.Errorf("first argument is not a list of pairs")
 		}
 		val := letenv.Eval(bind.Cells[1])
 		if val.Type == LError {
@@ -249,15 +249,15 @@ func opCond(env *LEnv, args *LVal) *LVal {
 	last := len(args.Cells) - 1
 	for i, branch := range args.Cells {
 		if branch.Type != LSExpr {
-			return berrf("cond", "argument is not a list: %v", branch.Type)
+			return env.Errorf("argument is not a list: %v", branch.Type)
 		}
 		if len(branch.Cells) != 2 {
-			return berrf("cond", "argument is not a pair (length %d)", len(branch.Cells))
+			return env.Errorf("argument is not a pair (length %d)", len(branch.Cells))
 		}
 		var test *LVal
 		if branch.Cells[0].Type == LSymbol && branch.Cells[0].Str == "else" {
 			if i != last {
-				return berrf("cond", "invalid syntax: else")
+				return env.Errorf("invalid syntax: else")
 			}
 			test = branch.Cells[0] // the value here doesn't matter as long as it isn't nil
 		} else {
@@ -278,7 +278,7 @@ func opCond(env *LEnv, args *LVal) *LVal {
 // (if test-form then-form else-form)
 func opIf(env *LEnv, s *LVal) *LVal {
 	if len(s.Cells) != 3 {
-		return berrf("if", "three arguments expected (got %d)", len(s.Cells))
+		return env.Errorf("three arguments expected (got %d)", len(s.Cells))
 	}
 	r := env.Eval(s.Cells[0])
 	if r.Type == LError {
