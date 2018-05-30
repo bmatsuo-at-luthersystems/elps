@@ -36,6 +36,7 @@ func (fun *langBuiltin) Eval(env *LEnv, args *LVal) *LVal {
 
 var userBuiltins []*langBuiltin
 var langBuiltins = []*langBuiltin{
+	{"in-package", Formals("name"), builtinInPackage},
 	{"set", Formals("sym", "val"), builtinSet},
 	{"eval", Formals("expr"), builtinEval},
 	{"error", Formals(VarArgSymbol, "args"), builtinError},
@@ -89,6 +90,21 @@ func DefaultBuiltins() []LBuiltinDef {
 		ops[offset+i] = langBuiltins[i]
 	}
 	return ops
+}
+
+func builtinInPackage(env *LEnv, args *LVal) *LVal {
+	if args.Cells[0].Type != LSymbol && args.Cells[0].Type != LString {
+		return env.Errorf("first argument is not a symbol or a string: %v", args.Cells[0].Type)
+	}
+	name := args.Cells[0].Str
+	root := env.root()
+	pkg := root.Registry.Packages[name]
+	if pkg == nil {
+		root.Registry.DefinePackage(name)
+		pkg = root.Registry.Packages[name]
+	}
+	root.Package = pkg
+	return Nil()
 }
 
 func builtinSet(env *LEnv, v *LVal) *LVal {

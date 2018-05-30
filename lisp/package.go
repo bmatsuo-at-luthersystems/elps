@@ -12,12 +12,14 @@ func NewRepository() *PackageRegistry {
 	}
 }
 
-func (r *PackageRegistry) DefinePackage(name string) {
-	_, ok := r.Packages[name]
+func (r *PackageRegistry) DefinePackage(name string) *Package {
+	p, ok := r.Packages[name]
 	if ok {
-		return
+		return p
 	}
-	r.Packages[name] = NewPackage(name)
+	p = NewPackage(name)
+	r.Packages[name] = p
+	return p
 }
 
 // Package is a named set of bound symbols.  A package is interpreted code and

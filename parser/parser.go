@@ -83,7 +83,8 @@ func newParsecParser() parsec.Parser {
 	comment := parsec.Token(`;([^\n]*[^\s])?`, "COMMENT")
 	decimal := parsec.Token(`[+-]?[0-9]+([.][0-9]+)?([eE][+-]?[0-9]+)?`, "DECIMAL")
 	//symbol := parsec.Token(`[^\s()']+`, "SYMBOL")
-	symbol := parsec.Token(`(?:\pL|[_+\-*/\=<>!&~%])(?:\pL|[0-9]|[_+\-*/\=<>!&~%])*`, "SYMBOL")
+	// TODO:  Fix the parsing of symbols.  This regexp is fucking gross.
+	symbol := parsec.Token(`(?:(?:\pL|[_+\-*/\=<>!&~%])(?:\pL|[0-9]|[_+\-*/\=<>!&~%])*[:])?(?:\pL|[_+\-*/\=<>!&~%])(?:\pL|[0-9]|[_+\-*/\=<>!&~%])*`, "SYMBOL")
 	//qsymbol := parsec.And(nil, q, symbol)
 	term := parsec.OrdChoice(astNode(nodeTerm), // terminal token
 		parsec.String(),

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"log"
+	"strings"
 	"sync/atomic"
 )
 
@@ -306,7 +307,19 @@ eval:
 	}
 	switch v.Type {
 	case LSymbol:
-		return env.Get(v)
+		pieces := strings.Split(v.Str, ":")
+		switch len(pieces) {
+		case 1:
+			return env.Get(v)
+		case 2:
+			pkg := env.root().Registry.Packages[pieces[0]]
+			if pkg == nil {
+				return env.Errorf("unknown package: %q", v.Str)
+			}
+			return pkg.Get(Symbol(pieces[1]))
+		default:
+			return env.Errorf("illegal symbol: %q", v.Str)
+		}
 	case LSExpr:
 		res := env.EvalSExpr(v)
 		if res.Type == LMarkMacExpand {
