@@ -72,7 +72,10 @@ type LVal struct {
 	// Str used by LSymbol and LString values
 	Str string
 
-	// Cells used for many values as a storage space for lisp objects.
+	// Package name for symbols and functions.
+	Package string
+
+	// Cells used by many values as a storage space for lisp objects.
 	Cells []*LVal
 
 	// Map used for LSortMap values.

@@ -48,7 +48,8 @@ func macroDefmacro(env *LEnv, args *LVal) *LVal {
 		return fun
 	}
 	fun.FunType = LFunMacro // evaluate as a macro
-	fun.Env.Parent = env    // function definitions get a lexical scope
+	fun.Package = env.root().Package.Name
+	fun.Env.Parent = env // function definitions get a lexical scope
 	fun.Env.Stack = env.Stack
 	env.PutGlobal(sym, fun)
 	return Nil()
@@ -69,6 +70,7 @@ func macroDefun(env *LEnv, args *LVal) *LVal {
 		return fun
 	}
 	fun.Env.Parent = env // function definitions get a lexical scope
+	fun.Package = env.root().Package.Name
 	fun.Env.Stack = env.Stack
 	env.PutGlobal(sym, fun)
 	return Nil()

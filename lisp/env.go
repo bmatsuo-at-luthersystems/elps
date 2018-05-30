@@ -15,32 +15,59 @@ func getEnvID() uint {
 
 // LEnv is a lisp environment.
 type LEnv struct {
-	ID      uint
-	Scope   map[string]*LVal
-	FunName map[string]string
-	Parent  *LEnv
-	Stack   *CallStack
+	ID       uint
+	Scope    map[string]*LVal
+	FunName  map[string]string
+	Parent   *LEnv
+	Stack    *CallStack
+	Package  *Package
+	Registry *PackageRegistry
 }
 
 // NewEnv returns initializes and returns a new LEnv.
 func NewEnv(parent *LEnv) *LEnv {
-	var stack *CallStack
-	if parent != nil {
-		stack = parent.Stack
-	} else {
-		stack = &CallStack{}
-	}
-	return &LEnv{
+	env := &LEnv{
 		ID:      getEnvID(),
 		Scope:   make(map[string]*LVal),
 		FunName: make(map[string]string),
 		Parent:  parent,
-		Stack:   stack,
 	}
+	if parent != nil {
+		env.Stack = parent.Stack
+	} else {
+		env.Registry = NewRepository()
+		env.Registry.DefinePackage("lisp")
+		env.Registry.DefinePackage("user")
+		env.Package = env.Registry.Packages["lisp"]
+		env.Stack = &CallStack{}
+	}
+	return env
 }
 
 func (env *LEnv) getFID() string {
 	return fmt.Sprintf("anon%d", env.ID)
+}
+
+func (env *LEnv) DefinePackage(name *LVal) *LVal {
+	if name.Type != LSymbol && name.Type != LString {
+		return Errorf("argument cannot be converted to string: %v", name.Type)
+	}
+	env = env.root()
+	env.Registry.DefinePackage(name.Str)
+	return Nil()
+}
+
+func (env *LEnv) InPackage(name *LVal) *LVal {
+	if name.Type != LSymbol && name.Type != LString {
+		return Errorf("argument cannot be converted to string: %v", name.Type)
+	}
+	env = env.root()
+	pkg := env.Registry.Packages[name.Str]
+	if pkg == nil {
+		return Errorf("unknown package: %v", name.Str)
+	}
+	env.Package = pkg
+	return Nil()
 }
 
 // Copy returns a new LEnv with a copy of env.Scope but a shared parent and
@@ -91,20 +118,23 @@ func (env *LEnv) get(k *LVal) *LVal {
 	if env.Parent != nil {
 		return env.Parent.Get(k)
 	}
-	return Errorf("unbound symbol: %v", k)
+	return env.Package.Get(k)
 }
 
 // GetFunName returns the function name (if any) known to be bound to the given
 // FID.
-func (env *LEnv) GetFunName(fid string) string {
-	name, ok := env.FunName[fid]
-	if ok {
-		return name
+func (env *LEnv) GetFunName(f *LVal) string {
+	pkgname := f.Package
+	if pkgname == "" {
+		log.Printf("unknown package for function %s", f.FID)
+		return ""
 	}
-	if env.Parent != nil {
-		return env.Parent.GetFunName(fid)
+	pkg := env.root().Registry.Packages[pkgname]
+	if pkg == nil {
+		log.Printf("failed to find package %q", pkgname)
+		return ""
 	}
-	return ""
+	return pkg.FunNames[f.FID]
 }
 
 // Put takes an LSymbol k and binds it to v in env.
@@ -124,17 +154,16 @@ func (env *LEnv) Put(k, v *LVal) {
 	env.Scope[k.Str] = v.Copy()
 }
 
-// GetGlobal takes LSymbol k and returns the value it is bound to in the root
-// environment (global scope).
+// GetGlobal takes LSymbol k and returns the value it is bound to in the
+// current package.
 func (env *LEnv) GetGlobal(k *LVal) *LVal {
-	return env.root().Get(k)
+	return env.root().Package.Get(k)
 }
 
-// PutGlobal takes an LSymbol k and binds it to v in root environment (global
-// scope).
+// PutGlobal takes an LSymbol k and binds it to v in current package.
 func (env *LEnv) PutGlobal(k, v *LVal) {
 	root := env.root()
-	root.Put(k, v)
+	root.Package.Put(k, v)
 }
 
 func (env *LEnv) root() *LEnv {
@@ -150,14 +179,17 @@ func (env *LEnv) AddMacros(macs ...LBuiltinDef) {
 	if len(macs) == 0 {
 		macs = DefaultMacros()
 	}
+	pkg := env.root().Package
 	for _, mac := range macs {
 		k := Symbol(mac.Name())
-		exist := env.Get(k)
+		exist := pkg.Get(k)
 		if !exist.IsNil() && exist.Type != LError { // LError is ubound symbol
 			panic(fmt.Sprintf("macro already defined: %v (= %v)", k, exist))
 		}
 		id := fmt.Sprintf("<builtin-macro ``%s''>", mac.Name())
-		env.Put(k, Macro(id, mac.Formals(), mac.Eval))
+		fn := Macro(id, mac.Formals(), mac.Eval)
+		fn.Package = pkg.Name
+		pkg.Put(k, fn)
 	}
 }
 
@@ -167,14 +199,17 @@ func (env *LEnv) AddSpecialOps(ops ...LBuiltinDef) {
 	if len(ops) == 0 {
 		ops = DefaultSpecialOps()
 	}
+	pkg := env.root().Package
 	for _, op := range ops {
 		k := Symbol(op.Name())
-		exist := env.Get(k)
+		exist := pkg.Get(k)
 		if !exist.IsNil() && exist.Type != LError { // LError is ubound symbol
 			panic(fmt.Sprintf("macro already defined: %v (= %v)", k, exist))
 		}
 		id := fmt.Sprintf("<special-op ``%s''>", op.Name())
-		env.Put(k, SpecialOp(id, op.Formals(), op.Eval))
+		fn := SpecialOp(id, op.Formals(), op.Eval)
+		fn.Package = pkg.Name
+		pkg.Put(k, fn)
 	}
 }
 
@@ -184,15 +219,17 @@ func (env *LEnv) AddBuiltins(funs ...LBuiltinDef) {
 	if len(funs) == 0 {
 		funs = DefaultBuiltins()
 	}
+	pkg := env.root().Package
 	for _, f := range funs {
 		k := Symbol(f.Name())
-		exist := env.Get(k)
+		exist := pkg.Get(k)
 		if exist.Type != LError {
 			panic("symbol already defined: " + f.Name())
 		}
 		id := fmt.Sprintf("<builtin-function ``%s''>", f.Name())
 		v := Fun(id, f.Formals(), f.Eval)
-		env.Put(k, v)
+		v.Package = pkg.Name
+		pkg.Put(k, v)
 	}
 }
 
@@ -311,7 +348,7 @@ func (env *LEnv) EvalSExpr(s *LVal) *LVal {
 	// Push onto the stack here so that we don't trigger tail recursion while
 	// evaluating the arguments to f -- f has to be the recursive call, if
 	// there is recursion at all.
-	env.Stack.PushFID(f.FID, env.GetFunName(f.FID))
+	env.Stack.PushFID(f.FID, env.GetFunName(f))
 	defer env.Stack.Pop()
 
 	if f.IsSpecialFun() {
