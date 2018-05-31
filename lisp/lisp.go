@@ -23,6 +23,7 @@ const (
 	LQuote
 	LString
 	LSortMap
+	LNative
 	LMarkTailRec
 	LMarkMacExpand
 )
@@ -39,6 +40,7 @@ var lvalTypeStrings = []string{
 	LQuote:         "quoted",
 	LString:        "string",
 	LSortMap:       "sortmap",
+	LNative:        "native",
 	LMarkTailRec:   "marker-tail-recursion",
 	LMarkMacExpand: "marker-macro-expansion",
 }
@@ -77,6 +79,9 @@ type LVal struct {
 
 	// Cells used by many values as a storage space for lisp objects.
 	Cells []*LVal
+
+	// Native value for language embedding and writing custom DSLs.
+	Native interface{}
 
 	// Map used for LSortMap values.
 	Map map[interface{}]*LVal
@@ -151,6 +156,14 @@ func QSymbol(s string) *LVal {
 // Nil returns an LVal representing nil, an empty list, an absent value.
 func Nil() *LVal {
 	return SExpr(nil)
+}
+
+// Native returns an LVal containng a native Go value.
+func Native(v interface{}) *LVal {
+	return &LVal{
+		Type:   LNative,
+		Native: v,
+	}
 }
 
 // SExpr returns an LVal representing an S-expression, a symbolic expression.
@@ -462,6 +475,8 @@ func (v *LVal) str(onTheRecord bool) string {
 		return QUOTE + v.Cells[0].str(true)
 	case LSortMap:
 		return quote + sortedMapString(v)
+	case LNative:
+		return fmt.Sprintf("<native value: %T>", v.Native)
 	case LMarkTailRec:
 		return quote + fmt.Sprintf("<tail-recursion frames=%d (%s %s)>", v.Cells[0].Int, v.Cells[1], v.Cells[2])
 	case LMarkMacExpand:

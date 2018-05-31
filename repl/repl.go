@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"bitbucket.org/luthersystems/elps/lisp"
+	"bitbucket.org/luthersystems/elps/lisp/lisplib"
 	"bitbucket.org/luthersystems/elps/parser"
 	"github.com/chzyer/readline"
 )
@@ -16,7 +17,12 @@ func RunRepl(prompt string) {
 	env := lisp.NewEnv(nil)
 	rc := lisp.InitializeUserEnv(env)
 	if !rc.IsNil() {
-		errlnf("Initialization failure: %v", rc)
+		errlnf("Language initialization failure: %v", rc)
+		os.Exit(1)
+	}
+	rc = lisplib.LoadLibrary(env)
+	if !rc.IsNil() {
+		errlnf("Stdlib initialization failure: %v", rc)
 		os.Exit(1)
 	}
 
