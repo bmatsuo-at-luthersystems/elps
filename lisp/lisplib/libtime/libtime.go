@@ -68,6 +68,8 @@ func (fun *builtin) Eval(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
 
 var builtins = []*builtin{
 	{"utc-now", lisp.Formals(), BuiltinUTCNow},
+	{"parse-rfc3339", lisp.Formals("timestamp"), BuiltinParseRFC3339},
+	{"parse-rfc3339-nano", lisp.Formals("timestamp"), BuiltinParseRFC3339Nano},
 	{"format-rfc3339", lisp.Formals("datetime"), BuiltinFormatRFC3339},
 	{"format-rfc3339-nano", lisp.Formals("datetime"), BuiltinFormatRFC3339Nano},
 	{"sub", lisp.Formals("end", "start"), BuiltinSub},
@@ -78,6 +80,30 @@ var builtins = []*builtin{
 
 func BuiltinUTCNow(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
 	return Time(time.Now().UTC())
+}
+
+func BuiltinParseRFC3339(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
+	stamp := args.Cells[0]
+	if stamp.Type != lisp.LString {
+		return env.Errorf("argument is not a string: %v", stamp.Type)
+	}
+	t, err := time.Parse(time.RFC3339, stamp.Str)
+	if err != nil {
+		return env.Error(err)
+	}
+	return Time(t)
+}
+
+func BuiltinParseRFC3339Nano(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
+	stamp := args.Cells[0]
+	if stamp.Type != lisp.LString {
+		return env.Errorf("argument is not a string: %v", stamp.Type)
+	}
+	t, err := time.Parse(time.RFC3339Nano, stamp.Str)
+	if err != nil {
+		return env.Error(err)
+	}
+	return Time(t)
 }
 
 func BuiltinFormatRFC3339(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
