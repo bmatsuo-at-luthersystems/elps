@@ -14,15 +14,36 @@ func TestPackages(t *testing.T) {
 		{"in-package", TestSequence{
 			// Switch into a new package and define a function
 			{"(in-package 'new-package)", "()"},
-			{"(lisp:defun ++ (x) (lisp:+ 1 x))", "()"},
-			{`(++ 2)`, `3`},
+			{"(defun fun (x) (+ x 1))", "()"},
+			{"(in-package 'other-package)", "()"},
+			{"(defun fun (x) (- x 1))", "()"},
+			{"(in-package 'user)", "()"},
+			{`(new-package:fun 2)`, `3`},
+			{`(other-package:fun 2)`, `1`},
 		}},
-		{"shadowing", TestSequence{
-			// Switch into a new package and define a function
+		{"use-package", TestSequence{
+			// Define fun in a new-package
 			{"(in-package 'new-package)", "()"},
-			{"(defun + (x y) (list x y))", "()"},
-			{`(+ 1 2)`, `'(1 2)`},
+			{"(defun fun (x) (internal x))", "()"},
+			{"(defun internal (x) (+ x 1))", "()"},
+			{"(export 'fun)", "()"},
+			// Also define fun in other-package
+			{"(in-package 'other-package)", "()"},
+			{"(defun fun (x) (internal x))", "()"},
+			{"(defun internal (x) (- x 1))", "()"},
+			{"(export 'fun)", "()"},
+			// Use new-package and check the result of an unqualified fun call.
+			{"(in-package 'user)", "()"},
+			{"(use-package 'new-package)", "()"},
+			{`(fun 2)`, `3`},
+			{`(other-package:fun 2)`, `1`},
 		}},
+		//{"shadowing", TestSequence{
+		//	// Switch into a new package and define a function
+		//	{"(in-package 'new-package)", "()"},
+		//	{"(defun + (x y) (list x y))", "()"},
+		//	{`(+ 1 2)`, `'(1 2)`},
+		//}},
 	}
 	RunTestSuite(t, tests)
 }

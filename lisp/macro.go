@@ -38,10 +38,10 @@ func macroDefmacro(env *LEnv, args *LVal) *LVal {
 	if sym.Type != LSymbol {
 		return env.Errorf("first argument is not a symbol: %s", sym.Type)
 	}
-	v := env.GetGlobal(sym)
-	if v.Type != LError {
-		return env.Errorf("symbol ``%v'' is already defined: %v", sym, v)
-	}
+	//v := env.GetGlobal(sym)
+	//if v.Type != LError {
+	//	return env.Errorf("symbol ``%v'' is already defined: %v", sym, v)
+	//}
 	fun := Lambda(args.Cells[1], []*LVal{args.Cells[2]})
 	if fun.Type == LError {
 		fun.Stack = env.Stack.Copy()
@@ -51,8 +51,18 @@ func macroDefmacro(env *LEnv, args *LVal) *LVal {
 	fun.Package = env.root().Package.Name
 	fun.Env.Parent = env // function definitions get a lexical scope
 	fun.Env.Stack = env.Stack
-	env.PutGlobal(sym, fun)
-	return Nil()
+	return SExpr([]*LVal{
+		Symbol("lisp:progn"),
+		SExpr([]*LVal{
+			Symbol("lisp:set"),
+			Quote(sym),
+			fun,
+		}),
+		Nil(),
+	})
+
+	//env.PutGlobal(sym, fun)
+	//return Nil()
 }
 
 func macroDefun(env *LEnv, args *LVal) *LVal {
@@ -60,10 +70,10 @@ func macroDefun(env *LEnv, args *LVal) *LVal {
 	if sym.Type != LSymbol {
 		return env.Errorf("first argument is not a symbol: %s", sym.Type)
 	}
-	v := env.GetGlobal(sym)
-	if v.Type != LError {
-		return env.Errorf("symbol ``%v'' is already defined: %v", sym, v)
-	}
+	//v := env.GetGlobal(sym)
+	//if v.Type != LError {
+	//	return env.Errorf("symbol ``%v'' is already defined: %v", sym, v)
+	//}
 	fun := Lambda(args.Cells[1], args.Cells[2:])
 	if fun.Type == LError {
 		fun.Stack = env.Stack.Copy()
@@ -72,8 +82,17 @@ func macroDefun(env *LEnv, args *LVal) *LVal {
 	fun.Env.Parent = env // function definitions get a lexical scope
 	fun.Package = env.root().Package.Name
 	fun.Env.Stack = env.Stack
-	env.PutGlobal(sym, fun)
-	return Nil()
+	return SExpr([]*LVal{
+		Symbol("lisp:progn"),
+		SExpr([]*LVal{
+			Symbol("lisp:set"),
+			Quote(sym),
+			fun,
+		}),
+		Nil(),
+	})
+	//env.PutGlobal(sym, fun)
+	//return Nil()
 }
 
 func macroQuote(env *LEnv, args *LVal) *LVal {

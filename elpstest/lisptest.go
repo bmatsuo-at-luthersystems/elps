@@ -24,9 +24,7 @@ type TestSuite []struct {
 func RunTestSuite(t *testing.T, tests TestSuite) {
 	for i, test := range tests {
 		env := lisp.NewEnv(nil)
-		env.AddBuiltins()
-		env.AddSpecialOps()
-		env.AddMacros()
+		lisp.InitializeUserEnv(env)
 		for j, expr := range test.TestSequence {
 			//log.Printf("test %d %q: expr %d evaluating", i, test.Name, j)
 			v, _, err := parser.ParseLVal([]byte(expr.Expr))

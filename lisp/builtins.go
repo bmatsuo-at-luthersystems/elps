@@ -36,7 +36,9 @@ func (fun *langBuiltin) Eval(env *LEnv, args *LVal) *LVal {
 
 var userBuiltins []*langBuiltin
 var langBuiltins = []*langBuiltin{
-	{"in-package", Formals("name"), builtinInPackage},
+	{"in-package", Formals("package-name"), builtinInPackage},
+	{"use-package", Formals(VarArgSymbol, "package-name"), builtinUsePackage},
+	{"export", Formals(VarArgSymbol, "symbol"), builtinExport},
 	{"set", Formals("sym", "val"), builtinSet},
 	{"eval", Formals("expr"), builtinEval},
 	{"error", Formals(VarArgSymbol, "args"), builtinError},
@@ -99,11 +101,41 @@ func builtinInPackage(env *LEnv, args *LVal) *LVal {
 	name := args.Cells[0].Str
 	root := env.root()
 	pkg := root.Registry.Packages[name]
+	newpkg := false
 	if pkg == nil {
+		newpkg = true
 		root.Registry.DefinePackage(name)
 		pkg = root.Registry.Packages[name]
 	}
 	root.Package = pkg
+	if newpkg && root.Registry.Lang != "" {
+		// For now, all packages use the lisp package.  The ``in-package''
+		// builtin doesn't provide syntax to simply use lisp (calling
+		// ``lisp:use-package'' from a package that doesn't use lisp hard to
+		// remember).
+		root.UsePackage(Symbol(root.Registry.Lang))
+	}
+	return Nil()
+}
+
+func builtinUsePackage(env *LEnv, args *LVal) *LVal {
+	if args.Cells[0].Type != LSymbol && args.Cells[0].Type != LString {
+		return env.Errorf("first argument is not a symbol or a string: %v", args.Cells[0].Type)
+	}
+	return env.UsePackage(args.Cells[0])
+}
+
+func builtinExport(env *LEnv, args *LVal) *LVal {
+	for _, arg := range args.Cells {
+		switch {
+		case arg.Type == LSymbol || arg.Type != LString:
+			env.root().Package.Exports(arg.Str)
+		case arg.Type == LSExpr:
+			builtinExport(env, arg)
+		default:
+			return env.Errorf("argument is not a symbol, a string, or a list of valid types: %v", arg.Type)
+		}
+	}
 	return Nil()
 }
 

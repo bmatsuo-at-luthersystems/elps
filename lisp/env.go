@@ -8,10 +8,34 @@ import (
 	"sync/atomic"
 )
 
+// DefaultLangPackage is the name of default language package
+const DefaultLangPackage = "lisp"
+
+// DefaultUserPackage is the name of the entry point package for interpreting
+// user code.
+const DefaultUserPackage = "user"
+
 var envCount uint64
 
 func getEnvID() uint {
 	return uint(atomic.AddUint64(&envCount, 1))
+}
+
+// InitializeUserEnv creates the default user environment.
+func InitializeUserEnv(env *LEnv) *LVal {
+	env.Registry.DefinePackage(DefaultLangPackage)
+	env.Registry.DefinePackage(DefaultUserPackage)
+	env.Registry.Lang = DefaultLangPackage
+	env.Package = env.Registry.Packages[env.Registry.Lang]
+	env.AddMacros(true)
+	env.AddSpecialOps(true)
+	env.AddBuiltins(true)
+	rc := env.InPackage(Symbol(DefaultUserPackage))
+	if !rc.IsNil() {
+		return rc
+	}
+	rc = env.UsePackage(Symbol(env.Registry.Lang))
+	return rc
 }
 
 // LEnv is a lisp environment.
@@ -37,9 +61,11 @@ func NewEnv(parent *LEnv) *LEnv {
 		env.Stack = parent.Stack
 	} else {
 		env.Registry = NewRepository()
-		env.Registry.DefinePackage("lisp")
-		env.Registry.DefinePackage("user")
-		env.Package = env.Registry.Packages["lisp"]
+		env.Registry.DefinePackage(DefaultLangPackage)
+		env.Registry.DefinePackage(DefaultUserPackage)
+		env.Registry.Lang = DefaultLangPackage
+		env.Package = env.Registry.Packages[env.Registry.Lang]
+		env.UsePackage(Symbol(env.Registry.Lang))
 		env.Stack = &CallStack{}
 	}
 	return env
@@ -51,7 +77,7 @@ func (env *LEnv) getFID() string {
 
 func (env *LEnv) DefinePackage(name *LVal) *LVal {
 	if name.Type != LSymbol && name.Type != LString {
-		return Errorf("argument cannot be converted to string: %v", name.Type)
+		return env.Errorf("argument cannot be converted to string: %v", name.Type)
 	}
 	env = env.root()
 	env.Registry.DefinePackage(name.Str)
@@ -60,14 +86,33 @@ func (env *LEnv) DefinePackage(name *LVal) *LVal {
 
 func (env *LEnv) InPackage(name *LVal) *LVal {
 	if name.Type != LSymbol && name.Type != LString {
-		return Errorf("argument cannot be converted to string: %v", name.Type)
+		return env.Errorf("argument cannot be converted to string: %v", name.Type)
 	}
-	env = env.root()
-	pkg := env.Registry.Packages[name.Str]
+	root := env.root()
+	pkg := root.Registry.Packages[name.Str]
 	if pkg == nil {
-		return Errorf("unknown package: %v", name.Str)
+		return env.Errorf("unknown package: %v", name.Str)
 	}
-	env.Package = pkg
+	root.Package = pkg
+	return Nil()
+}
+
+func (env *LEnv) UsePackage(name *LVal) *LVal {
+	if name.Type != LSymbol && name.Type != LString {
+		return env.Errorf("argument cannot be converted to string: %v", name.Type)
+	}
+	root := env.root()
+	pkg := root.Registry.Packages[name.Str]
+	if pkg == nil {
+		return env.Errorf("unknown package: %v", name.Str)
+	}
+	for _, sym := range pkg.Externals {
+		v := pkg.Get(Symbol(sym))
+		if v.Type == LError {
+			return env.Errorf("package %s: %v", name.Str, v)
+		}
+		root.Package.Put(Symbol(sym), v)
+	}
 	return Nil()
 }
 
@@ -176,7 +221,7 @@ func (env *LEnv) root() *LEnv {
 
 // AddMacros binds the given macros to their names in env.  When called with no
 // arguments AddMacros adds the DefaultMacros to env.
-func (env *LEnv) AddMacros(macs ...LBuiltinDef) {
+func (env *LEnv) AddMacros(external bool, macs ...LBuiltinDef) {
 	if len(macs) == 0 {
 		macs = DefaultMacros()
 	}
@@ -191,12 +236,15 @@ func (env *LEnv) AddMacros(macs ...LBuiltinDef) {
 		fn := Macro(id, mac.Formals(), mac.Eval)
 		fn.Package = pkg.Name
 		pkg.Put(k, fn)
+		if external {
+			pkg.Externals = append(pkg.Externals, k.Str)
+		}
 	}
 }
 
 // AddSpecialOps binds the given special operators to their names in env.  When
 // called with no arguments AddSpecialOps adds the DefaultSpecialOps to env.
-func (env *LEnv) AddSpecialOps(ops ...LBuiltinDef) {
+func (env *LEnv) AddSpecialOps(external bool, ops ...LBuiltinDef) {
 	if len(ops) == 0 {
 		ops = DefaultSpecialOps()
 	}
@@ -211,12 +259,15 @@ func (env *LEnv) AddSpecialOps(ops ...LBuiltinDef) {
 		fn := SpecialOp(id, op.Formals(), op.Eval)
 		fn.Package = pkg.Name
 		pkg.Put(k, fn)
+		if external {
+			pkg.Externals = append(pkg.Externals, k.Str)
+		}
 	}
 }
 
 // AddBuiltins binds the given funs to their names in env.  When called with no
 // arguments AddBuiltins adds the DefaultBuiltins to env.
-func (env *LEnv) AddBuiltins(funs ...LBuiltinDef) {
+func (env *LEnv) AddBuiltins(external bool, funs ...LBuiltinDef) {
 	if len(funs) == 0 {
 		funs = DefaultBuiltins()
 	}
@@ -231,6 +282,9 @@ func (env *LEnv) AddBuiltins(funs ...LBuiltinDef) {
 		v := Fun(id, f.Formals(), f.Eval)
 		v.Package = pkg.Name
 		pkg.Put(k, v)
+		if external {
+			pkg.Externals = append(pkg.Externals, k.Str)
+		}
 	}
 }
 
@@ -265,7 +319,7 @@ func (env *LEnv) Error(msg ...interface{}) *LVal {
 	if fullMsg == "" {
 		fullMsg = buf.String()
 	}
-	log.Printf("stack %v", env.Stack.Copy())
+	//log.Printf("stack %v", env.Stack.Copy())
 	return &LVal{
 		Type:  LError,
 		Str:   fullMsg,
@@ -276,7 +330,6 @@ func (env *LEnv) Error(msg ...interface{}) *LVal {
 // Errorf returns an LError value with a formatted error message.  The returned
 // LVal contains a copy env.Stack.
 func (env *LEnv) Errorf(format string, v ...interface{}) *LVal {
-	log.Printf("stack %v", env.Stack.Copy())
 	return &LVal{
 		Type:  LError,
 		Str:   fmt.Sprintf(format, v...),
@@ -339,7 +392,7 @@ eval:
 // EvalSExpr evaluates s and returns the resulting LVal.
 func (env *LEnv) EvalSExpr(s *LVal) *LVal {
 	if s.Type != LSExpr {
-		return Errorf("not an s-expression")
+		return env.Errorf("not an s-expression")
 	}
 	if len(s.Cells) == 0 {
 		return Nil()
@@ -351,7 +404,7 @@ func (env *LEnv) EvalSExpr(s *LVal) *LVal {
 		return f
 	}
 	if f.Type != LFun {
-		return Errorf("first element of expression is not a function: %v", f)
+		return env.Errorf("first element of expression is not a function: %v", f)
 	}
 
 	// Check for possible tail recursion before pushing to avoid hitting s when
@@ -361,7 +414,7 @@ func (env *LEnv) EvalSExpr(s *LVal) *LVal {
 	// Push onto the stack here so that we don't trigger tail recursion while
 	// evaluating the arguments to f -- f has to be the recursive call, if
 	// there is recursion at all.
-	env.Stack.PushFID(f.FID, env.GetFunName(f))
+	env.Stack.PushFID(f.FID, f.Package, env.GetFunName(f))
 	defer env.Stack.Pop()
 
 	if f.IsSpecialFun() {
@@ -452,12 +505,12 @@ func (env *LEnv) Call(fun *LVal, args *LVal) *LVal {
 	nargs := len(formals.Cells) // only used when not vargs
 	for i, v := range args.Cells {
 		if len(formals.Cells) == 0 {
-			return Errorf("%s: function expects %d arguments (got %d)", fun.FID, nargs, len(args.Cells))
+			return env.Errorf("%s: function expects %d arguments (got %d)", fun.FID, nargs, len(args.Cells))
 		}
 		argSym := formals.Cells[0]
 		if argSym.Str == VarArgSymbol {
 			if len(formals.Cells) == 1 {
-				return Errorf("%s: function argument format list ends with symbol ``%s''", fun.FID, VarArgSymbol)
+				return env.Errorf("%s: function argument format list ends with symbol ``%s''", fun.FID, VarArgSymbol)
 			}
 			argSym = formals.Cells[1]
 			q := QExpr(args.Cells[i:])
@@ -475,7 +528,7 @@ func (env *LEnv) Call(fun *LVal, args *LVal) *LVal {
 			return fun
 		}
 		if len(formals.Cells) != 2 {
-			return Errorf("function argument format list ends with symbol ``%s''", VarArgSymbol)
+			return env.Errorf("function argument format list ends with symbol ``%s''", VarArgSymbol)
 		}
 		// We never bound the final argument to a value so we do it here.
 		putVarArg(formals.Cells[1], Nil())
@@ -492,9 +545,29 @@ func (env *LEnv) Call(fun *LVal, args *LVal) *LVal {
 		// We are definitely working with a non-empty stack here so there is no
 		// nil check.
 		env.Stack.Top().Terminal = true
+
 		// FIXME:  I think fun.Env is probably correct here.  But it wouldn't
 		// surprise me if at least one builtin breaks when it switches.
 		return fun.Builtin(env, QExpr(fun.Cells[1:]))
+	}
+
+	// With formal arguments bound, we can switch into the function's package
+	// namespace for the duration of the call.
+	//
+	// BUG:  This package-swap should occur for builtins as well but there is a
+	// bootstrapping problem, where ``set'' (as well as defun/defmacro) needs
+	// to modify the *package* namespace and not the "lisp" namespace.  Dynamic
+	// variables may be required in order to work through this completely.
+	root := env.root()
+	outer := root.Package
+	if outer.Name != fun.Package {
+		inner := root.Registry.Packages[fun.Package]
+		if inner != nil {
+			root.Package = inner
+			defer func() {
+				root.Package = outer
+			}()
+		}
 	}
 
 	body := fun.Cells[1:]

@@ -18,6 +18,9 @@ func (e *ErrorVal) Error() string {
 
 // FullError returns a message that details where the function was created.
 func (e *ErrorVal) FullError() string {
+	if e.Stack == nil {
+		return e.Str
+	}
 	return fmt.Sprintf("%s: %s", e.Stack.Top().Name, e.Str)
 }
 
@@ -37,8 +40,10 @@ func (e *ErrorVal) WriteTrace(w io.Writer) (int, error) {
 	if !wrote(bw.WriteString("\n")) {
 		return n, err
 	}
-	if !wrote(e.Stack.DebugPrint(bw)) {
-		return n, err
+	if e.Stack != nil {
+		if !wrote(e.Stack.DebugPrint(bw)) {
+			return n, err
+		}
 	}
 	return n, bw.Flush()
 }

@@ -1,8 +1,11 @@
 package lisp
 
+import "sort"
+
 // PackageRegistry contains a set of packages.
 type PackageRegistry struct {
 	Packages map[string]*Package
+	Lang     string // A default package used by all other packages
 }
 
 // NewRepository initializes and returns a new Repository.
@@ -25,9 +28,10 @@ func (r *PackageRegistry) DefinePackage(name string) *Package {
 // Package is a named set of bound symbols.  A package is interpreted code and
 // belongs to the LEnv that creates it.
 type Package struct {
-	Name     string
-	Symbols  map[string]*LVal
-	FunNames map[string]string
+	Name      string
+	Symbols   map[string]*LVal
+	FunNames  map[string]string
+	Externals []string
 }
 
 // NewPackage initializes and returns a package with the given name.
@@ -70,6 +74,24 @@ func (pkg *Package) get(k *LVal) *LVal {
 		return v.Copy()
 	}
 	return Errorf("unbound symbol: %v", k)
+}
+
+// Exports declares symbols exported by the package.  The symbols are not
+// required to be bound at the time Exports is called.
+func (pkg *Package) Exports(sym ...string) {
+	sort.Strings(sym)
+	externs := pkg.Externals
+addloop:
+	for _, symnew := range sym {
+		for _, s := range pkg.Externals {
+			if s == symnew {
+				continue addloop
+			}
+		}
+		externs = append(externs, symnew)
+	}
+	sort.Strings(externs)
+	pkg.Externals = externs
 }
 
 // GetFunName returns the function name (if any) known to be bound to the given

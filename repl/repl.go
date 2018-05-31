@@ -14,9 +14,11 @@ import (
 // RunRepl runs a simple repl
 func RunRepl(prompt string) {
 	env := lisp.NewEnv(nil)
-	env.AddBuiltins()
-	env.AddSpecialOps()
-	env.AddMacros()
+	rc := lisp.InitializeUserEnv(env)
+	if !rc.IsNil() {
+		errlnf("Initialization failure: %v", rc)
+		os.Exit(1)
+	}
 
 	rl, err := readline.New(prompt)
 	if err != nil {

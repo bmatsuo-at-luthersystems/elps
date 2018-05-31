@@ -14,6 +14,7 @@ type CallStack struct {
 // CallFrame is one frame in the CallStack
 type CallFrame struct {
 	FID      string
+	Package  string
 	Name     string
 	Terminal bool
 }
@@ -28,7 +29,7 @@ func (s *CallStack) Copy() *CallStack {
 
 // Top returns the CallFrame at the top of the stack or nil if none exists.
 func (s *CallStack) Top() *CallFrame {
-	if len(s.Frames) == 0 {
+	if s == nil || len(s.Frames) == 0 {
 		return nil
 	}
 	return &s.Frames[len(s.Frames)-1]
@@ -61,8 +62,8 @@ func (s *CallStack) TerminalFID(fid string) int {
 }
 
 // PushFID pushes a new stack frame with the given FID onto s.
-func (s *CallStack) PushFID(fid string, name string) {
-	s.Frames = append(s.Frames, CallFrame{FID: fid, Name: name})
+func (s *CallStack) PushFID(fid, pkg, name string) {
+	s.Frames = append(s.Frames, CallFrame{FID: fid, Package: pkg, Name: name})
 }
 
 // Pop removes the top CallFrame from the stack and returns it.  If the stack
@@ -93,6 +94,9 @@ func (s *CallStack) DebugPrint(w io.Writer) (int, error) {
 		name := f.FID
 		if f.Name != "" {
 			name = f.Name
+		}
+		if f.Package != "" {
+			name = f.Package + ":" + name
 		}
 		_n, err := fmt.Fprintf(w, "%sheight %d: %s%s\n", indent, i, name, mod.String())
 		n += _n
