@@ -259,7 +259,7 @@ Packages are created/modified using the `in-package`
 function, which changes the environment's working package.  Symbols bound using
 `set`, `defun`, `defmacro`, etc will be bound in the working package.
 
-```
+```lisp
 (in-package 'my-new-package)
 (export 'my-special-function)
 (defun my-special-function () (debug-print "something special"))
@@ -270,9 +270,9 @@ Outside of the `my-new-package` package, the symbol `my-special-function` may
 be bound to other values.  Value defined inside `my-new-package` may be
 accessed by qualifying the symbol using the package name.
 
-```
+```lisp
 (my-new-package:my-special-function)  ; prints "something special"
-(my-new-package:my-other)             ; prints "something else"
+(my-new-package:my-other-function)    ; prints "something else"
 ```
 
 ### Importing symbols
@@ -280,7 +280,7 @@ accessed by qualifying the symbol using the package name.
 Symbols exported within a package may be imported to another package with the
 `use-package` function.
 
-```
+```lisp
 (in-package 'my-other-package)
 (use-package 'my-new-package)
 (my-special-function)           ; prints "something special"
@@ -291,7 +291,7 @@ In the above example, `my-special-function` becomes bound in
 it was never exported.  If you really wanted to bind `my-other-function` it
 would be possible by using a qualified symbol.
 
-```
+```lisp
 (set 'my-other-function my-new-package:my-other-function)
 ```
 
@@ -308,7 +308,7 @@ of the language base "lisp" package.  There are packages for working with time,
 json, stream encodings, math, etc.  These packages generally have simple, short
 names.
 
-```
+```lisp
 (set 'now (time:utc-now))
 (debug-print (time:format-rfc3339 now))
 ```
@@ -318,7 +318,7 @@ names.
 For packages outside of the standard library it in recommended that names use a
 URL format for organizational clarity and to avoid package name collisions.
 
-```
+```lisp
 (in-package 'example.com/faster-json)
 (use-package 'example.com/faster-json/utils)
 ```
