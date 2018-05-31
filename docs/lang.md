@@ -247,3 +247,78 @@ Maps are mutable values and can be updated with the `assoc!` function.
     (assoc! m 'carol 2)
     (get m 'carol))     ; evaluates to 2
 ```
+
+##Packages
+
+Packages allow namespace isolation for components of a codebase as its
+complexity increases.
+
+### Basics
+
+Packages are created/modified using the `in-package`
+function, which changes the environment's working package.  Symbols bound using
+`set`, `defun`, `defmacro`, etc will be bound in the working package.
+
+```
+(in-package 'my-new-package)
+(export 'my-special-function)
+(defun my-special-function () (debug-print "something special"))
+(defun my-other-function () (debug-print "something else"))
+```
+
+Outside of the `my-new-package` package, the symbol `my-special-function` may
+be bound to other values.  Value defined inside `my-new-package` may be
+accessed by qualifying the symbol using the package name.
+
+```
+(my-new-package:my-special-function)  ; prints "something special"
+(my-new-package:my-other)             ; prints "something else"
+```
+
+### Importing symbols
+
+Symbols exported within a package may be imported to another package with the
+`use-package` function.
+
+```
+(in-package 'my-other-package)
+(use-package 'my-new-package)
+(my-special-function)           ; prints "something special"
+```
+
+In the above example, `my-special-function` becomes bound in
+`my-other-package`.  But the symbol `my-other-function` remains unbound because
+it was never exported.  If you really wanted to bind `my-other-function` it
+would be possible by using a qualified symbol.
+
+```
+(set 'my-other-function my-new-package:my-other-function)
+```
+
+**NOTE:** All packages use the "lisp" package, which defines all of the
+language builtin functions and macros.  It is not currently possible to change
+this behavior for packages defined by lisp code.  Embedded lisp isntances are
+able change this behavior globally -- something outside the scope of this
+document.
+
+### Standard library
+
+A default lisp instance will have a standard set of packages available outside
+of the language base "lisp" package.  There are packages for working with time,
+json, stream encodings, math, etc.  These packages generally have simple, short
+names.
+
+```
+(set 'now (time:utc-now))
+(debug-print (time:format-rfc3339 now))
+```
+
+### User packages
+
+For packages outside of the standard library it in recommended that names use a
+URL format for organizational clarity and to avoid package name collisions.
+
+```
+(in-package 'example.com/faster-json)
+(use-package 'example.com/faster-json/utils)
+```
