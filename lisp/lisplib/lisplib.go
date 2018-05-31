@@ -4,6 +4,7 @@ package lisplib
 
 import (
 	"bitbucket.org/luthersystems/elps/lisp"
+	"bitbucket.org/luthersystems/elps/lisp/lisplib/libgolang"
 	"bitbucket.org/luthersystems/elps/lisp/lisplib/libtime"
 )
 
@@ -11,6 +12,10 @@ import (
 // default user package.
 func LoadLibrary(env *lisp.LEnv) *lisp.LVal {
 	e := libtime.LoadPackage(env)
+	if !e.IsNil() {
+		return e
+	}
+	e = libgolang.LoadPackage(env)
 	if !e.IsNil() {
 		return e
 	}
