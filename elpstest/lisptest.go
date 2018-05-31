@@ -25,6 +25,7 @@ func RunTestSuite(t *testing.T, tests TestSuite) {
 	for i, test := range tests {
 		env := lisp.NewEnv(nil)
 		lisp.InitializeUserEnv(env)
+		env.Reader = parser.NewReader()
 		for j, expr := range test.TestSequence {
 			//log.Printf("test %d %q: expr %d evaluating", i, test.Name, j)
 			v, _, err := parser.ParseLVal([]byte(expr.Expr))

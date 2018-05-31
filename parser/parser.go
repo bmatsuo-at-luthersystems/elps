@@ -14,12 +14,36 @@ package parser
 import (
 	"fmt"
 	"io"
+	"io/ioutil"
 	"strconv"
 	"strings"
 
 	"bitbucket.org/luthersystems/elps/lisp"
 	parsec "github.com/prataprc/goparsec"
 )
+
+// NewReader returns a lisp.Reader.
+func NewReader() lisp.Reader {
+	return &parsecReader{}
+}
+
+type parsecReader struct {
+}
+
+func (p *parsecReader) Read(name string, r io.Reader) ([]*lisp.LVal, error) {
+	b, err := ioutil.ReadAll(r)
+	if err != nil {
+		return nil, err
+	}
+	vals, n, err := ParseLVal(b)
+	if err != nil {
+		return nil, err
+	}
+	if n != len(b) {
+		return nil, io.ErrUnexpectedEOF
+	}
+	return vals, nil
+}
 
 const (
 	nodeInvalid nodeType = iota

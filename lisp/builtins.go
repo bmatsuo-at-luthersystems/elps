@@ -36,6 +36,7 @@ func (fun *langBuiltin) Eval(env *LEnv, args *LVal) *LVal {
 
 var userBuiltins []*langBuiltin
 var langBuiltins = []*langBuiltin{
+	{"load-string", Formals("source-code"), builtinLoadString},
 	{"in-package", Formals("package-name"), builtinInPackage},
 	{"use-package", Formals(VarArgSymbol, "package-name"), builtinUsePackage},
 	{"export", Formals(VarArgSymbol, "symbol"), builtinExport},
@@ -92,6 +93,14 @@ func DefaultBuiltins() []LBuiltinDef {
 		ops[offset+i] = langBuiltins[i]
 	}
 	return ops
+}
+
+func builtinLoadString(env *LEnv, args *LVal) *LVal {
+	if args.Cells[0].Type != LString {
+		return env.Errorf("first argument is not a string: %v", args.Cells[0].Type)
+	}
+	source := args.Cells[0].Str
+	return env.root().LoadString("load-string", source)
 }
 
 func builtinInPackage(env *LEnv, args *LVal) *LVal {

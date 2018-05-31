@@ -3,6 +3,7 @@ package lisp
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"log"
 	"strings"
 	"sync/atomic"
@@ -47,6 +48,7 @@ type LEnv struct {
 	Stack    *CallStack
 	Package  *Package
 	Registry *PackageRegistry
+	Reader   Reader
 }
 
 // NewEnv returns initializes and returns a new LEnv.
@@ -114,6 +116,34 @@ func (env *LEnv) UsePackage(name *LVal) *LVal {
 		root.Package.Put(Symbol(sym), v)
 	}
 	return Nil()
+}
+
+func (env *LEnv) LoadString(name, exprs string) *LVal {
+	return env.Load(name, strings.NewReader(exprs))
+}
+
+// Load reads LVals from r and evaluates them as if in a progn.  The value
+// returned by the last evaluated LVal will be retured.  If env.Reader has not
+// been set then an error will be returned.
+func (env *LEnv) Load(name string, r io.Reader) *LVal {
+	if env.Reader == nil {
+		return Errorf("no reader for environment")
+	}
+	exprs, err := env.Reader.Read(name, r)
+	if err != nil {
+		return Error(err)
+	}
+	if len(exprs) == 0 {
+		return Nil()
+	}
+	ret := Nil()
+	for _, expr := range exprs {
+		ret = env.Eval(expr)
+		if ret.Type == LError {
+			return ret
+		}
+	}
+	return ret
 }
 
 // Copy returns a new LEnv with a copy of env.Scope but a shared parent and
