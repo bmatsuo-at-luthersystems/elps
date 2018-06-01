@@ -46,6 +46,19 @@ func TestEval(t *testing.T) {
 			{"(reverse (list 1 2 3))", "'(3 2 1)"},
 			{"(reverse (list 1 2))", "'(2 1)"},
 			{"(concat (list 1 2) (list 3))", "'(1 2 3)"},
+			{"(slice '(0 1 2 3 4) 1 3)", "'(1 2)"},
+		}},
+		{"make-sequence", TestSequence{
+			{"(make-sequence 0 5)", "'(0 1 2 3 4)"},
+			{"(make-sequence 0 5 2)", "'(0 2 4)"},
+		}},
+		{"filtering", TestSequence{
+			{"(select (expr (< % 3)) '())", "'()"},
+			{"(select (expr (< % 3)) '(0 1 2 3 4 5))", "'(0 1 2)"},
+			{"(select (expr (< % 3)) '(3 4 5 6))", "'()"},
+			{"(reject (expr (< % 3)) '())", "'()"},
+			{"(reject (expr (< % 3)) '(0 1 2 3 4 5))", "'(3 4 5)"},
+			{"(reject (expr (< % 3)) '(0 1 1 -1 2 2))", "'()"},
 		}},
 		{"defun", TestSequence{
 			// defun macro

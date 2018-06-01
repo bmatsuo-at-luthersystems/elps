@@ -17,6 +17,10 @@ func TestFP(t *testing.T) {
 			{"(unpack cons '(1 '(2)))", "'(1 2)"},
 			{"(unpack (cons 1) '('(2)))", "'(1 2)"},
 		}},
+		{"zip", TestSequence{
+			{"(zip '(1 2 3) '('a 'b 'c))", "'('(1 'a) '(2 'b) '(3 'c))"},
+			{"(unpack zip (zip '(1 2 3) '('a 'b 'c)))", "'('(1 2 3) '('a 'b 'c))"},
+		}},
 		{"simple composition", TestSequence{
 			{"(defun f (x) (+ x 1))", "()"},
 			{"(defun g (x) (* x 2))", "()"},

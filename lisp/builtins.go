@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"sort"
 )
 
 // LBuiltin is a function that performs executes a lisp function.
@@ -55,11 +56,21 @@ var langBuiltins = []*langBuiltin{
 	{"get", Formals("m", "k"), builtinGet},
 	{"sorted-map", Formals(VarArgSymbol, "args"), builtinSortedMap},
 	{"concat", Formals(VarArgSymbol, "args"), builtinConcat},
+	{"sort", Formals("less-predicate", "list"), builtinSort},
+	{"select", Formals("predicate", "list"), builtinSelect},
+	{"reject", Formals("predicate", "list"), builtinReject},
+	{"zip", Formals(VarArgSymbol, "lists"), builtinZip},
+	{"make-sequence", Formals("start", "stop", VarArgSymbol, "step"), builtinMakeSequence},
 	{"reverse", Formals("lis"), builtinReverse},
+	{"slice", Formals("list", "start", "end"), builtinSlice},
 	{"list", Formals(VarArgSymbol, "args"), builtinList},
 	{"length", Formals("lis"), builtinLength},
 	{"cons", Formals("head", "tail"), builtinCons},
 	{"not", Formals("expr"), builtinNot},
+	{"all?", Formals("predicate", "list"), builtinAllP},
+	{"any?", Formals("predicate", "list"), builtinAnyP},
+	{"max", Formals("real", VarArgSymbol, "rest"), builtinMax},
+	{"min", Formals("real", VarArgSymbol, "rest"), builtinMin},
 	{">=", Formals("a", "b"), builtinGEq},
 	{">", Formals("a", "b"), builtinGT},
 	{"<=", Formals("a", "b"), builtinLEq},
@@ -403,6 +414,135 @@ func builtinConcat(env *LEnv, v *LVal) *LVal {
 	return q
 }
 
+func builtinSort(env *LEnv, args *LVal) *LVal {
+	less, list := args.Cells[0], args.Cells[1]
+	if less.Type != LFun {
+		return env.Errorf("first argument is not a function: %v", less.Type)
+	}
+	if list.Type != LSExpr {
+		return env.Errorf("second arument is not a list: %v", list.Type)
+	}
+	sortErr := Nil()
+	sort.Slice(list.Cells, func(i, j int) bool {
+		if !sortErr.IsNil() {
+			return false
+		}
+		a, b := list.Cells[i], list.Cells[j]
+		// Functions are always copied when being invoked. But the arguments
+		// are not copied in general.
+		expr := SExpr([]*LVal{less, a, b})
+		ok := env.Eval(expr)
+		if ok.Type == LError {
+			sortErr = ok
+			return false
+		}
+		return !ok.IsNil()
+	})
+	if !sortErr.IsNil() {
+		return sortErr
+	}
+	return list
+}
+
+func builtinSelect(env *LEnv, args *LVal) *LVal {
+	pred, list := args.Cells[0], args.Cells[1]
+	if pred.Type != LFun {
+		return env.Errorf("first argument is not a function: %v", pred.Type)
+	}
+	if list.Type != LSExpr {
+		return env.Errorf("second argument is not a function: %v", list.Type)
+	}
+	out := QExpr(nil)
+	for _, v := range list.Cells {
+		expr := SExpr([]*LVal{pred, v})
+		ok := env.Eval(expr)
+		if ok.Type == LError {
+			return ok
+		}
+		if !ok.IsNil() {
+			out.Cells = append(out.Cells, v)
+		}
+	}
+	return out
+}
+
+func builtinReject(env *LEnv, args *LVal) *LVal {
+	pred, list := args.Cells[0], args.Cells[1]
+	if pred.Type != LFun {
+		return env.Errorf("first argument is not a function: %v", pred.Type)
+	}
+	if list.Type != LSExpr {
+		return env.Errorf("second argument is not a function: %v", list.Type)
+	}
+	out := QExpr(nil)
+	for _, v := range list.Cells {
+		expr := SExpr([]*LVal{pred, v})
+		ok := env.Eval(expr)
+		if ok.Type == LError {
+			return ok
+		}
+		if ok.IsNil() {
+			out.Cells = append(out.Cells, v)
+		}
+	}
+	return out
+}
+
+func builtinZip(env *LEnv, args *LVal) *LVal {
+	n := 0
+	for _, list := range args.Cells {
+		if list.Type != LSExpr {
+			return env.Errorf("argument is not a list: %v", list.Type)
+		}
+		if n == 0 || len(list.Cells) < n {
+			n = len(list.Cells)
+		}
+	}
+	cells := make([]*LVal, n)
+	for i := range cells {
+		elem := QExpr(make([]*LVal, 0, len(args.Cells)))
+		for _, list := range args.Cells {
+			elem.Cells = append(elem.Cells, list.Cells[i])
+		}
+		cells[i] = elem
+	}
+	return QExpr(cells)
+}
+
+func builtinMakeSequence(env *LEnv, args *LVal) *LVal {
+	start, stop := args.Cells[0], args.Cells[1]
+	if !start.IsNumeric() {
+		return env.Errorf("first argument is not numeric: %v", start.Type)
+	}
+	if !stop.IsNumeric() {
+		return env.Errorf("second argument is not numeric: %v", stop.Type)
+	}
+	var step *LVal
+	if len(args.Cells) == 2 {
+		if start.Type == LInt {
+			step = Int(1)
+		} else {
+			step = Float(1.0)
+		}
+	} else {
+		if len(args.Cells) > 3 {
+			return env.Errorf("too many arguments provided")
+		}
+		step = args.Cells[2]
+		if !step.IsNumeric() {
+			return env.Errorf("third argument is not numeric: %v", step.Type)
+		}
+		if lessNumeric(step, Float(0)) {
+			return env.Errorf("third argument is negative")
+		}
+	}
+	list := QExpr(nil)
+	for x := start; lessNumeric(x, stop); x = addNumeric(x, step) {
+		list.Cells = append(list.Cells, x.Copy())
+	}
+	return list
+}
+
 func builtinReverse(env *LEnv, args *LVal) *LVal {
 	if args.Cells[0].Type != LSExpr {
 		return env.Errorf("first argument is not a list: %v", args.Cells[0].Type)
@@ -412,6 +552,37 @@ func builtinReverse(env *LEnv, args *LVal) *LVal {
 		q.Cells[i], q.Cells[len(q.Cells)-1-i] = q.Cells[len(q.Cells)-1-i], q.Cells[i]
 	}
 	return q
+}
+
+func builtinSlice(env *LEnv, args *LVal) *LVal {
+	list, start, end := args.Cells[0], args.Cells[1], args.Cells[2]
+	if list.Type != LSExpr {
+		return env.Errorf("first argument is not a list")
+	}
+	if start.Type != LInt {
+		return env.Errorf("second argument is not an integer")
+	}
+	if end.Type != LInt {
+		return env.Errorf("third argument is not an integer")
+	}
+	i := start.Int
+	j := end.Int
+	if i < 0 {
+		return env.Errorf("index out of range")
+	}
+	if i > len(list.Cells) {
+		return env.Errorf("index out of range")
+	}
+	if j < 0 {
+		return env.Errorf("index out of range")
+	}
+	if j > len(list.Cells) {
+		return env.Errorf("index out of range")
+	}
+	if i > j {
+		return env.Errorf("end before start")
+	}
+	return QExpr(list.Cells[i:j])
 }
 
 func builtinList(env *LEnv, v *LVal) *LVal {
@@ -446,13 +617,87 @@ func builtinNot(env *LEnv, v *LVal) *LVal {
 	return Nil()
 }
 
+func builtinAllP(env *LEnv, args *LVal) *LVal {
+	pred, list := args.Cells[0], args.Cells[1]
+	if pred.Type != LFun {
+		return env.Errorf("first argument is not a function: %v", pred.Type)
+	}
+	if list.Type != LSExpr {
+		return env.Errorf("first argument is not a list: %v", list.Type)
+	}
+	for _, v := range list.Cells {
+		expr := SExpr([]*LVal{pred, v})
+		ok := env.Eval(expr)
+		if ok.Type == LError {
+			return ok
+		}
+		if ok.IsNil() {
+			return Nil()
+		}
+	}
+	return Symbol("t")
+}
+
+func builtinAnyP(env *LEnv, args *LVal) *LVal {
+	pred, list := args.Cells[0], args.Cells[1]
+	if pred.Type != LFun {
+		return env.Errorf("first argument is not a function: %v", pred.Type)
+	}
+	if list.Type != LSExpr {
+		return env.Errorf("first argument is not a list: %v", list.Type)
+	}
+	for _, v := range list.Cells {
+		expr := SExpr([]*LVal{pred, v})
+		ok := env.Eval(expr)
+		if ok.Type == LError {
+			return ok
+		}
+		if !ok.IsNil() {
+			return Symbol("t")
+		}
+	}
+	return Nil()
+}
+
+func builtinMax(env *LEnv, args *LVal) *LVal {
+	max := args.Cells[0]
+	if !max.IsNumeric() {
+		return env.Errorf("argument is not a number: %s", max.Type)
+	}
+	for _, x := range args.Cells[1:] {
+		if !x.IsNumeric() {
+			return env.Errorf("argument is not a number: %s", x.Type)
+		}
+		if lessNumeric(max, x) {
+			max = x
+		}
+	}
+	return max
+}
+
+func builtinMin(env *LEnv, args *LVal) *LVal {
+	min := args.Cells[0]
+	if !min.IsNumeric() {
+		return env.Errorf("argument is not a number: %s", min.Type)
+	}
+	for _, x := range args.Cells[1:] {
+		if !x.IsNumeric() {
+			return env.Errorf("argument is not a number: %s", x.Type)
+		}
+		if lessNumeric(x, min) {
+			min = x
+		}
+	}
+	return min
+}
+
 func builtinLEq(env *LEnv, args *LVal) *LVal {
 	a, b := args.Cells[0], args.Cells[1]
-	if a.IsNumeric() {
-		env.Errorf("first argument is not a number: %s", a.Type)
+	if !a.IsNumeric() {
+		return env.Errorf("first argument is not a number: %s", a.Type)
 	}
-	if b.IsNumeric() {
-		env.Errorf("second argument is not a number: %s", b.Type)
+	if !b.IsNumeric() {
+		return env.Errorf("second argument is not a number: %s", b.Type)
 	}
 	if bothInt(a, b) {
 		return Bool(a.Int <= b.Int)
@@ -462,11 +707,11 @@ func builtinLEq(env *LEnv, args *LVal) *LVal {
 
 func builtinLT(env *LEnv, args *LVal) *LVal {
 	a, b := args.Cells[0], args.Cells[1]
-	if a.IsNumeric() {
-		env.Errorf("first argument is not a number: %s", a.Type)
+	if !a.IsNumeric() {
+		return env.Errorf("first argument is not a number: %s", a.Type)
 	}
-	if b.IsNumeric() {
-		env.Errorf("second argument is not a number: %s", b.Type)
+	if !b.IsNumeric() {
+		return env.Errorf("second argument is not a number: %s", b.Type)
 	}
 	if bothInt(a, b) {
 		return Bool(a.Int < b.Int)
@@ -476,11 +721,11 @@ func builtinLT(env *LEnv, args *LVal) *LVal {
 
 func builtinGEq(env *LEnv, args *LVal) *LVal {
 	a, b := args.Cells[0], args.Cells[1]
-	if a.IsNumeric() {
-		env.Errorf("first argument is not a number: %s", a.Type)
+	if !a.IsNumeric() {
+		return env.Errorf("first argument is not a number: %s", a.Type)
 	}
-	if b.IsNumeric() {
-		env.Errorf("second argument is not a number: %s", b.Type)
+	if !b.IsNumeric() {
+		return env.Errorf("second argument is not a number: %s", b.Type)
 	}
 	if bothInt(a, b) {
 		return Bool(a.Int >= b.Int)
@@ -490,11 +735,11 @@ func builtinGEq(env *LEnv, args *LVal) *LVal {
 
 func builtinGT(env *LEnv, args *LVal) *LVal {
 	a, b := args.Cells[0], args.Cells[1]
-	if a.IsNumeric() {
-		env.Errorf("first argument is not a number: %s", a.Type)
+	if !a.IsNumeric() {
+		return env.Errorf("first argument is not a number: %s", a.Type)
 	}
-	if b.IsNumeric() {
-		env.Errorf("second argument is not a number: %s", b.Type)
+	if !b.IsNumeric() {
+		return env.Errorf("second argument is not a number: %s", b.Type)
 	}
 	if bothInt(a, b) {
 		return Bool(a.Int > b.Int)
@@ -504,11 +749,11 @@ func builtinGT(env *LEnv, args *LVal) *LVal {
 
 func builtinEqNum(env *LEnv, args *LVal) *LVal {
 	a, b := args.Cells[0], args.Cells[1]
-	if a.IsNumeric() {
-		env.Errorf("first argument is not a number: %s", a.Type)
+	if !a.IsNumeric() {
+		return env.Errorf("first argument is not a number: %s", a.Type)
 	}
-	if b.IsNumeric() {
-		env.Errorf("second argument is not a number: %s", b.Type)
+	if !b.IsNumeric() {
+		return env.Errorf("second argument is not a number: %s", b.Type)
 	}
 	if bothInt(a, b) {
 		return Bool(a.Int == b.Int)
@@ -520,11 +765,11 @@ func builtinEqNum(env *LEnv, args *LVal) *LVal {
 
 func builtinPow(env *LEnv, args *LVal) *LVal {
 	a, b := args.Cells[0], args.Cells[1]
-	if a.IsNumeric() {
-		env.Errorf("first argument is not a number: %s", a.Type)
+	if !a.IsNumeric() {
+		return env.Errorf("first argument is not a number: %s", a.Type)
 	}
-	if b.IsNumeric() {
-		env.Errorf("second argument is not a number: %s", b.Type)
+	if !b.IsNumeric() {
+		return env.Errorf("second argument is not a number: %s", b.Type)
 	}
 	if bothInt(a, b) {
 		return powInt(a.Int, b.Int)
@@ -704,6 +949,20 @@ func builtinDebugPrint(env *LEnv, args *LVal) *LVal {
 func builtinDebugStack(env *LEnv, args *LVal) *LVal {
 	env.Stack.DebugPrint(os.Stdout)
 	return Nil()
+}
+
+func addNumeric(a, b *LVal) *LVal {
+	if bothInt(a, b) {
+		return Int(a.Int + b.Int)
+	}
+	return Float(toFloat(a) + toFloat(b))
+}
+
+func lessNumeric(a, b *LVal) bool {
+	if bothInt(a, b) {
+		return a.Int < b.Int
+	}
+	return toFloat(a) < toFloat(b)
 }
 
 func bothInt(a, b *LVal) bool {
