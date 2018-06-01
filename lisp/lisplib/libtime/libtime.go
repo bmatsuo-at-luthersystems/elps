@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"bitbucket.org/luthersystems/elps/lisp"
+	"bitbucket.org/luthersystems/elps/lisp/lisplib/internal/libutil"
 )
 
 // DeafultPackageName is the package name used by LoadPackage.
@@ -48,34 +49,16 @@ func GetDuration(v *lisp.LVal) (time.Duration, bool) {
 	return d, ok
 }
 
-type builtin struct {
-	name    string
-	formals *lisp.LVal
-	fun     lisp.LBuiltin
-}
-
-func (fun *builtin) Name() string {
-	return fun.name
-}
-
-func (fun *builtin) Formals() *lisp.LVal {
-	return fun.formals
-}
-
-func (fun *builtin) Eval(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
-	return fun.fun(env, args)
-}
-
-var builtins = []*builtin{
-	{"utc-now", lisp.Formals(), BuiltinUTCNow},
-	{"parse-rfc3339", lisp.Formals("timestamp"), BuiltinParseRFC3339},
-	{"parse-rfc3339-nano", lisp.Formals("timestamp"), BuiltinParseRFC3339Nano},
-	{"format-rfc3339", lisp.Formals("datetime"), BuiltinFormatRFC3339},
-	{"format-rfc3339-nano", lisp.Formals("datetime"), BuiltinFormatRFC3339Nano},
-	{"sub", lisp.Formals("end", "start"), BuiltinSub},
-	{"duration", lisp.Formals("time-duration"), BuiltinDurationSeconds},
-	{"duration-ms", lisp.Formals("time-duration"), BuiltinDurationMS},
-	{"duration-ns", lisp.Formals("time-duration"), BuiltinDurationNS},
+var builtins = []*libutil.Builtin{
+	libutil.Function("utc-now", lisp.Formals(), BuiltinUTCNow),
+	libutil.Function("parse-rfc3339", lisp.Formals("timestamp"), BuiltinParseRFC3339),
+	libutil.Function("parse-rfc3339-nano", lisp.Formals("timestamp"), BuiltinParseRFC3339Nano),
+	libutil.Function("format-rfc3339", lisp.Formals("datetime"), BuiltinFormatRFC3339),
+	libutil.Function("format-rfc3339-nano", lisp.Formals("datetime"), BuiltinFormatRFC3339Nano),
+	libutil.Function("sub", lisp.Formals("end", "start"), BuiltinSub),
+	libutil.Function("duration", lisp.Formals("time-duration"), BuiltinDurationSeconds),
+	libutil.Function("duration-ms", lisp.Formals("time-duration"), BuiltinDurationMS),
+	libutil.Function("duration-ns", lisp.Formals("time-duration"), BuiltinDurationNS),
 }
 
 func BuiltinUTCNow(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
