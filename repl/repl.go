@@ -25,6 +25,11 @@ func RunRepl(prompt string) {
 		errlnf("Stdlib initialization failure: %v", rc)
 		os.Exit(1)
 	}
+	rc = env.InPackage(lisp.String(lisp.DefaultUserPackage))
+	if !rc.IsNil() {
+		errlnf("No user package: %v", rc)
+		os.Exit(1)
+	}
 
 	rl, err := readline.New(prompt)
 	if err != nil {

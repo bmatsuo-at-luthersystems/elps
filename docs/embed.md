@@ -1,0 +1,115 @@
+# Embedding lisp
+
+The elps project is intended to be used as an embedded language, allowing
+programs to be extended easily and dynamically.
+
+## Usage
+
+To initialize a new environment set its Reader and load the packages you that
+want to be accessible.
+
+```go
+env := lisp.NewEnv(nil)
+env.Reader = parser.NewReader()
+lerr := lisp.InitializeUserEnv(env)
+if !lerr.IsNil() {
+   log.Panicf("initialization error: %v", lerr) 
+}
+lerr = lisplib.LoadLibrary(env)
+if !lerr.IsNil() {
+    log.Panicf("stdlib error: %v", lerr)
+}
+lerr = env.InPackge(lisp.String(lisp.DefaultUserPackage))
+if !lerr.IsNil() {
+    log.Panic("no user package: %v", lerr)
+}
+```
+
+InitializeUserEnv loads the base language package, lisp.  The remaining
+packages in the standard library are loaded through the
+`lisplib.LoadLibrary(env)` function call.  If there are packages in the
+standard library which should not be accessible use an alternative function or
+write your own library loader using the LoadLibrary source code as a reference.
+
+## Writing Functions
+
+Programs embedding elps can write functions in Go which can be loaded into
+packages, bound under a given symbol.
+
+## Testing Functions
+
+TODO
+
+## Working with lisp types
+
+All lisp values are represented in Go as the LVal type.  The lisp type of a
+value can determined by checking the LType value stored in the LVal.Type field.
+
+### Primitive types
+
+String values (those with Type equal to `LString`) and Symbols (those with Type
+`LSymbol`) store their data in the LVal.Str field.  Floats and Ints store their
+data in the LVal.Float and LVal.Int fields respectively.
+
+Lists are stores as SExpr types. Though typically, when returning a list from a
+function, a quoted SExpr is desired.  Quoted SExprs can be conveniently created
+using the `QExpr()` function.
+
+```go
+return QExpr([]*lisp.LVal{lisp.Int(1), lisp.Int(2), lisp.Float(3.0)})
+```
+
+### Maps
+
+TODO
+
+## Operating on Go types
+
+To pass a native Go value to lisp code wrap it in a call to `lisp.Native()` so
+the value can be put into an S-expression.
+
+```go
+    lisptime := lisp.Native(time.Now())
+    expr := SExpr([]*lisp.LVal{"my-function", lisptime})
+```
+
+You can then write functions which operate on the value by unboxing the
+`Native` field of the corresponding argument LVal.
+
+```go
+func builtinPrintTime(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
+    lisptime := args.Cells[0]
+    if lisptime.Type != lisp.LNative {
+        return env.Errorf("argument is not a time: %v", lisptime.Type)
+    }
+    t, ok := lisptime.Native.(time.Time)
+    if !ok {
+        return env.Errorf("argument is not a time: %v", lisptime)
+    }
+    fmt.Println(t.Format(time.RFC3339))
+    return lisp.Nil()
+}
+```
+
+Lisp code can operate on primitive Go types and structs using the golang
+package.
+
+```go
+type AppData struct {
+    Person struct {
+        Name string
+    }
+}
+```
+
+Given the above struct definition, when an AppData object is wrapped with
+`lisp.Native()` lisp code can extract exported struct fields using functions in
+the golang package.
+
+```lisp
+(defun print-name (app-data)
+    (let* ( (person (golang:struct-field app-data "Person"))
+            (go-name (golang:struct-field app-data "Name"))
+            (name (golang:string name)))
+        (debug-print (string:format "My name is {}" name))))
+```
