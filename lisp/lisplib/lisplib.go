@@ -5,6 +5,7 @@ package lisplib
 import (
 	"bitbucket.org/luthersystems/elps/lisp"
 	"bitbucket.org/luthersystems/elps/lisp/lisplib/libgolang"
+	"bitbucket.org/luthersystems/elps/lisp/lisplib/libjson"
 	"bitbucket.org/luthersystems/elps/lisp/lisplib/libmath"
 	"bitbucket.org/luthersystems/elps/lisp/lisplib/libstring"
 	"bitbucket.org/luthersystems/elps/lisp/lisplib/libtime"
@@ -26,6 +27,10 @@ func LoadLibrary(env *lisp.LEnv) *lisp.LVal {
 		return e
 	}
 	e = libstring.LoadPackage(env)
+	if !e.IsNil() {
+		return e
+	}
+	e = libjson.LoadPackage(env)
 	if !e.IsNil() {
 		return e
 	}
