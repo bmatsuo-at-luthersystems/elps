@@ -25,18 +25,17 @@ func getEnvID() uint {
 // InitializeUserEnv creates the default user environment.
 func InitializeUserEnv(env *LEnv) *LVal {
 	env.Registry.DefinePackage(DefaultLangPackage)
-	env.Registry.DefinePackage(DefaultUserPackage)
 	env.Registry.Lang = DefaultLangPackage
 	env.Package = env.Registry.Packages[env.Registry.Lang]
 	env.AddMacros(true)
 	env.AddSpecialOps(true)
 	env.AddBuiltins(true)
+	env.Registry.DefinePackage(DefaultUserPackage)
 	rc := env.InPackage(Symbol(DefaultUserPackage))
 	if !rc.IsNil() {
 		return rc
 	}
-	rc = env.UsePackage(Symbol(env.Registry.Lang))
-	return rc
+	return env.UsePackage(Symbol(env.Registry.Lang))
 }
 
 // LEnv is a lisp environment.
@@ -63,11 +62,6 @@ func NewEnv(parent *LEnv) *LEnv {
 		env.Stack = parent.Stack
 	} else {
 		env.Registry = NewRepository()
-		env.Registry.DefinePackage(DefaultLangPackage)
-		env.Registry.DefinePackage(DefaultUserPackage)
-		env.Registry.Lang = DefaultLangPackage
-		env.Package = env.Registry.Packages[env.Registry.Lang]
-		env.UsePackage(Symbol(env.Registry.Lang))
 		env.Stack = &CallStack{}
 	}
 	return env

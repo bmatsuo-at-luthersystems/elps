@@ -67,6 +67,7 @@ var langBuiltins = []*langBuiltin{
 	{"length", Formals("lis"), builtinLength},
 	{"cons", Formals("head", "tail"), builtinCons},
 	{"not", Formals("expr"), builtinNot},
+	{"equal?", Formals("a", "b"), builtinEqual},
 	{"all?", Formals("predicate", "list"), builtinAllP},
 	{"any?", Formals("predicate", "list"), builtinAnyP},
 	{"max", Formals("real", VarArgSymbol, "rest"), builtinMax},
@@ -327,6 +328,7 @@ func builtinCompose(env *LEnv, args *LVal) *LVal {
 	body.Cells[1] = gcall
 	newfun := Lambda(formals, []*LVal{body})
 	newfun.Env.Parent = env
+	newfun.Package = env.root().Package.Name
 	return newfun
 }
 
@@ -617,6 +619,11 @@ func builtinNot(env *LEnv, v *LVal) *LVal {
 	return Nil()
 }
 
+func builtinEqual(env *LEnv, args *LVal) *LVal {
+	a, b := args.Cells[0], args.Cells[1]
+	return a.Equal(b)
+}
+
 func builtinAllP(env *LEnv, args *LVal) *LVal {
 	pred, list := args.Cells[0], args.Cells[1]
 	if pred.Type != LFun {
@@ -755,12 +762,7 @@ func builtinEqNum(env *LEnv, args *LVal) *LVal {
 	if !b.IsNumeric() {
 		return env.Errorf("second argument is not a number: %s", b.Type)
 	}
-	if bothInt(a, b) {
-		return Bool(a.Int == b.Int)
-	}
-
-	// This may not be correct
-	return Bool(toFloat(a) == toFloat(b))
+	return a.equalNum(b)
 }
 
 func builtinPow(env *LEnv, args *LVal) *LVal {

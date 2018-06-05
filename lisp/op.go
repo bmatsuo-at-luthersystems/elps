@@ -89,6 +89,7 @@ func opLambda(env *LEnv, v *LVal) *LVal {
 	fun := Lambda(formals, body)
 	fun.Env.Parent = env
 	fun.Env.Stack = env.Stack
+	fun.Package = env.root().Package.Name
 
 	return fun
 }
@@ -119,6 +120,8 @@ func opExpr(env *LEnv, args *LVal) *LVal {
 	fun := Lambda(formals, []*LVal{body})
 	fun.Env.Parent = env
 	fun.Env.Stack = env.Stack
+	fun.Package = env.root().Package.Name
+
 	return fun
 }
 

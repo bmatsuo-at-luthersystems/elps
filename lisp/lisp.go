@@ -390,6 +390,59 @@ func (v *LVal) IsNumeric() bool {
 	return false
 }
 
+// Equal returns a non-nil value if v and other are logically equal, under the
+// rules used by the ``equal?'' function.
+//
+// BUG:  sorted-map comparison is not implemented
+func (v *LVal) Equal(other *LVal) *LVal {
+	if v.Type != other.Type {
+		return Nil()
+	}
+	if v.IsNumeric() {
+		return v.equalNum(other)
+	}
+	switch v.Type {
+	case LString, LSymbol:
+		return Bool(v.Str == other.Str)
+	case LSExpr:
+		if v.Len() != other.Len() {
+			return Nil()
+		}
+		for i := range v.Cells {
+			if True(v.Cells[i].Equal(other.Cells[i])) {
+				return Nil()
+			}
+		}
+		return Symbol("t")
+	case LSortMap:
+		if len(v.Map) != len(other.Map) {
+			return Nil()
+		}
+
+		return Nil()
+	}
+	return Nil()
+}
+
+func (v *LVal) EqualNum(other *LVal) *LVal {
+	if !v.IsNumeric() {
+		return Errorf("receiver is not a number: %v", v.Type)
+	}
+	if !other.IsNumeric() {
+		return Errorf("argument is not a number: %s", other.Type)
+	}
+	return v.equalNum(other)
+}
+
+func (v *LVal) equalNum(other *LVal) *LVal {
+	if bothInt(v, other) {
+		return Bool(v.Int == other.Int)
+	}
+
+	// This may not be correct
+	return Bool(toFloat(v) == toFloat(other))
+}
+
 // Copy creates a deep copy of the receiver.
 func (v *LVal) Copy() *LVal {
 	if v == nil {
