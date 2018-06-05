@@ -879,18 +879,19 @@ func builtinDiv(env *LEnv, v *LVal) *LVal {
 	if len(v.Cells) == 0 {
 		return Int(1)
 	}
+
+	for _, c := range v.Cells {
+		if !c.IsNumeric() {
+			return env.Errorf("argument is not a number: %v", c.Type)
+		}
+	}
+
 	if len(v.Cells) == 1 {
 		if v.Cells[0].Type == LInt {
 			return Float(1 / float64(v.Cells[0].Int))
 		}
 		v.Cells[0].Float = 1 / v.Cells[0].Float
 		return v.Cells[0]
-	}
-
-	for _, c := range v.Cells {
-		if !c.IsNumeric() {
-			return env.Errorf("argument is not a number: %v", c.Type)
-		}
 	}
 
 	// Never perform integer division with the function ``/''.  Integer
