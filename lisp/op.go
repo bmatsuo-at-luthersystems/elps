@@ -1,6 +1,7 @@
 package lisp
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -8,6 +9,7 @@ import (
 
 var userSpecialOps []*langBuiltin
 var langSpecialOps = []*langBuiltin{
+	{"assert", Formals("expr", VarArgSymbol, "message-format-args"), opAssert},
 	{"quasiquote", Formals("expr"), opQuasiquote},
 	{"lambda", Formals("formals", VarArgSymbol, "expr"), opLambda},
 	{"expr", Formals("pattern"), opExpr},
@@ -38,6 +40,37 @@ func DefaultSpecialOps() []LBuiltinDef {
 		ops[offset+i] = langSpecialOps[i]
 	}
 	return ops
+}
+
+func opAssert(env *LEnv, args *LVal) *LVal {
+	test := args.Cells[0]
+	var formatStr *LVal
+	var formatArgs []*LVal
+	if len(args.Cells) > 1 {
+		formatStr = args.Cells[1]
+		formatArgs = args.Cells[2:]
+		if formatStr.Type != LString {
+			return env.Errorf("second argument is not a string: %v", formatStr.Type)
+		}
+	}
+	ok := env.Eval(test)
+	if True(ok) {
+		return Nil()
+	}
+	if formatStr == nil {
+		return env.Errorf("assertion failure: %s", test)
+	}
+	for i := range formatArgs {
+		formatArgs[i] = env.Eval(formatArgs[i])
+		if formatArgs[i].Type == LError {
+			return formatArgs[i]
+		}
+	}
+	msg := builtinFormatString(env, SExpr(args.Cells[1:]))
+	if msg.Type == LError {
+		return msg
+	}
+	return env.Error(errors.New(msg.Str))
 }
 
 func opQuasiquote(env *LEnv, args *LVal) *LVal {
