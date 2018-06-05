@@ -19,10 +19,6 @@ lerr = lisplib.LoadLibrary(env)
 if !lerr.IsNil() {
     log.Panicf("stdlib error: %v", lerr)
 }
-lerr = env.InPackge(lisp.String(lisp.DefaultUserPackage))
-if !lerr.IsNil() {
-    log.Panic("no user package: %v", lerr)
-}
 ```
 
 InitializeUserEnv loads the base language package, lisp.  The remaining
@@ -59,9 +55,44 @@ using the `QExpr()` function.
 return QExpr([]*lisp.LVal{lisp.Int(1), lisp.Int(2), lisp.Float(3.0)})
 ```
 
+### Boolean values
+
+The only false value in the elps language is nil `()`, an empty expression.  An
+LVal can be checked as nil by calling its `IsNil()` method.  Instead of calling
+`IsNil()` to determine the falsehood of a value the `True` function will
+determine a value's truth value.
+
+```go
+ok := env.Eval(lisp.SExpr([]*lisp.LVal{"ok?"}))
+if lisp.True(ok) {  // equivalent to !ok.IsNil()
+    fmt.Println("ok")
+}
+```
+
 ### Maps
 
 TODO
+
+### Conversion functions
+
+Additionally, types can be converted from an LVal into a native Go type using
+the functions GoString, GoInt, GoFloat, etc.
+
+```lisp
+(set 'data "hello")
+```
+
+An application could extract the string "hello" using the following code.
+
+```go
+s, _ := GoString(env.GetGlobal(lisp.Symbol("data")))
+if s != "hello" {
+    panic(s)
+}
+```
+
+These functions for converting types to native values are experimental in
+nature and their semantics could change.
 
 ## Operating on Go types
 
@@ -110,6 +141,6 @@ the golang package.
 (defun print-name (app-data)
     (let* ( (person (golang:struct-field app-data "Person"))
             (go-name (golang:struct-field app-data "Name"))
-            (name (golang:string name)))
+            (name (golang:string go-name)))
         (debug-print (string:format "My name is {}" name))))
 ```
