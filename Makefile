@@ -11,7 +11,7 @@ repl: build
 
 .PHONY: test
 test:
-	GOCACHE=off go test -v ./...
+	GOCACHE=off go test ./...
 
 .PHONY: install
 install:

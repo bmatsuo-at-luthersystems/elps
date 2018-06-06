@@ -28,6 +28,9 @@ func LoadPackage(env *lisp.LEnv) *lisp.LVal {
 	for _, fn := range suite.Ops() {
 		env.AddSpecialOps(true, fn)
 	}
+	for _, fn := range suite.Macros() {
+		env.AddMacros(true, fn)
+	}
 	return lisp.Nil()
 }
 
@@ -62,10 +65,53 @@ func (s *TestSuite) Test(i int) *Test {
 	return s.tests[s.order[i]]
 }
 
+func (s *TestSuite) Macros() []*libutil.Builtin {
+	return []*libutil.Builtin{
+		libutil.Function("test-let", lisp.Formals("name", "bindings", lisp.VarArgSymbol, "expers"), s.MacroTestLet),
+		libutil.Function("test-let*", lisp.Formals("name", "bindings", lisp.VarArgSymbol, "expers"), s.MacroTestLetSeq),
+	}
+}
+
 func (s *TestSuite) Ops() []*libutil.Builtin {
 	return []*libutil.Builtin{
 		libutil.Function("test", lisp.Formals("name", lisp.VarArgSymbol, "exprs"), s.OpTest),
 	}
+}
+
+func (s *TestSuite) MacroTestLet(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
+	return s.macroTestLet(env, args, "let")
+}
+
+func (s *TestSuite) MacroTestLetSeq(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
+	return s.macroTestLet(env, args, "let*")
+}
+
+func (s *TestSuite) macroTestLet(env *lisp.LEnv, args *lisp.LVal, let string) *lisp.LVal {
+	name, binds, exprs := args.Cells[0], args.Cells[1], args.Cells[2:]
+	_, _, _ = name, binds, exprs
+	if name.Type != lisp.LString {
+		return env.Errorf("first argument is not a string: %v", name.Type)
+	}
+	if binds.Type != lisp.LSExpr {
+		return env.Errorf("second argument is not a list: %v", binds.Type)
+	}
+	for _, v := range binds.Cells {
+		if v.Type != lisp.LSExpr {
+			return env.Errorf("second argument is not a list of pairs: %v", v.Type)
+		}
+		if v.Len() != 2 {
+			return env.Errorf("second argument is not a list of pairs: length %d", v.Len())
+		}
+	}
+	letCells := make([]*lisp.LVal, 0, 2+len(exprs))
+	letCells = append(letCells, lisp.Symbol(env.Registry.Lang+":"+let), binds)
+	letCells = append(letCells, exprs...)
+	letExpr := lisp.SExpr(letCells)
+	return lisp.SExpr([]*lisp.LVal{
+		lisp.Symbol(DefaultPackageName + ":test"),
+		name,
+		letExpr,
+	})
 }
 
 func (s *TestSuite) OpTest(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {

@@ -11,5 +11,5 @@ import (
 
 func TestPackage(t *testing.T) {
 	r := &elpstest.Runner{}
-	r.RunTestFile(t, "string_test.lisp")
+	r.RunTestFile(t, "libstring_test.lisp")
 }
