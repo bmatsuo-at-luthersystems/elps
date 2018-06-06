@@ -97,13 +97,16 @@ func (r *Runner) RunTestFile(t *testing.T, path string) {
 
 			lerr := env.Load(filepath.Base(path), bytes.NewReader(source))
 			if lerr.Type == lisp.LError {
-				t.Error(lerr.String())
 				if lerr.Stack != nil {
 					var buf bytes.Buffer
+					buf.WriteString(lerr.String())
+					buf.WriteString("\n")
 					lerr.Stack.DebugPrint(&buf)
 					t.Error(buf.String())
-					return
+				} else {
+					t.Error(lerr.String())
 				}
+				return
 			}
 			suite := libtesting.EnvTestSuite(env)
 			if suite == nil {
@@ -113,7 +116,15 @@ func (r *Runner) RunTestFile(t *testing.T, path string) {
 			ltest := suite.Test(i)
 			lerr = env.Eval(lisp.SExpr([]*lisp.LVal{ltest.Fun}))
 			if lerr.Type == lisp.LError {
-				t.Errorf("%s: %v", ltest.Name, lerr.String())
+				if lerr.Stack != nil {
+					var buf bytes.Buffer
+					buf.WriteString(lerr.String())
+					buf.WriteString("\n")
+					lerr.Stack.DebugPrint(&buf)
+					t.Error(buf.String())
+				} else {
+					t.Error(lerr.String())
+				}
 				return
 			}
 		})
