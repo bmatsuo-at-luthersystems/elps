@@ -75,6 +75,11 @@ var langBuiltins = []*langBuiltin{
 	{"any?", Formals("predicate", "list"), builtinAnyP},
 	{"max", Formals("real", VarArgSymbol, "rest"), builtinMax},
 	{"min", Formals("real", VarArgSymbol, "rest"), builtinMin},
+	{"string>=", Formals("a", "b"), builtinStringGEq},
+	{"string>", Formals("a", "b"), builtinStringGT},
+	{"string<=", Formals("a", "b"), builtinStringLEq},
+	{"string<", Formals("a", "b"), builtinStringLT},
+	{"string=", Formals("a", "b"), builtinStringEq},
 	{">=", Formals("a", "b"), builtinGEq},
 	{">", Formals("a", "b"), builtinGT},
 	{"<=", Formals("a", "b"), builtinLEq},
@@ -699,6 +704,61 @@ func builtinMin(env *LEnv, args *LVal) *LVal {
 		}
 	}
 	return min
+}
+
+func builtinStringLEq(env *LEnv, args *LVal) *LVal {
+	a, b := args.Cells[0], args.Cells[1]
+	if a.Type != LString {
+		return env.Errorf("first argument is not a string: %s", a.Type)
+	}
+	if b.Type != LString {
+		return env.Errorf("second argument is not a string: %s", b.Type)
+	}
+	return Bool(a.Str <= b.Str)
+}
+
+func builtinStringLT(env *LEnv, args *LVal) *LVal {
+	a, b := args.Cells[0], args.Cells[1]
+	if a.Type != LString {
+		return env.Errorf("first argument is not a string: %s", a.Type)
+	}
+	if b.Type != LString {
+		return env.Errorf("second argument is not a string: %s", b.Type)
+	}
+	return Bool(a.Str < b.Str)
+}
+
+func builtinStringGEq(env *LEnv, args *LVal) *LVal {
+	a, b := args.Cells[0], args.Cells[1]
+	if a.Type != LString {
+		return env.Errorf("first argument is not a string: %s", a.Type)
+	}
+	if b.Type != LString {
+		return env.Errorf("second argument is not a string: %s", b.Type)
+	}
+	return Bool(a.Str >= b.Str)
+}
+
+func builtinStringGT(env *LEnv, args *LVal) *LVal {
+	a, b := args.Cells[0], args.Cells[1]
+	if a.Type != LString {
+		return env.Errorf("first argument is not a string: %s", a.Type)
+	}
+	if b.Type != LString {
+		return env.Errorf("second argument is not a string: %s", b.Type)
+	}
+	return Bool(a.Str > b.Str)
+}
+
+func builtinStringEq(env *LEnv, args *LVal) *LVal {
+	a, b := args.Cells[0], args.Cells[1]
+	if a.Type != LString {
+		return env.Errorf("first argument is not a string: %s", a.Type)
+	}
+	if b.Type != LString {
+		return env.Errorf("second argument is not a string: %s", b.Type)
+	}
+	return Bool(a.Str == b.Str)
 }
 
 func builtinLEq(env *LEnv, args *LVal) *LVal {
