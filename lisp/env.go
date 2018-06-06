@@ -236,6 +236,17 @@ func (env *LEnv) PutGlobal(k, v *LVal) {
 	root.Package.Put(k, v)
 }
 
+// Lambda returns a new Lambda with fun.Env and fun.Package set automatically.
+func (env *LEnv) Lambda(formals *LVal, body []*LVal) *LVal {
+	fun := Lambda(formals, body)
+	if fun.Type == LError {
+		return fun
+	}
+	fun.Env.Parent = env
+	fun.Package = env.root().Package.Name
+	return fun
+}
+
 func (env *LEnv) root() *LEnv {
 	for env.Parent != nil {
 		env = env.Parent
@@ -391,7 +402,7 @@ eval:
 		case 2:
 			pkg := env.root().Registry.Packages[pieces[0]]
 			if pkg == nil {
-				return env.Errorf("unknown package: %q", v.Str)
+				return env.Errorf("unknown package: %q", pieces[0])
 			}
 			return pkg.Get(Symbol(pieces[1]))
 		default:

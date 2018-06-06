@@ -54,6 +54,9 @@ func opAssert(env *LEnv, args *LVal) *LVal {
 		}
 	}
 	ok := env.Eval(test.Copy())
+	if ok.Type == LError {
+		return ok
+	}
 	if True(ok) {
 		return Nil()
 	}
@@ -276,6 +279,9 @@ func opProgn(env *LEnv, args *LVal) *LVal {
 	var val *LVal
 	for _, c := range args.Cells {
 		val = env.Eval(c)
+		if val.Type == LError {
+			return val
+		}
 	}
 	return val
 }

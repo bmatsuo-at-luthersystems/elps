@@ -8,6 +8,7 @@ import (
 	"bitbucket.org/luthersystems/elps/lisp/lisplib/libjson"
 	"bitbucket.org/luthersystems/elps/lisp/lisplib/libmath"
 	"bitbucket.org/luthersystems/elps/lisp/lisplib/libstring"
+	"bitbucket.org/luthersystems/elps/lisp/lisplib/libtesting"
 	"bitbucket.org/luthersystems/elps/lisp/lisplib/libtime"
 )
 
@@ -31,6 +32,10 @@ func LoadLibrary(env *lisp.LEnv) *lisp.LVal {
 		return e
 	}
 	e = libjson.LoadPackage(env)
+	if !e.IsNil() {
+		return e
+	}
+	e = libtesting.LoadPackage(env)
 	if !e.IsNil() {
 		return e
 	}

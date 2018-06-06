@@ -2,12 +2,14 @@ package elpstest
 
 import (
 	"bytes"
+	"fmt"
 	"io/ioutil"
 	"path/filepath"
 	"testing"
 
 	"bitbucket.org/luthersystems/elps/lisp"
 	"bitbucket.org/luthersystems/elps/lisp/lisplib"
+	"bitbucket.org/luthersystems/elps/lisp/lisplib/libtesting"
 	"bitbucket.org/luthersystems/elps/parser"
 )
 
@@ -18,19 +20,11 @@ type Runner struct {
 	Loader func(*lisp.LEnv) *lisp.LVal
 }
 
-func (r *Runner) RunTestFile(t *testing.T, path string) {
-	source, err := ioutil.ReadFile(path)
-	if err != nil {
-		t.Errorf("Unable to read test file: %v", err)
-		return
-	}
-	_ = source
-
+func (r *Runner) NewEnv() (*lisp.LEnv, error) {
 	env := lisp.NewEnv(nil)
 	lerr := lisp.InitializeUserEnv(env)
 	if lerr.Type == lisp.LError {
-		t.Errorf("Failed to initialize lisp environment: %v", lerr)
-		return
+		return nil, fmt.Errorf("Failed to initialize lisp environment: %v", lerr)
 	}
 	env.InPackage(lisp.String(lisp.DefaultUserPackage))
 	env.Reader = parser.NewReader()
@@ -40,14 +34,33 @@ func (r *Runner) RunTestFile(t *testing.T, path string) {
 	}
 	lerr = loader(env)
 	if lerr.Type == lisp.LError {
-		t.Errorf("Failed to load package library: %v", lerr)
+		return nil, fmt.Errorf("Failed to load package library: %v", lerr)
 	}
-	env.InPackage(lisp.String(lisp.DefaultUserPackage))
+	lerr = env.InPackage(lisp.String(lisp.DefaultUserPackage))
+	if lerr.Type == lisp.LError {
+		return nil, fmt.Errorf("Failed to switch into user package: %v", lerr)
+	}
 
-	ok := t.Run("load", func(t *testing.T) {
+	return env, nil
+}
+
+func (r *Runner) RunTestFile(t *testing.T, path string) {
+	source, err := ioutil.ReadFile(path)
+	if err != nil {
+		t.Errorf("Unable to read test file: %v", err)
+		return
+	}
+
+	var names []string
+	ok := t.Run("$load", func(t *testing.T) {
+		env, err := r.NewEnv()
+		if err != nil {
+			t.Error(err.Error())
+			return
+		}
+
 		lerr := env.Load(filepath.Base(path), bytes.NewReader(source))
 		if lerr.Type == lisp.LError {
-			t.Logf("file: contents:\n%s", source)
 			t.Error(lerr.String())
 			if lerr.Stack != nil {
 				var buf bytes.Buffer
@@ -55,9 +68,55 @@ func (r *Runner) RunTestFile(t *testing.T, path string) {
 				t.Error(buf.String())
 			}
 		}
+		suite := libtesting.EnvTestSuite(env)
+		if suite == nil {
+			t.Errorf("unable to locate test suite")
+			return
+		}
+		names = make([]string, suite.Len())
+		for i := range names {
+			names[i] = suite.Test(i).Name
+		}
 	})
 	if !ok {
 		return
+	}
+
+	for i := range names {
+		// We don't check the result of t.Run here because we want all
+		// independent tests to run during a single run of the suite.  An
+		// assertion failure within a tests prevents futher evaluation of
+		// expressions in that test, but does not halt the execution of the
+		// suite as a whole.
+		t.Run(names[i], func(t *testing.T) {
+			env, err := r.NewEnv()
+			if err != nil {
+				t.Error(err.Error())
+				return
+			}
+
+			lerr := env.Load(filepath.Base(path), bytes.NewReader(source))
+			if lerr.Type == lisp.LError {
+				t.Error(lerr.String())
+				if lerr.Stack != nil {
+					var buf bytes.Buffer
+					lerr.Stack.DebugPrint(&buf)
+					t.Error(buf.String())
+					return
+				}
+			}
+			suite := libtesting.EnvTestSuite(env)
+			if suite == nil {
+				t.Errorf("unable to locate test suite")
+				return
+			}
+			ltest := suite.Test(i)
+			lerr = env.Eval(lisp.SExpr([]*lisp.LVal{ltest.Fun}))
+			if lerr.Type == lisp.LError {
+				t.Errorf("%s: %v", ltest.Name, lerr.String())
+				return
+			}
+		})
 	}
 }
 

@@ -1,5 +1,10 @@
 (use-package 'string)
+(use-package 'testing)
 
-(assert (string= (uppercase "abc") "ABC"))
-(assert (string= (lowercase "ABC") "abc"))
-(assert (string= (titlecase "abc def") "Abc def"))
+(test "uppercase"
+	  (assert (string= (uppercase "") ""))
+	  (assert (string= (uppercase "abc") "ABC")))
+
+(test "lowercase"
+	  (assert (string= (lowercase "") ""))
+	  (assert (string= (lowercase "ABC") "abc")))
