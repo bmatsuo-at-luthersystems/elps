@@ -73,13 +73,16 @@ func BuiltinString(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
 // Any type with underlying kind float32 or float64 can be converted.
 func BuiltinFloat(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
 	lval := args.Cells[0]
+	if lval.Type != lisp.LNative {
+		return env.Errorf("first argument is not a go float: %v", lval.Type)
+	}
 	x, ok := lval.Native.(float64)
 	if !ok {
 		v := reflect.ValueOf(lval.Native)
 		if v.Kind() == reflect.Float64 || v.Kind() == reflect.Float32 {
 			x = v.Float()
 		} else {
-			return env.Errorf("first argument is not a go float")
+			return env.Errorf("first argument is not a go float: %T", lval.Native)
 		}
 	}
 	return lisp.Float(x)
@@ -90,6 +93,9 @@ func BuiltinFloat(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
 // be returned if any overflow occurs during conversion.
 func BuiltinInt(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
 	lval := args.Cells[0]
+	if lval.Type != lisp.LNative {
+		return env.Errorf("first argument is not a go integer: %v", lval.Type)
+	}
 	x, ok := lval.Native.(int)
 	x64 := int64(x)
 	if !ok {
@@ -103,7 +109,7 @@ func BuiltinInt(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
 				return env.Errorf("unsigned integer overflow")
 			}
 		default:
-			return env.Errorf("first argument is not a go float")
+			return env.Errorf("first argument is not a go integer: %T", lval.Native)
 		}
 	}
 	x = int(x64)
@@ -121,6 +127,7 @@ func BuiltinStructField(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
 		return env.Errorf("first argument is not a go struct: %v", s.Type)
 	}
 	v := reflect.ValueOf(s.Native)
+	v = derefPtr(v)
 	if v.Kind() != reflect.Struct {
 		return env.Errorf("first argument is not a go struct: %v", s)
 	}
@@ -133,6 +140,9 @@ func BuiltinStructField(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
 	x := v.FieldByName(field.Str)
 	if !x.IsValid() {
 		return env.Errorf("struct has no field: %v", field.Str)
+	}
+	if !x.CanInterface() {
+		return env.Errorf("cannot return struct field: %v", field.Str)
 	}
 	return lisp.Native(x.Interface())
 }
@@ -147,4 +157,14 @@ func nameIsExported(name string) bool {
 	}
 	return false
 
+}
+
+func derefPtr(v reflect.Value) reflect.Value {
+	if v.Kind() != reflect.Ptr {
+		return v
+	}
+	if v.IsNil() {
+		return v
+	}
+	return reflect.Indirect(v)
 }
