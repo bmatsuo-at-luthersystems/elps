@@ -1,11 +1,65 @@
 package elpstest
 
 import (
+	"bytes"
+	"io/ioutil"
+	"path/filepath"
 	"testing"
 
 	"bitbucket.org/luthersystems/elps/lisp"
+	"bitbucket.org/luthersystems/elps/lisp/lisplib"
 	"bitbucket.org/luthersystems/elps/parser"
 )
+
+// Runner is a test runner.
+type Runner struct {
+	// Loader is the package loader used to initialize the test environment.
+	// When Loader is nil lisplib.LoadLibrary is used.
+	Loader func(*lisp.LEnv) *lisp.LVal
+}
+
+func (r *Runner) RunTestFile(t *testing.T, path string) {
+	source, err := ioutil.ReadFile(path)
+	if err != nil {
+		t.Errorf("Unable to read test file: %v", err)
+		return
+	}
+	_ = source
+
+	env := lisp.NewEnv(nil)
+	lerr := lisp.InitializeUserEnv(env)
+	if lerr.Type == lisp.LError {
+		t.Errorf("Failed to initialize lisp environment: %v", lerr)
+		return
+	}
+	env.InPackage(lisp.String(lisp.DefaultUserPackage))
+	env.Reader = parser.NewReader()
+	loader := r.Loader
+	if loader == nil {
+		loader = lisplib.LoadLibrary
+	}
+	lerr = loader(env)
+	if lerr.Type == lisp.LError {
+		t.Errorf("Failed to load package library: %v", lerr)
+	}
+	env.InPackage(lisp.String(lisp.DefaultUserPackage))
+
+	ok := t.Run("load", func(t *testing.T) {
+		lerr := env.Load(filepath.Base(path), bytes.NewReader(source))
+		if lerr.Type == lisp.LError {
+			t.Logf("file: contents:\n%s", source)
+			t.Error(lerr.String())
+			if lerr.Stack != nil {
+				var buf bytes.Buffer
+				lerr.Stack.DebugPrint(&buf)
+				t.Error(buf.String())
+			}
+		}
+	})
+	if !ok {
+		return
+	}
+}
 
 // TestSequence is a sequence of lisp expressions which are evaluated sequentially
 // by a lisp.LEnv.

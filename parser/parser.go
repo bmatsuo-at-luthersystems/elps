@@ -94,6 +94,7 @@ func ParseLVal(text []byte) ([]*lisp.LVal, int, error) {
 		v = append(v, getLVal(root))
 		root, s = parser(s)
 	}
+	_, s = s.SkipWS()
 	if !s.Endof() {
 		return v, s.GetCursor(), io.ErrUnexpectedEOF
 	}

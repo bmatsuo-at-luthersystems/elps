@@ -53,7 +53,7 @@ func opAssert(env *LEnv, args *LVal) *LVal {
 			return env.Errorf("second argument is not a string: %v", formatStr.Type)
 		}
 	}
-	ok := env.Eval(test)
+	ok := env.Eval(test.Copy())
 	if True(ok) {
 		return Nil()
 	}

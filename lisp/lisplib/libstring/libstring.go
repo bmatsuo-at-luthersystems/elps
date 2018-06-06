@@ -30,7 +30,6 @@ func LoadPackage(env *lisp.LEnv) *lisp.LVal {
 var builtins = []*libutil.Builtin{
 	libutil.Function("lowercase", lisp.Formals("str"), builtinLower),
 	libutil.Function("uppercase", lisp.Formals("str"), builtinUpper),
-	libutil.Function("titlecase", lisp.Formals("str"), builtinTitle),
 }
 
 func builtinLower(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
@@ -47,12 +46,4 @@ func builtinUpper(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
 		return env.Errorf("argument is not a string: %v", str.Type)
 	}
 	return lisp.String(strings.ToUpper(str.Str))
-}
-
-func builtinTitle(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
-	str := args.Cells[0]
-	if str.Type != lisp.LString {
-		return env.Errorf("argument is not a string: %v", str.Type)
-	}
-	return lisp.String(strings.ToTitle(str.Str))
 }
