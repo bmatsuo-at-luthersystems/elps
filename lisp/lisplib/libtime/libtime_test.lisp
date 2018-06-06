@@ -27,5 +27,7 @@
             (epoch (parse-rfc3339 epoch-timestamp)))
            (assert (= (duration-s one-second) 1))
            (assert (= (duration-ms one-second) 1000))
+           (assert (string= (format-rfc3339 (time-add epoch complex-dur))
+                            "2000-01-01T01:13:00Z"))
            (assert (string= (format-rfc3339-nano (time-add epoch complex-dur))
-                            "2000-01-01T01:13:00.450Z")))
+                            "2000-01-01T01:13:00.45Z")))
