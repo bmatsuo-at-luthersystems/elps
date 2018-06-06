@@ -80,7 +80,7 @@ packages, bound under a given symbol.
 ## Testing Functions
 
 Use go package bitbucket.org/luthersystems/elps/elpstest and the lisp package
-`testing` to write tests for custom packages.  See the standard libraries tests
+`testing` to write tests for custom packages.  See the standard library's tests
 for examples of how to use these packages together.
 
 TODO -- example
