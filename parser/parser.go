@@ -52,6 +52,7 @@ const (
 	nodeItems
 	nodeList
 	nodeSExpr
+	nodeVector
 	nodeQExpr
 )
 
@@ -62,6 +63,7 @@ var nodeTypeStrings = []string{
 	nodeItems:   "ITEMS",
 	nodeList:    "LIST",
 	nodeSExpr:   "SEXPR",
+	nodeVector:  "VECTOR",
 	nodeQExpr:   "QEXPR",
 }
 
@@ -104,6 +106,8 @@ func ParseLVal(text []byte) ([]*lisp.LVal, int, error) {
 func newParsecParser() parsec.Parser {
 	openP := parsec.Atom("(", "OPENP")
 	closeP := parsec.Atom(")", "CLOSEP")
+	openB := parsec.Atom("[", "OPENB")
+	closeB := parsec.Atom("]", "CLOSEB")
 	q := parsec.Atom("'", "QUOTE")
 	comment := parsec.Token(`;([^\n]*[^\s])?`, "COMMENT")
 	decimal := parsec.Token(`[+-]?[0-9]+([.][0-9]+)?([eE][+-]?[0-9]+)?`, "DECIMAL")
@@ -119,8 +123,9 @@ func newParsecParser() parsec.Parser {
 	var expr parsec.Parser // forward declaration allows for recursive parsing
 	exprList := parsec.Kleene(nil, &expr)
 	sexpr := parsec.And(astNode(nodeSExpr), openP, exprList, closeP)
+	vector := parsec.And(astNode(nodeVector), openB, exprList, closeB)
 	qexpr := parsec.And(astNode(nodeQExpr), q, &expr)
-	expr = parsec.OrdChoice(nil, comment, term, sexpr, qexpr)
+	expr = parsec.OrdChoice(nil, comment, term, sexpr, vector, qexpr)
 	return expr
 }
 
@@ -174,6 +179,17 @@ func newAST(typ nodeType, nodes []parsec.ParsecNode) parsec.ParsecNode {
 	case nodeSExpr:
 		// We don't want terminal parsec nodes '(' and ')'
 		lval := lisp.SExpr(make([]*lisp.LVal, 0, len(nodes)-2))
+		for _, c := range nodes {
+			switch c.(type) {
+			case *lisp.LVal:
+				lval.Cells = append(lval.Cells, c.(*lisp.LVal))
+			}
+		}
+		return lval
+	case nodeVector:
+		// We don't want terminal parsec nodes '(' and ')'
+		// NOTE:  Yeah.. The naming of nodeQExpr here is a little confusing.
+		lval := lisp.QExpr(make([]*lisp.LVal, 0, len(nodes)-2))
 		for _, c := range nodes {
 			switch c.(type) {
 			case *lisp.LVal:
