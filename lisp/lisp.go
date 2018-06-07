@@ -329,6 +329,16 @@ func (v *LVal) Len() int {
 	return len(v.Cells)
 }
 
+// MapKeys returns a list of keys in the map.  MapKeys panics if v.Type is not
+// LSortMap.
+func (v *LVal) MapKeys() *LVal {
+	if v.Type != LSortMap {
+		panic("not sortmap: " + v.Type.String())
+	}
+	list := QExpr(sortedMapKeys(v))
+	return list
+}
+
 // MapGet returns the value corresponding to k in v or an LError if k is not
 // present in v.  MapGet panics if v.Type is not LSortMap.
 func (v *LVal) MapGet(k interface{}) *LVal {

@@ -117,7 +117,7 @@ func sortedMapKey(k interface{}) *LVal {
 	case string:
 		return String(v)
 	case mapSymbol:
-		return Symbol(string(v))
+		return Quote(Symbol(string(v)))
 	}
 	return Error(fmt.Errorf("invalid key type: %T", k))
 }
@@ -136,17 +136,25 @@ func (ks mapKeys) Less(i, j int) bool {
 	if ks[i].IsNumeric() && ks[j].IsNumeric() {
 		// TODO: Fall back to numeric sort here
 	}
-	if ks[i].Type != ks[j].Type {
+	if !ks.compatible(i, j) {
 		return ks[i].Type < ks[j].Type
 	}
 	switch ks[i].Type {
+	//case LInt:
+	//	return ks[i].Int < ks[j].Int
+	//case LFloat:
+	//	return ks[i].Float < ks[j].Float
 	case LString, LSymbol:
 		return ks[i].Str < ks[j].Str
-	case LInt:
-		return ks[i].Int < ks[j].Int
-	case LFloat:
-		return ks[i].Float < ks[j].Float
 	}
 	// should not be reachable
+	return false
+}
+
+func (ks mapKeys) compatible(i, j int) bool {
+	switch ks[i].Type {
+	case LString, LSymbol:
+		return ks[j].Type == LString || ks[j].Type == LSymbol
+	}
 	return false
 }

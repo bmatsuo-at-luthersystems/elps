@@ -53,9 +53,10 @@ var langBuiltins = []*langBuiltin{
 	{"foldr", Formals("fn", "z", "lis"), builtinFoldRight},
 	{"compose", Formals("f", "g"), builtinCompose},
 	{"unpack", Formals("f", "lis"), builtinUnpack},
-	{"assoc", Formals("m", "k", "v"), builtinAssoc},
-	{"assoc!", Formals("m", "k", "v"), builtinAssocMutate},
-	{"get", Formals("m", "k"), builtinGet},
+	{"assoc", Formals("map", "key", "value"), builtinAssoc},
+	{"assoc!", Formals("map", "key", "value"), builtinAssocMutate},
+	{"get", Formals("map", "key"), builtinGet},
+	{"keys", Formals("map"), builtinKeys},
 	{"sorted-map", Formals(VarArgSymbol, "args"), builtinSortedMap},
 	{"concat", Formals(VarArgSymbol, "args"), builtinConcat},
 	{"sort", Formals("less-predicate", "list"), builtinSort},
@@ -394,6 +395,14 @@ func builtinGet(env *LEnv, args *LVal) *LVal {
 		return env.Errorf("first argument is not a map: %s", m.Type)
 	}
 	return mapGet(m, k)
+}
+
+func builtinKeys(env *LEnv, args *LVal) *LVal {
+	m := args.Cells[0]
+	if m.Type != LSortMap {
+		return env.Errorf("first argument is not a map: %s", m.Type)
+	}
+	return m.MapKeys()
 }
 
 func builtinSortedMap(env *LEnv, args *LVal) *LVal {
