@@ -475,7 +475,18 @@ func (env *LEnv) EvalSExpr(s *LVal) *LVal {
 			}
 		}
 	}
-	if npop > 0 {
+	// The call stack allows for tail recursion optimization.  However certain
+	// functions like ``let'' can't utilize optimization because the scope
+	// defined by the outer ``let'' would be lost.  (let ([x 1]) (let ([y x])
+	// (+ y 1))) The stack analysis marks the inner let as an optimization
+	// candidate.  But unwinding the stack would result in x being unbound.
+	// The simple solution is to avoid unwinding for functions like let (e.g.
+	// all builtin functions).  Alternatively builtin functions that don't
+	// allow tail recursion might mark the stack to indicate frames which
+	// cannot be unwound to for tail recursion optimization.  It's unclear if
+	// builtin functions benefit from tail recursion so it is much simpler to
+	// just avoid unwinding for tail recursion in any buitlin function..
+	if npop > 0 && f.Builtin == nil {
 		return markTailRec(npop, f, s)
 	}
 callf:

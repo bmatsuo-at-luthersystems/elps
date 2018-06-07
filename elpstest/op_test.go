@@ -15,6 +15,20 @@ func TestSpecialOp(t *testing.T) {
 			{"(if '(()) 1 2)", "1"},
 			{`(if "false" 1 2)`, "1"},
 		}},
+		{"let", TestSequence{
+			{`(let ())`, "()"},
+			{`(let ((x 1)) x)`, "1"},
+			{`(let ([x 1]) x)`, "1"},
+			{`(let ([x 1] [y 2]) (+ x y))`, "3"},
+			{`(let ([x 0]) (let ([x 1] [y (+ (progn (debug-stack) x) 1)]) (+ x y)))`, "2"},
+		}},
+		{"let*", TestSequence{
+			{`(let* ())`, "()"},
+			{`(let* ((x 1)) x)`, "1"},
+			{`(let* ([x 1]) x)`, "1"},
+			{`(let* ([x 1] [y 2]) (+ x y))`, "3"},
+			{`(let* ([x 0]) (let* ([x 1] [y (+ x 1)]) (+ x y)))`, "3"},
+		}},
 		{"cond", TestSequence{
 			{`(cond)`, "()"},
 			{`(cond (else 1))`, "1"},
