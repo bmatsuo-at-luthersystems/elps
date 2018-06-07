@@ -22,6 +22,7 @@ const (
 	LFun
 	LQuote
 	LString
+	LBytes
 	LSortMap
 	LNative
 	LMarkTailRec
@@ -39,6 +40,7 @@ var lvalTypeStrings = []string{
 	LFun:           "function",
 	LQuote:         "quoted",
 	LString:        "string",
+	LBytes:         "bytes",
 	LSortMap:       "sortmap",
 	LNative:        "native",
 	LMarkTailRec:   "marker-tail-recursion",
@@ -73,6 +75,9 @@ type LVal struct {
 
 	// Str used by LSymbol and LString values
 	Str string
+
+	// Bytes used by LBytes values
+	Bytes []byte
 
 	// Package name for symbols and functions.
 	Package string
@@ -134,6 +139,14 @@ func String(str string) *LVal {
 	return &LVal{
 		Type: LString,
 		Str:  str,
+	}
+}
+
+// Bytes returns an LVal representing binary data b.
+func Bytes(b []byte) *LVal {
+	return &LVal{
+		Type:  LBytes,
+		Bytes: b,
 	}
 }
 
@@ -502,6 +515,8 @@ func (v *LVal) str(onTheRecord bool) string {
 		return quote + strconv.FormatFloat(v.Float, 'g', -1, 64)
 	case LString:
 		return quote + fmt.Sprintf("%q", v.Str)
+	case LBytes:
+		return quote + fmt.Sprint(v.Bytes)
 	case LError:
 		return quote + v.Str
 	case LSymbol:
