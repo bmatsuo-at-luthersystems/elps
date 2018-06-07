@@ -409,7 +409,7 @@ func (v *LVal) Equal(other *LVal) *LVal {
 			return Nil()
 		}
 		for i := range v.Cells {
-			if True(v.Cells[i].Equal(other.Cells[i])) {
+			if !True(v.Cells[i].Equal(other.Cells[i])) {
 				return Nil()
 			}
 		}

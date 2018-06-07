@@ -8,3 +8,14 @@
 (test "lowercase"
       (assert (string= (lowercase "") ""))
       (assert (string= (lowercase "ABC") "abc")))
+
+(test "split"
+      (assert (equal? (split "abc:def" ":")
+                      '("abc" "def"))
+              "unexpected {}" (split "abc:def" ":"))
+      (assert (equal? (split "abc" ":")
+                      '("abc")))
+      (assert (equal? (split "" ":")
+                      '("")))
+      (assert (equal? (split ":" ":")
+                      '("" ""))))
