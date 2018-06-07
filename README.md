@@ -30,8 +30,18 @@ $ elps run prog.lisp
 
 Embedded execution in a Go program
 
-```
-WIP -- See usage in elpstest/ and cmd/
+```go
+env := lisp.NewEnv(nil)
+env.Reader = parser.NewReader()
+lerr := lisp.InitializeUserEnv(env)
+if !lerr.IsNil() {
+   log.Panicf("initialization error: %v", lerr) 
+}
+lerr = lisplib.LoadLibrary(env)
+if !lerr.IsNil() {
+    log.Panicf("stdlib error: %v", lerr)
+}
+env.LoadString(`(debug-print "hello-world")`)
 ```
 
 ##Reference
@@ -39,3 +49,4 @@ WIP -- See usage in elpstest/ and cmd/
 See the docs/ directory for more documentation:
 
 - [Language reference](docs/lang.md)
+- [Embedding guide](docs/embed.md)

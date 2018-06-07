@@ -55,10 +55,17 @@ var builtins = []*libutil.Builtin{
 	libutil.Function("parse-rfc3339-nano", lisp.Formals("timestamp"), BuiltinParseRFC3339Nano),
 	libutil.Function("format-rfc3339", lisp.Formals("datetime"), BuiltinFormatRFC3339),
 	libutil.Function("format-rfc3339-nano", lisp.Formals("datetime"), BuiltinFormatRFC3339Nano),
-	libutil.Function("sub", lisp.Formals("end", "start"), BuiltinSub),
-	libutil.Function("duration", lisp.Formals("time-duration"), BuiltinDurationSeconds),
+	libutil.Function("time=", lisp.Formals("a", "b"), BuiltinTimeEq),
+	libutil.Function("time<", lisp.Formals("a", "b"), BuiltinTimeLT),
+	libutil.Function("time>", lisp.Formals("a", "b"), BuiltinTimeGT),
+	libutil.Function("time-add", lisp.Formals("datetime", "duration"), BuiltinTimeAdd),
+	libutil.Function("time-elapsed", lisp.Formals("start"), BuiltinElapsed),
+	libutil.Function("time-from", lisp.Formals("start", "end"), BuiltinDurationBetween),
+	libutil.Function("parse-duration", lisp.Formals("duration-string"), BuiltinParseDuration),
+	libutil.Function("duration-s", lisp.Formals("time-duration"), BuiltinDurationSeconds),
 	libutil.Function("duration-ms", lisp.Formals("time-duration"), BuiltinDurationMS),
 	libutil.Function("duration-ns", lisp.Formals("time-duration"), BuiltinDurationNS),
+	libutil.Function("sleep", lisp.Formals("time-duration"), BuiltinSleep),
 }
 
 func BuiltinUTCNow(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
@@ -113,7 +120,74 @@ func BuiltinFormatRFC3339Nano(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
 	return lisp.String(t.Format(time.RFC3339Nano))
 }
 
-func BuiltinSub(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
+func BuiltinTimeEq(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
+	a, b := args.Cells[0], args.Cells[1]
+	if a.Type != lisp.LNative {
+		return env.Errorf("argument is not a time: %v", a.Type)
+	}
+	t1, ok := a.Native.(time.Time)
+	if !ok {
+		return env.Errorf("argument is not a time: %v", a)
+	}
+	t2, ok := b.Native.(time.Time)
+	if !ok {
+		return env.Errorf("argument is not a time: %v", b)
+	}
+	return lisp.Bool(t1.Equal(t2))
+}
+
+func BuiltinTimeLT(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
+	a, b := args.Cells[0], args.Cells[1]
+	if a.Type != lisp.LNative {
+		return env.Errorf("argument is not a time: %v", a.Type)
+	}
+	t1, ok := a.Native.(time.Time)
+	if !ok {
+		return env.Errorf("argument is not a time: %v", a)
+	}
+	t2, ok := b.Native.(time.Time)
+	if !ok {
+		return env.Errorf("argument is not a time: %v", b)
+	}
+	return lisp.Bool(t2.After(t1))
+}
+
+func BuiltinTimeGT(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
+	a, b := args.Cells[0], args.Cells[1]
+	if a.Type != lisp.LNative {
+		return env.Errorf("argument is not a time: %v", a.Type)
+	}
+	t1, ok := a.Native.(time.Time)
+	if !ok {
+		return env.Errorf("argument is not a time: %v", a)
+	}
+	t2, ok := b.Native.(time.Time)
+	if !ok {
+		return env.Errorf("argument is not a time: %v", b)
+	}
+	return lisp.Bool(t1.After(t2))
+}
+
+func BuiltinTimeAdd(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
+	lt, ld := args.Cells[0], args.Cells[1]
+	if lt.Type != lisp.LNative {
+		return env.Errorf("argument is not a time: %v", lt.Type)
+	}
+	if ld.Type != lisp.LNative {
+		return env.Errorf("argument is not a duration: %v", ld.Type)
+	}
+	t, ok := lt.Native.(time.Time)
+	if !ok {
+		return env.Errorf("argument is not a time: %v", lt)
+	}
+	d, ok := ld.Native.(time.Duration)
+	if !ok {
+		return env.Errorf("argument is not a time: %v", ld)
+	}
+	return Time(t.Add(d))
+}
+
+func BuiltinDurationBetween(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
 	lt1, lt2 := args.Cells[0], args.Cells[1]
 	if lt1.Type != lisp.LNative {
 		return env.Errorf("argument is not a time: %v", lt1.Type)
@@ -129,7 +203,31 @@ func BuiltinSub(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
 	if !ok {
 		return env.Errorf("argument is not a time: %v", lt2)
 	}
-	return Duration(t1.Sub(t2))
+	return Duration(t2.Sub(t1))
+}
+
+func BuiltinElapsed(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
+	lt1 := args.Cells[0]
+	if lt1.Type != lisp.LNative {
+		return env.Errorf("argument is not a time: %v", lt1.Type)
+	}
+	t1, ok := lt1.Native.(time.Time)
+	if !ok {
+		return env.Errorf("argument is not a time: %v", lt1)
+	}
+	return Duration(time.Since(t1))
+}
+
+func BuiltinParseDuration(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
+	v := args.Cells[0]
+	if v.Type != lisp.LString {
+		return env.Errorf("argument is not a string: %v", v.Type)
+	}
+	d, err := time.ParseDuration(v.Str)
+	if err != nil {
+		return env.Error(err)
+	}
+	return Duration(d)
 }
 
 // BulitinDurationSecods returns a float equal to the the number of seconds in
@@ -177,4 +275,18 @@ func BuiltinDurationNS(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
 		return env.Errorf("duration is too large")
 	}
 	return lisp.Int(int(d))
+}
+
+// BulitinSleep sleeps for the given duration before returning.
+func BuiltinSleep(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
+	lt := args.Cells[0]
+	if lt.Type != lisp.LNative {
+		return env.Errorf("argument is not a duration: %v", lt.Type)
+	}
+	d, ok := lt.Native.(time.Duration)
+	if !ok {
+		return env.Errorf("argument is not a duration: %v", lt)
+	}
+	time.Sleep(d)
+	return lisp.Nil()
 }

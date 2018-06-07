@@ -1,10 +1,12 @@
 package lisp
 
 import (
+	"bytes"
 	"fmt"
 	"math"
 	"os"
 	"sort"
+	"strings"
 )
 
 // LBuiltin is a function that performs executes a lisp function.
@@ -61,6 +63,7 @@ var langBuiltins = []*langBuiltin{
 	{"reject", Formals("predicate", "list"), builtinReject},
 	{"zip", Formals(VarArgSymbol, "lists"), builtinZip},
 	{"make-sequence", Formals("start", "stop", VarArgSymbol, "step"), builtinMakeSequence},
+	{"format-string", Formals("format", VarArgSymbol, "values"), builtinFormatString},
 	{"reverse", Formals("lis"), builtinReverse},
 	{"slice", Formals("list", "start", "end"), builtinSlice},
 	{"list", Formals(VarArgSymbol, "args"), builtinList},
@@ -72,13 +75,18 @@ var langBuiltins = []*langBuiltin{
 	{"any?", Formals("predicate", "list"), builtinAnyP},
 	{"max", Formals("real", VarArgSymbol, "rest"), builtinMax},
 	{"min", Formals("real", VarArgSymbol, "rest"), builtinMin},
+	{"string>=", Formals("a", "b"), builtinStringGEq},
+	{"string>", Formals("a", "b"), builtinStringGT},
+	{"string<=", Formals("a", "b"), builtinStringLEq},
+	{"string<", Formals("a", "b"), builtinStringLT},
+	{"string=", Formals("a", "b"), builtinStringEq},
 	{">=", Formals("a", "b"), builtinGEq},
 	{">", Formals("a", "b"), builtinGT},
 	{"<=", Formals("a", "b"), builtinLEq},
 	{"<", Formals("a", "b"), builtinLT},
 	{"=", Formals("a", "b"), builtinEqNum},
-	{"**", Formals("a", "b"), builtinPow},
-	{"%", Formals("a", "b"), builtinMod},
+	{"pow", Formals("a", "b"), builtinPow},
+	{"mod", Formals("a", "b"), builtinMod},
 	{"+", Formals(VarArgSymbol, "x"), builtinAdd},
 	{"-", Formals(VarArgSymbol, "x"), builtinSub},
 	{"/", Formals(VarArgSymbol, "x"), builtinDiv},
@@ -698,6 +706,61 @@ func builtinMin(env *LEnv, args *LVal) *LVal {
 	return min
 }
 
+func builtinStringLEq(env *LEnv, args *LVal) *LVal {
+	a, b := args.Cells[0], args.Cells[1]
+	if a.Type != LString {
+		return env.Errorf("first argument is not a string: %s", a.Type)
+	}
+	if b.Type != LString {
+		return env.Errorf("second argument is not a string: %s", b.Type)
+	}
+	return Bool(a.Str <= b.Str)
+}
+
+func builtinStringLT(env *LEnv, args *LVal) *LVal {
+	a, b := args.Cells[0], args.Cells[1]
+	if a.Type != LString {
+		return env.Errorf("first argument is not a string: %s", a.Type)
+	}
+	if b.Type != LString {
+		return env.Errorf("second argument is not a string: %s", b.Type)
+	}
+	return Bool(a.Str < b.Str)
+}
+
+func builtinStringGEq(env *LEnv, args *LVal) *LVal {
+	a, b := args.Cells[0], args.Cells[1]
+	if a.Type != LString {
+		return env.Errorf("first argument is not a string: %s", a.Type)
+	}
+	if b.Type != LString {
+		return env.Errorf("second argument is not a string: %s", b.Type)
+	}
+	return Bool(a.Str >= b.Str)
+}
+
+func builtinStringGT(env *LEnv, args *LVal) *LVal {
+	a, b := args.Cells[0], args.Cells[1]
+	if a.Type != LString {
+		return env.Errorf("first argument is not a string: %s", a.Type)
+	}
+	if b.Type != LString {
+		return env.Errorf("second argument is not a string: %s", b.Type)
+	}
+	return Bool(a.Str > b.Str)
+}
+
+func builtinStringEq(env *LEnv, args *LVal) *LVal {
+	a, b := args.Cells[0], args.Cells[1]
+	if a.Type != LString {
+		return env.Errorf("first argument is not a string: %s", a.Type)
+	}
+	if b.Type != LString {
+		return env.Errorf("second argument is not a string: %s", b.Type)
+	}
+	return Bool(a.Str == b.Str)
+}
+
 func builtinLEq(env *LEnv, args *LVal) *LVal {
 	a, b := args.Cells[0], args.Cells[1]
 	if !a.IsNumeric() {
@@ -876,18 +939,19 @@ func builtinDiv(env *LEnv, v *LVal) *LVal {
 	if len(v.Cells) == 0 {
 		return Int(1)
 	}
+
+	for _, c := range v.Cells {
+		if !c.IsNumeric() {
+			return env.Errorf("argument is not a number: %v", c.Type)
+		}
+	}
+
 	if len(v.Cells) == 1 {
 		if v.Cells[0].Type == LInt {
 			return Float(1 / float64(v.Cells[0].Int))
 		}
 		v.Cells[0].Float = 1 / v.Cells[0].Float
 		return v.Cells[0]
-	}
-
-	for _, c := range v.Cells {
-		if !c.IsNumeric() {
-			return env.Errorf("argument is not a number: %v", c.Type)
-		}
 	}
 
 	// Never perform integer division with the function ``/''.  Integer
@@ -1010,4 +1074,122 @@ func toFloat(x *LVal) float64 {
 		return float64(x.Int)
 	}
 	return x.Float
+}
+
+func builtinFormatString(env *LEnv, args *LVal) *LVal {
+	format := args.Cells[0]
+	fvals := args.Cells[1:]
+	if format.Type != LString {
+		return env.Errorf("first argument is not a string")
+	}
+	parts, err := parseFormatString(format.Str)
+	if err != nil {
+		return env.Error(err)
+	}
+	var buf bytes.Buffer
+	anonIndex := 0
+	for _, p := range parts {
+		if strings.HasPrefix(p, "{") && strings.HasSuffix(p, "}") {
+			p = strings.Join(strings.Fields(p), "")
+			// TODO:  Allow non-empty formatting directives
+			if p != "{}" {
+				return env.Errorf("formatting direcives must be empty")
+			}
+			if anonIndex >= len(fvals) {
+				return env.Errorf("too many formatting direcives for supplied values")
+			}
+			val := fvals[anonIndex]
+			if val.Type == LString {
+				buf.WriteString(val.Str)
+			} else {
+				buf.WriteString(val.String())
+			}
+			anonIndex++
+		} else {
+			buf.WriteString(p)
+		}
+	}
+
+	return String(buf.String())
+}
+
+func parseFormatString(f string) ([]string, error) {
+	var s []string
+	tokens := tokenizeFormatString(f)
+	for len(tokens) > 0 {
+		tok := tokens[0]
+		if tok.typ == formatText {
+			s = append(s, tok.text)
+			tokens = tokens[1:]
+			continue
+		}
+		if tok.typ == formatClose {
+			if len(tokens) == 0 || tokens[0].typ != formatClose {
+				return nil, fmt.Errorf("unexpected closing brace '}' outside of formatting direcive")
+			}
+			s = append(s, "}")
+			tokens = tokens[2:]
+		}
+		if len(tokens) < 2 {
+			return nil, fmt.Errorf("unclosed formatting directive")
+		}
+		switch tokens[1].typ {
+		case formatOpen:
+			s = append(s, "{")
+			tokens = tokens[2:]
+			continue
+		case formatClose:
+			s = append(s, "{}")
+			tokens = tokens[2:]
+			continue
+		case formatText:
+			if len(tokens) < 3 {
+				return nil, fmt.Errorf("unclosed formatting directive")
+			}
+			if tokens[2].typ != formatClose {
+				return nil, fmt.Errorf("invalid formatting directive")
+			}
+			s = append(s, "{"+tokens[1].text+"}")
+			tokens = tokens[3:]
+			continue
+		default:
+			panic("unknown type")
+		}
+	}
+	return s, nil
+}
+
+func tokenizeFormatString(f string) []formatToken {
+	var tokens []formatToken
+	for {
+		i := strings.IndexAny(f, "{}")
+		if i < 0 {
+			tokens = append(tokens, formatToken{formatText, f})
+			return tokens
+		}
+		if i > 0 {
+			tokens = append(tokens, formatToken{formatText, f[:i]})
+			f = f[i:]
+		}
+		if f[0] == '{' {
+			tokens = append(tokens, formatToken{formatOpen, "{"})
+			f = f[1:]
+		} else {
+			tokens = append(tokens, formatToken{formatClose, "}"})
+			f = f[1:]
+		}
+	}
+}
+
+type formatTokenType uint
+
+const (
+	formatText formatTokenType = iota
+	formatOpen
+	formatClose
+)
+
+type formatToken struct {
+	typ  formatTokenType
+	text string
 }

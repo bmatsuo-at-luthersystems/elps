@@ -27,6 +27,51 @@ packages in the standard library are loaded through the
 standard library which should not be accessible use an alternative function or
 write your own library loader using the LoadLibrary source code as a reference.
 
+### Evaluating expressions
+
+Lisp code can be 'loaded' (parsed and evaluated) using the `env.Load` family of
+functions.
+
+```go
+ret := env.LoadString(lispcode)
+if ret.Type == lisp.LError {
+    // handle an error
+}
+```
+
+Instead of repeatedly parsing code, an expression can be parsed and evaluated
+separately.
+
+```go
+exprs, err := env.Reader.Read(r)
+if err != nil {
+    // handle io error
+}
+for _, expr := range exprs {
+    ret := env.Eval(expr)
+    if ret.Type == lisp.LError {
+        // handle an error
+        break
+    }
+}
+```
+
+To evaluate the same code repeatedly it is important not to pass the same LVal
+to env.Eval multiple times.  Instead, make a copy of the expression each time
+it is evaluated.
+
+```go
+for _, expr := range exprs {
+    // a copy of each expression is passed so that exprs can be evaluated
+    // again at a later time.
+    ret := env.Eval(expr.Copy())
+    if ret.Type == lisp.LError {
+        // handle an error
+        break
+    }
+}
+```
+
 ## Writing Functions
 
 Programs embedding elps can write functions in Go which can be loaded into
@@ -34,7 +79,11 @@ packages, bound under a given symbol.
 
 ## Testing Functions
 
-TODO
+Use go package bitbucket.org/luthersystems/elps/elpstest and the lisp package
+`testing` to write tests for custom packages.  See the standard library's tests
+for examples of how to use these packages together.
+
+TODO -- example
 
 ## Working with lisp types
 
