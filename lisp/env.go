@@ -617,9 +617,10 @@ func (env *LEnv) Call(fun *LVal, args *LVal) *LVal {
 	}
 
 	body := fun.Cells[1:]
-	if len(body) > 0 {
-		body[len(body)-1].Terminal = true
+	if len(body) == 0 {
+		return Nil()
 	}
+	body[len(body)-1].Terminal = true
 	var ret *LVal
 	for i := range body {
 		ret = fun.Env.Eval(body[i])
