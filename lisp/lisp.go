@@ -110,6 +110,26 @@ type LVal struct {
 	Terminal bool // LVal is the terminal expression in a function body
 }
 
+// Value conveniently converts v to an LVal.  Types which can be represented
+// directly in lisp will be converted to the appropriate LVal.  All other types
+// will be turned into a Native LVal.  Value is the GoValue function.
+func Value(v interface{}) *LVal {
+	switch v := v.(type) {
+	case string:
+		return String(v)
+	case []byte:
+		return Bytes(v)
+	case int:
+		return Int(v)
+	case float64:
+		return Float(v)
+	case []*LVal:
+		return QExpr(v)
+	default:
+		return Native(v)
+	}
+}
+
 // Bool returns an LVal with truthiness identical to b.
 func Bool(b bool) *LVal {
 	if b {
