@@ -3,6 +3,7 @@ package elpstest
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"path/filepath"
 	"testing"
@@ -18,6 +19,11 @@ type Runner struct {
 	// Loader is the package loader used to initialize the test environment.
 	// When Loader is nil lisplib.LoadLibrary is used.
 	Loader func(*lisp.LEnv) *lisp.LVal
+
+	// Teardown runs code to teardown an environment after each test declared
+	// in the testing package has been run.  Any error returned by the teardown
+	// function is reported as a test failure.
+	Teardown func(*lisp.LEnv) *lisp.LVal
 }
 
 func (r *Runner) NewEnv() (*lisp.LEnv, error) {
@@ -44,6 +50,79 @@ func (r *Runner) NewEnv() (*lisp.LEnv, error) {
 	return env, nil
 }
 
+func (r *Runner) LoadTests(t *testing.T, path string, source io.Reader) []string {
+	env, err := r.NewEnv()
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+
+	lerr := env.Load(filepath.Base(path), source)
+	if lerr.Type == lisp.LError {
+		t.Error(lerr.String())
+		if lerr.Stack != nil {
+			var buf bytes.Buffer
+			lerr.Stack.DebugPrint(&buf)
+			t.Error(buf.String())
+		}
+	}
+	suite := libtesting.EnvTestSuite(env)
+	if suite == nil {
+		t.Fatal("unable to locate test suite")
+	}
+	names := make([]string, suite.Len())
+	for i := range names {
+		names[i] = suite.Test(i).Name
+	}
+	return names
+}
+
+// RunTest runs the test at index i read from source.  Path is only used to
+// determine a file basename to use in LEnv.Load().  RunTest returns true if
+// the test, and any teardown function given, completed successfully.
+func (r *Runner) RunTest(t *testing.T, i int, path string, source io.Reader) {
+	env, err := r.NewEnv()
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	lerr := env.Load(filepath.Base(path), source)
+	if lerr.Type == lisp.LError {
+		if lerr.Stack != nil {
+			var buf bytes.Buffer
+			buf.WriteString(lerr.String())
+			buf.WriteString("\n")
+			lerr.Stack.DebugPrint(&buf)
+			t.Error(buf.String())
+		} else {
+			t.Error(lerr.String())
+		}
+		return
+	}
+	if r.Teardown != nil {
+		defer r.Teardown(env)
+	}
+	suite := libtesting.EnvTestSuite(env)
+	if suite == nil {
+		t.Errorf("unable to locate test suite")
+		return
+	}
+	ltest := suite.Test(i)
+	lerr = env.Eval(lisp.SExpr([]*lisp.LVal{ltest.Fun}))
+	if lerr.Type == lisp.LError {
+		if lerr.Stack != nil {
+			var buf bytes.Buffer
+			buf.WriteString(lerr.String())
+			buf.WriteString("\n")
+			lerr.Stack.DebugPrint(&buf)
+			t.Error(buf.String())
+		} else {
+			t.Error(lerr.String())
+		}
+		return
+	}
+}
+
 func (r *Runner) RunTestFile(t *testing.T, path string) {
 	source, err := ioutil.ReadFile(path)
 	if err != nil {
@@ -53,30 +132,7 @@ func (r *Runner) RunTestFile(t *testing.T, path string) {
 
 	var names []string
 	ok := t.Run("$load", func(t *testing.T) {
-		env, err := r.NewEnv()
-		if err != nil {
-			t.Error(err.Error())
-			return
-		}
-
-		lerr := env.Load(filepath.Base(path), bytes.NewReader(source))
-		if lerr.Type == lisp.LError {
-			t.Error(lerr.String())
-			if lerr.Stack != nil {
-				var buf bytes.Buffer
-				lerr.Stack.DebugPrint(&buf)
-				t.Error(buf.String())
-			}
-		}
-		suite := libtesting.EnvTestSuite(env)
-		if suite == nil {
-			t.Errorf("unable to locate test suite")
-			return
-		}
-		names = make([]string, suite.Len())
-		for i := range names {
-			names[i] = suite.Test(i).Name
-		}
+		names = r.LoadTests(t, path, bytes.NewReader(source))
 	})
 	if !ok {
 		return
@@ -89,44 +145,7 @@ func (r *Runner) RunTestFile(t *testing.T, path string) {
 		// expressions in that test, but does not halt the execution of the
 		// suite as a whole.
 		t.Run(names[i], func(t *testing.T) {
-			env, err := r.NewEnv()
-			if err != nil {
-				t.Error(err.Error())
-				return
-			}
-
-			lerr := env.Load(filepath.Base(path), bytes.NewReader(source))
-			if lerr.Type == lisp.LError {
-				if lerr.Stack != nil {
-					var buf bytes.Buffer
-					buf.WriteString(lerr.String())
-					buf.WriteString("\n")
-					lerr.Stack.DebugPrint(&buf)
-					t.Error(buf.String())
-				} else {
-					t.Error(lerr.String())
-				}
-				return
-			}
-			suite := libtesting.EnvTestSuite(env)
-			if suite == nil {
-				t.Errorf("unable to locate test suite")
-				return
-			}
-			ltest := suite.Test(i)
-			lerr = env.Eval(lisp.SExpr([]*lisp.LVal{ltest.Fun}))
-			if lerr.Type == lisp.LError {
-				if lerr.Stack != nil {
-					var buf bytes.Buffer
-					buf.WriteString(lerr.String())
-					buf.WriteString("\n")
-					lerr.Stack.DebugPrint(&buf)
-					t.Error(buf.String())
-				} else {
-					t.Error(lerr.String())
-				}
-				return
-			}
+			r.RunTest(t, i, path, bytes.NewReader(source))
 		})
 	}
 }
