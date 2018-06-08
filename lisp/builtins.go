@@ -6,6 +6,7 @@ import (
 	"math"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -44,6 +45,9 @@ var langBuiltins = []*langBuiltin{
 	{"use-package", Formals(VarArgSymbol, "package-name"), builtinUsePackage},
 	{"export", Formals(VarArgSymbol, "symbol"), builtinExport},
 	{"set", Formals("sym", "val"), builtinSet},
+	{"to-string", Formals("value"), builtinToString},
+	{"to-int", Formals("value"), builtinToInt},
+	{"to-float", Formals("value"), builtinToFloat},
 	{"eval", Formals("expr"), builtinEval},
 	{"error", Formals(VarArgSymbol, "args"), builtinError},
 	{"car", Formals("lis"), builtinCAR},
@@ -71,6 +75,7 @@ var langBuiltins = []*langBuiltin{
 	{"length", Formals("lis"), builtinLength},
 	{"cons", Formals("head", "tail"), builtinCons},
 	{"not", Formals("expr"), builtinNot},
+	{"nil?", Formals("expr"), builtinIsNil},
 	{"equal?", Formals("a", "b"), builtinEqual},
 	{"all?", Formals("predicate", "list"), builtinAllP},
 	{"any?", Formals("predicate", "list"), builtinAnyP},
@@ -176,6 +181,60 @@ func builtinSet(env *LEnv, v *LVal) *LVal {
 
 	env.PutGlobal(v.Cells[0], v.Cells[1])
 	return env.GetGlobal(v.Cells[0])
+}
+
+func builtinToString(env *LEnv, args *LVal) *LVal {
+	val := args.Cells[0]
+	switch val.Type {
+	case LString:
+		return val
+	case LSymbol:
+		return String(val.Str)
+	case LBytes:
+		return String(string(val.Bytes))
+	case LInt:
+		return String(strconv.Itoa(val.Int))
+	case LFloat:
+		return String(strconv.FormatFloat(val.Float, 'g', -1, 64))
+	default:
+		return env.Errorf("cannot convert type to string: %v", val.Type)
+	}
+}
+
+func builtinToInt(env *LEnv, args *LVal) *LVal {
+	val := args.Cells[0]
+	switch val.Type {
+	case LString:
+		x, err := strconv.Atoi(val.Str)
+		if err != nil {
+			return env.Error(err)
+		}
+		return Int(x)
+	case LInt:
+		return val
+	case LFloat:
+		return Int(int(val.Float))
+	default:
+		return env.Errorf("cannot convert type to string: %v", val.Type)
+	}
+}
+
+func builtinToFloat(env *LEnv, args *LVal) *LVal {
+	val := args.Cells[0]
+	switch val.Type {
+	case LString:
+		x, err := strconv.ParseFloat(val.Str, 64)
+		if err != nil {
+			return env.Error(err)
+		}
+		return Float(x)
+	case LInt:
+		return Float(float64(val.Int))
+	case LFloat:
+		return val
+	default:
+		return env.Errorf("cannot convert type to string: %v", val.Type)
+	}
 }
 
 func builtinEval(env *LEnv, args *LVal) *LVal {
@@ -632,6 +691,14 @@ func builtinNot(env *LEnv, v *LVal) *LVal {
 			// v.Cells[0] is nil
 			return Symbol("t")
 		}
+	}
+	return Nil()
+}
+
+func builtinIsNil(env *LEnv, args *LVal) *LVal {
+	v := args.Cells[0]
+	if v.IsNil() {
+		return Symbol("t")
 	}
 	return Nil()
 }
