@@ -113,7 +113,7 @@ func newParsecParser() parsec.Parser {
 	decimal := parsec.Token(`[+-]?[0-9]+([.][0-9]+)?([eE][+-]?[0-9]+)?`, "DECIMAL")
 	//symbol := parsec.Token(`[^\s()']+`, "SYMBOL")
 	// TODO:  Fix the parsing of symbols.  This regexp is fucking gross.
-	symbol := parsec.Token(`(?:(?:\pL|[._+\-*/\=<>!&~%?])(?:\pL|[0-9]|[._+\-*/\=<>!&~%?])*[:])?(?:\pL|[._+\-*/\=<>!&~%?])(?:\pL|[0-9]|[._+\-*/\=<>!&~%?])*`, "SYMBOL")
+	symbol := parsec.Token(`(?:(?:\pL|[._+\-*/\=<>!&~%?$])(?:\pL|[0-9]|[._+\-*/\=<>!&~%?$])*[:])?(?:\pL|[._+\-*/\=<>!&~%?$])(?:\pL|[0-9]|[._+\-*/\=<>!&~%?$])*`, "SYMBOL")
 	//qsymbol := parsec.And(nil, q, symbol)
 	term := parsec.OrdChoice(astNode(nodeTerm), // terminal token
 		parsec.String(),
@@ -145,6 +145,9 @@ type ast struct {
 
 func newAST(typ nodeType, nodes []parsec.ParsecNode) parsec.ParsecNode {
 	nodes = cleanParsecNodeList(nodes)
+	if len(nodes) == 0 {
+		return lisp.Nil()
+	}
 	switch typ {
 	case nodeTerm:
 		var lval *lisp.LVal
@@ -210,6 +213,11 @@ func cleanParsecNodeList(lis []parsec.ParsecNode) []parsec.ParsecNode {
 	var nodes []parsec.ParsecNode
 	for _, n := range lis {
 		switch node := n.(type) {
+		case *parsec.Terminal:
+			if node.Name == "COMMENT" {
+				continue
+			}
+			nodes = append(nodes, node)
 		case []parsec.ParsecNode:
 			nodes = append(nodes, cleanParsecNodeList(node)...)
 		default:
@@ -254,12 +262,12 @@ func getLVal(root parsec.ParsecNode) *lisp.LVal {
 	nodes := cleanParsecNodeList([]parsec.ParsecNode{root})
 	if len(nodes) == 0 {
 		// we can be here if there is only whitespace on a line
-		return nil
+		return lisp.Nil()
 	}
 	lval, ok := nodes[0].(*lisp.LVal)
 	if !ok {
 		// we can be here if there is only a comment on a line
-		return nil
+		return lisp.Nil()
 	}
 	return lval
 }
