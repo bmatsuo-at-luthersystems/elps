@@ -44,6 +44,8 @@ func LoadPackage(env *lisp.LEnv) *lisp.LVal {
 // set of package builtin functions that use it.
 func Builtins(s *Serializer) []*libutil.Builtin {
 	return []*libutil.Builtin{
+		libutil.Function("dump-bytes", lisp.Formals("object"), s.DumpBytesBuiltin),
+		libutil.Function("load-bytes", lisp.Formals("object"), s.LoadBytesBuiltin),
 		libutil.Function("dump-string", lisp.Formals("object"), s.DumpStringBuiltin),
 		libutil.Function("load-string", lisp.Formals("json-string"), s.LoadStringBuiltin),
 	}
@@ -125,6 +127,23 @@ func (s *Serializer) Dump(v *lisp.LVal) ([]byte, error) {
 		return nil, fmt.Errorf("type cannot be converted to json: %v", v.Type)
 	}
 	return json.Marshal(m)
+}
+
+func (s *Serializer) DumpBytesBuiltin(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
+	obj := args.Cells[0]
+	b, err := s.Dump(obj)
+	if err != nil {
+		return env.Error(err)
+	}
+	return lisp.Bytes(b)
+}
+
+func (s *Serializer) LoadBytesBuiltin(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
+	js := args.Cells[0]
+	if js.Type != lisp.LBytes {
+		return env.Errorf("argument is not bytes: %v", js.Type)
+	}
+	return s.Load(js.Bytes)
 }
 
 func (s *Serializer) DumpStringBuiltin(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
