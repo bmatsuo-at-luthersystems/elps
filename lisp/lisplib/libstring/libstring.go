@@ -32,7 +32,7 @@ var builtins = []*libutil.Builtin{
 	libutil.Function("lowercase", lisp.Formals("str"), builtinLower),
 	libutil.Function("uppercase", lisp.Formals("str"), builtinUpper),
 	libutil.Function("split", lisp.Formals("str", "sep"), builtinSplit),
-	libutil.Function("join", lisp.Formals("list", "sep"), builtinSplit),
+	libutil.Function("join", lisp.Formals("list", "sep"), builtinJoin),
 }
 
 func builtinLower(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
