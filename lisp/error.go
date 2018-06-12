@@ -21,7 +21,11 @@ func (e *ErrorVal) FullError() string {
 	if e.Stack == nil {
 		return e.Str
 	}
-	return fmt.Sprintf("%s: %s", e.Stack.Top().Name, e.Str)
+	top := e.Stack.Top()
+	if top == nil {
+		return e.Str
+	}
+	return fmt.Sprintf("%s: %s", top.Name, e.Str)
 }
 
 // WriteTrace writes the error and a stack trace to w

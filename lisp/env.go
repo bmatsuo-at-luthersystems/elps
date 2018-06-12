@@ -22,6 +22,12 @@ func getEnvID() uint {
 	return uint(atomic.AddUint64(&envCount, 1))
 }
 
+var symCount uint64
+
+func gensym() uint {
+	return uint(atomic.AddUint64(&symCount, 1))
+}
+
 // InitializeUserEnv creates the default user environment.
 func InitializeUserEnv(env *LEnv) *LVal {
 	env.Registry.DefinePackage(DefaultLangPackage)
@@ -69,6 +75,10 @@ func NewEnv(parent *LEnv) *LEnv {
 
 func (env *LEnv) getFID() string {
 	return fmt.Sprintf("anon%d", env.ID)
+}
+
+func (env *LEnv) GenSym() *LVal {
+	return String(fmt.Sprintf("gensym%d", gensym()))
 }
 
 func (env *LEnv) DefinePackage(name *LVal) *LVal {
@@ -121,7 +131,7 @@ func (env *LEnv) LoadString(name, exprs string) *LVal {
 // been set then an error will be returned.
 func (env *LEnv) Load(name string, r io.Reader) *LVal {
 	if env.Reader == nil {
-		return Errorf("no reader for environment")
+		return env.Errorf("no reader for environment")
 	}
 	exprs, err := env.Reader.Read(name, r)
 	if err != nil {
@@ -132,6 +142,7 @@ func (env *LEnv) Load(name string, r io.Reader) *LVal {
 	}
 	ret := Nil()
 	for _, expr := range exprs {
+		//log.Println("LOAD ", expr)
 		ret = env.Eval(expr)
 		if ret.Type == LError {
 			return ret
@@ -188,7 +199,15 @@ func (env *LEnv) get(k *LVal) *LVal {
 	if env.Parent != nil {
 		return env.Parent.Get(k)
 	}
-	return env.Package.Get(k)
+	return env.packageGet(k)
+}
+
+func (env *LEnv) packageGet(k *LVal) *LVal {
+	lerr := env.Package.Get(k)
+	if lerr.Type == LError {
+		lerr.Stack = env.Stack.Copy()
+	}
+	return lerr
 }
 
 // GetFunName returns the function name (if any) known to be bound to the given
@@ -381,7 +400,7 @@ func (env *LEnv) Errorf(format string, v ...interface{}) *LVal {
 func (env *LEnv) Eval(v *LVal) *LVal {
 eval:
 	if v.Spliced {
-		return Errorf("spliced value used as expression")
+		return env.Errorf("spliced value used as expression")
 	}
 	if v.Terminal {
 		v.Terminal = false
@@ -404,7 +423,11 @@ eval:
 			if pkg == nil {
 				return env.Errorf("unknown package: %q", pieces[0])
 			}
-			return pkg.Get(Symbol(pieces[1]))
+			lerr := pkg.Get(Symbol(pieces[1]))
+			if lerr.Type == LError {
+				lerr.Stack = env.Stack.Copy()
+			}
+			return lerr
 		default:
 			return env.Errorf("illegal symbol: %q", v.Str)
 		}
@@ -413,6 +436,9 @@ eval:
 		if res.Type == LMarkMacExpand {
 			v = res.Cells[0]
 			goto eval
+		}
+		if res.Type == LError && res.Stack == nil {
+			res.Stack = env.Stack.Copy()
 		}
 		return res
 	case LQuote:
@@ -455,7 +481,7 @@ func (env *LEnv) EvalSExpr(s *LVal) *LVal {
 	if f.IsSpecialFun() {
 		// Argument to a macro a not evaluated but they aren't quoted either.
 		// This behavior is what allows ``unquote'' to properly resolve macro
-		// arguments symbols during and still produce valid code during macro
+		// argument symbols during and still produce valid code during macro
 		// expansion.  That is, if x is a macro argument then what do the
 		// following expressions return?
 		//		(quasiquote (unquote x))             	  => {expression bound to x}
@@ -475,7 +501,18 @@ func (env *LEnv) EvalSExpr(s *LVal) *LVal {
 			}
 		}
 	}
-	if npop > 0 {
+	// The call stack allows for tail recursion optimization.  However certain
+	// functions like ``let'' can't utilize optimization because the scope
+	// defined by the outer ``let'' would be lost.  (let ([x 1]) (let ([y x])
+	// (+ y 1))) The stack analysis marks the inner let as an optimization
+	// candidate.  But unwinding the stack would result in x being unbound.
+	// The simple solution is to avoid unwinding for functions like let (e.g.
+	// all builtin functions).  Alternatively builtin functions that don't
+	// allow tail recursion might mark the stack to indicate frames which
+	// cannot be unwound to for tail recursion optimization.  It's unclear if
+	// builtin functions benefit from tail recursion so it is much simpler to
+	// just avoid unwinding for tail recursion in any buitlin function..
+	if npop > 0 && f.Builtin == nil {
 		return markTailRec(npop, f, s)
 	}
 callf:
@@ -606,9 +643,10 @@ func (env *LEnv) Call(fun *LVal, args *LVal) *LVal {
 	}
 
 	body := fun.Cells[1:]
-	if len(body) > 0 {
-		body[len(body)-1].Terminal = true
+	if len(body) == 0 {
+		return Nil()
 	}
+	body[len(body)-1].Terminal = true
 	var ret *LVal
 	for i := range body {
 		ret = fun.Env.Eval(body[i])

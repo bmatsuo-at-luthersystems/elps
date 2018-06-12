@@ -15,6 +15,20 @@ func TestSpecialOp(t *testing.T) {
 			{"(if '(()) 1 2)", "1"},
 			{`(if "false" 1 2)`, "1"},
 		}},
+		{"let", TestSequence{
+			{`(let ())`, "()"},
+			{`(let ((x 1)) x)`, "1"},
+			{`(let ([x 1]) x)`, "1"},
+			{`(let ([x 1] [y 2]) (+ x y))`, "3"},
+			{`(let ([x 0]) (let ([x 1] [y (+ (progn (debug-stack) x) 1)]) (+ x y)))`, "2"},
+		}},
+		{"let*", TestSequence{
+			{`(let* ())`, "()"},
+			{`(let* ((x 1)) x)`, "1"},
+			{`(let* ([x 1]) x)`, "1"},
+			{`(let* ([x 1] [y 2]) (+ x y))`, "3"},
+			{`(let* ([x 0]) (let* ([x 1] [y (+ x 1)]) (+ x y)))`, "3"},
+		}},
 		{"cond", TestSequence{
 			{`(cond)`, "()"},
 			{`(cond (else 1))`, "1"},
@@ -27,6 +41,12 @@ func TestSpecialOp(t *testing.T) {
 			{`((expr %) 123)`, "123"},
 			{`((expr %2) 'a 'b)`, "'b"},
 			{`((expr (reverse %&)) 1 2 3)`, "'(3 2 1)"},
+		}},
+		{"threading", TestSequence{
+			{`(thread-last 1 (+ 2) (< 2))`, `t`},
+			{`(thread-last 1 (+ 2) (> 2))`, `()`},
+			{`(thread-first 1 (+   2) (<   2))`, `()`},
+			{`(thread-first 1 (+   2) (>   2))`, `t`},
 		}},
 	}
 	RunTestSuite(t, tests)

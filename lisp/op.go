@@ -10,9 +10,12 @@ import (
 var userSpecialOps []*langBuiltin
 var langSpecialOps = []*langBuiltin{
 	{"assert", Formals("expr", VarArgSymbol, "message-format-args"), opAssert},
+	{"quote", Formals("expr"), opQuote},
 	{"quasiquote", Formals("expr"), opQuasiquote},
 	{"lambda", Formals("formals", VarArgSymbol, "expr"), opLambda},
 	{"expr", Formals("pattern"), opExpr},
+	{"thread-first", Formals("value", VarArgSymbol, "exprs"), opThreadFirst},
+	{"thread-last", Formals("value", VarArgSymbol, "exprs"), opThreadLast},
 	{"let*", Formals("bindings", VarArgSymbol, "expr"), opLetSeq},
 	{"let", Formals("bindings", VarArgSymbol, "expr"), opLet},
 	{"progn", Formals(VarArgSymbol, "expr"), opProgn},
@@ -74,6 +77,19 @@ func opAssert(env *LEnv, args *LVal) *LVal {
 		return msg
 	}
 	return env.Error(errors.New(msg.Str))
+}
+
+func opQuote(env *LEnv, args *LVal) *LVal {
+	if len(args.Cells) != 1 {
+		return env.Errorf("one argument expected (got %d)", len(args.Cells))
+	}
+	// NOTE:  Racket seems to detect nested (quote ...) expressions when
+	// quoting things.  That is, (quote (quote 3)) in Racket evaluates to ''3,
+	// not '(quote 3).  We could try to dig into the quoted arguments to
+	// determine if that were possible but it is unclear whether it's possible
+	// for ``quote'' to resolve differently or for this macro to be called
+	// under a different name.
+	return Quote(args.Cells[0])
 }
 
 func opQuasiquote(env *LEnv, args *LVal) *LVal {
@@ -220,6 +236,49 @@ func countExprArgs(expr *LVal) (nargs int, short bool, vargs bool, err error) {
 	default:
 		return 0, false, false, fmt.Errorf("invalid internal expression type: %s", expr.Type)
 	}
+}
+
+func opThreadLast(env *LEnv, args *LVal) *LVal {
+	val, exprs := args.Cells[0], args.Cells[1:]
+	for _, expr := range exprs {
+		if expr.Type != LSExpr || expr.Quoted {
+			return env.Errorf("expression argument is not a function call")
+		}
+		if expr.Len() < 1 {
+			return env.Errorf("expression argument is nil")
+		}
+	}
+	for _, expr := range exprs {
+		expr.Cells = append(expr.Cells, val)
+		val = env.Eval(expr)
+		if val.Type == LError {
+			return val
+		}
+	}
+	return val
+}
+
+func opThreadFirst(env *LEnv, args *LVal) *LVal {
+	val, exprs := args.Cells[0], args.Cells[1:]
+	for _, expr := range exprs {
+		if expr.Type != LSExpr || expr.Quoted {
+			return env.Errorf("expression argument is not a function call")
+		}
+		if expr.Len() < 1 {
+			return env.Errorf("expression argument is nil")
+		}
+	}
+	for _, expr := range exprs {
+		cells := make([]*LVal, len(expr.Cells)+1)
+		cells[0] = expr.Cells[0]
+		cells[1] = val
+		copy(cells[2:], expr.Cells[1:])
+		val = env.Eval(SExpr(cells))
+		if val.Type == LError {
+			return val
+		}
+	}
+	return val
 }
 
 func opLet(env *LEnv, args *LVal) *LVal {

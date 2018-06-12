@@ -9,7 +9,6 @@ var userMacros []*langBuiltin
 var langMacros = []*langBuiltin{
 	{"defmacro", Formals("name", "formals", "expr"), macroDefmacro},
 	{"defun", Formals("name", "formals", VarArgSymbol, "expr"), macroDefun},
-	{"quote", Formals("expr"), macroQuote},
 	{"trace", Formals("expr"), macroTrace},
 }
 
@@ -95,19 +94,6 @@ func macroDefun(env *LEnv, args *LVal) *LVal {
 	//return Nil()
 }
 
-func macroQuote(env *LEnv, args *LVal) *LVal {
-	if len(args.Cells) != 1 {
-		return env.Errorf("one argument expected (got %d)", len(args.Cells))
-	}
-	// NOTE:  Racket seems to detect nested (quote ...) expressions when
-	// quoting things.  That is, (quote (quote 3)) in Racket evaluates to ''3,
-	// not '(quote 3).  We could try to dig into the quoted arguments to
-	// determine if that were possible but it is unclear whether it's possible
-	// for ``quote'' to resolve differently or for this macro to be called
-	// under a different name.
-	return args.Cells[0]
-}
-
 func isUnquote(v *LVal) bool {
 	if v.Type != LSExpr {
 		return false
@@ -151,7 +137,7 @@ func findAndUnquote(env *LEnv, v *LVal) *LVal {
 		if spliceType == "unquote-splicing" {
 			x.Spliced = true
 		}
-		return findAndUnquote(env, x)
+		return x
 	}
 	// findAndUnquote all child expressions
 	for i := range v.Cells {

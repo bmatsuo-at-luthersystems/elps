@@ -6,6 +6,7 @@ import (
 	"math"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -44,21 +45,34 @@ var langBuiltins = []*langBuiltin{
 	{"use-package", Formals(VarArgSymbol, "package-name"), builtinUsePackage},
 	{"export", Formals(VarArgSymbol, "symbol"), builtinExport},
 	{"set", Formals("sym", "val"), builtinSet},
+	{"gensym", Formals(), builtinGensym},
+	{"identity", Formals("value"), builtinIdentity},
+	{"to-string", Formals("value"), builtinToString},
+	{"to-int", Formals("value"), builtinToInt},
+	{"to-float", Formals("value"), builtinToFloat},
 	{"eval", Formals("expr"), builtinEval},
 	{"error", Formals(VarArgSymbol, "args"), builtinError},
 	{"car", Formals("lis"), builtinCAR},
 	{"cdr", Formals("lis"), builtinCDR},
+	{"first", Formals("lis"), builtinFirst},
+	{"second", Formals("lis"), builtinSecond},
+	{"nth", Formals("lis", "n"), builtinNth},
 	{"map", Formals("fn", "lis"), builtinMap},
 	{"foldl", Formals("fn", "z", "lis"), builtinFoldLeft},
 	{"foldr", Formals("fn", "z", "lis"), builtinFoldRight},
 	{"compose", Formals("f", "g"), builtinCompose},
 	{"unpack", Formals("f", "lis"), builtinUnpack},
-	{"assoc", Formals("m", "k", "v"), builtinAssoc},
-	{"assoc!", Formals("m", "k", "v"), builtinAssocMutate},
-	{"get", Formals("m", "k"), builtinGet},
+	{"flip", Formals("binary-function"), builtinFlip},
+	{"assoc", Formals("map", "key", "value"), builtinAssoc},
+	{"assoc!", Formals("map", "key", "value"), builtinAssocMutate},
+	{"get", Formals("map", "key", VarArgSymbol, "default"), builtinGet},
+	{"keys", Formals("map"), builtinKeys},
 	{"sorted-map", Formals(VarArgSymbol, "args"), builtinSortedMap},
 	{"concat", Formals(VarArgSymbol, "args"), builtinConcat},
-	{"sort", Formals("less-predicate", "list"), builtinSort},
+	{"insert-index", Formals("list", "index", "item"), builtinInsertIndex},
+	{"sort", Formals("less-predicate", "list", VarArgSymbol, "key-fun"), builtinSort},
+	{"insert-sorted", Formals("list", "predicate", "item", VarArgSymbol, "key-fun"), builtinInsertSorted},
+	{"search-sorted", Formals("n", "predicate"), builtinSearchSorted},
 	{"select", Formals("predicate", "list"), builtinSelect},
 	{"reject", Formals("predicate", "list"), builtinReject},
 	{"zip", Formals(VarArgSymbol, "lists"), builtinZip},
@@ -70,6 +84,8 @@ var langBuiltins = []*langBuiltin{
 	{"length", Formals("lis"), builtinLength},
 	{"cons", Formals("head", "tail"), builtinCons},
 	{"not", Formals("expr"), builtinNot},
+	{"nil?", Formals("expr"), builtinIsNil},
+	{"string?", Formals("expr"), builtinIsString},
 	{"equal?", Formals("a", "b"), builtinEqual},
 	{"all?", Formals("predicate", "list"), builtinAllP},
 	{"any?", Formals("predicate", "list"), builtinAnyP},
@@ -177,6 +193,68 @@ func builtinSet(env *LEnv, v *LVal) *LVal {
 	return env.GetGlobal(v.Cells[0])
 }
 
+func builtinGensym(env *LEnv, args *LVal) *LVal {
+	return env.GenSym()
+}
+
+func builtinIdentity(env *LEnv, args *LVal) *LVal {
+	return args.Cells[0]
+}
+
+func builtinToString(env *LEnv, args *LVal) *LVal {
+	val := args.Cells[0]
+	switch val.Type {
+	case LString:
+		return val
+	case LSymbol:
+		return String(val.Str)
+	case LBytes:
+		return String(string(val.Bytes))
+	case LInt:
+		return String(strconv.Itoa(val.Int))
+	case LFloat:
+		return String(strconv.FormatFloat(val.Float, 'g', -1, 64))
+	default:
+		return env.Errorf("cannot convert type to string: %v", val.Type)
+	}
+}
+
+func builtinToInt(env *LEnv, args *LVal) *LVal {
+	val := args.Cells[0]
+	switch val.Type {
+	case LString:
+		x, err := strconv.Atoi(val.Str)
+		if err != nil {
+			return env.Error(err)
+		}
+		return Int(x)
+	case LInt:
+		return val
+	case LFloat:
+		return Int(int(val.Float))
+	default:
+		return env.Errorf("cannot convert type to string: %v", val.Type)
+	}
+}
+
+func builtinToFloat(env *LEnv, args *LVal) *LVal {
+	val := args.Cells[0]
+	switch val.Type {
+	case LString:
+		x, err := strconv.ParseFloat(val.Str, 64)
+		if err != nil {
+			return env.Error(err)
+		}
+		return Float(x)
+	case LInt:
+		return Float(float64(val.Int))
+	case LFloat:
+		return val
+	default:
+		return env.Errorf("cannot convert type to string: %v", val.Type)
+	}
+}
+
 func builtinEval(env *LEnv, args *LVal) *LVal {
 	v := args.Cells[0]
 	if v.Type == LQuote {
@@ -199,8 +277,7 @@ func builtinCAR(env *LEnv, v *LVal) *LVal {
 		return env.Errorf("argument is not a list: %v", v.Cells[0].Type)
 	}
 	if len(v.Cells[0].Cells) == 0 {
-		// Maybe this should just return v?
-		return env.Errorf("argument is empty")
+		return Nil()
 	}
 	return v.Cells[0].Cells[0]
 }
@@ -210,11 +287,46 @@ func builtinCDR(env *LEnv, v *LVal) *LVal {
 		return env.Errorf("argument is not a list %v", v.Cells[0].Type)
 	}
 	if len(v.Cells[0].Cells) == 0 {
-		// Maybe this should just return v?
-		return env.Errorf("argument is empty")
+		return Nil()
 	}
 	q := QExpr(v.Cells[0].Cells[1:])
 	return q
+}
+
+func builtinFirst(env *LEnv, args *LVal) *LVal {
+	list := args.Cells[0]
+	if list.Type != LSExpr {
+		return env.Errorf("argument is not a list: %v", list.Type)
+	}
+	if len(list.Cells) == 0 {
+		return Nil()
+	}
+	return list.Cells[0]
+}
+
+func builtinSecond(env *LEnv, args *LVal) *LVal {
+	list := args.Cells[0]
+	if list.Type != LSExpr {
+		return env.Errorf("argument is not a list: %v", list.Type)
+	}
+	if len(list.Cells) < 1 {
+		return Nil()
+	}
+	return list.Cells[1]
+}
+
+func builtinNth(env *LEnv, args *LVal) *LVal {
+	list, n := args.Cells[0], args.Cells[1]
+	if list.Type != LSExpr {
+		return env.Errorf("first argument is not a list: %v", list.Type)
+	}
+	if n.Type != LInt {
+		return env.Errorf("second argument is not an integer: %v", n.Type)
+	}
+	if len(list.Cells) < n.Int {
+		return Nil()
+	}
+	return list.Cells[n.Int]
 }
 
 func builtinMap(env *LEnv, args *LVal) *LVal {
@@ -324,11 +436,11 @@ func builtinCompose(env *LEnv, args *LVal) *LVal {
 	if restSym != nil {
 		concatPrefix := QExpr(gcall.Cells[1:])
 		concatCall := SExpr(nil)
-		concatCall.Cells = append(concatCall.Cells, Symbol("concat"))
+		concatCall.Cells = append(concatCall.Cells, Symbol("lisp:concat"))
 		concatCall.Cells = append(concatCall.Cells, concatPrefix)
 		concatCall.Cells = append(concatCall.Cells, restSym.Copy())
 		unpackCall := SExpr(nil)
-		unpackCall.Cells = append(unpackCall.Cells, Symbol("unpack"))
+		unpackCall.Cells = append(unpackCall.Cells, Symbol("lisp:unpack"))
 		unpackCall.Cells = append(unpackCall.Cells, g)
 		unpackCall.Cells = append(unpackCall.Cells, concatCall)
 		gcall = unpackCall
@@ -350,6 +462,20 @@ func builtinUnpack(env *LEnv, args *LVal) *LVal {
 	args.Cells = append(args.Cells[:1], args.Cells[1].Cells...)
 	args.Quoted = false
 	return env.Eval(args)
+}
+
+func builtinFlip(env *LEnv, args *LVal) *LVal {
+	fn := args.Cells[0]
+	if fn.Type != LFun {
+		return env.Errorf("argument is not a function: %s", fn.Type)
+	}
+	formals := fn.Cells[0]
+	if len(formals.Cells) < 2 && formals.Cells[0].Str != VarArgSymbol {
+		// TODO:  Check if varargs
+		return env.Errorf("argument is not a function of two arguments: %s", formals)
+	}
+	call := SExpr([]*LVal{fn, Symbol("y"), Symbol("x")})
+	return env.Lambda(Formals("x", "y"), []*LVal{call})
 }
 
 func builtinAssoc(env *LEnv, args *LVal) *LVal {
@@ -388,12 +514,26 @@ func builtinAssocMutate(env *LEnv, args *LVal) *LVal {
 }
 
 func builtinGet(env *LEnv, args *LVal) *LVal {
-	m := args.Cells[0]
-	k := args.Cells[1]
+	m, k, _def := args.Cells[0], args.Cells[1], args.Cells[2:]
 	if m.Type != LSortMap {
 		return env.Errorf("first argument is not a map: %s", m.Type)
 	}
-	return mapGet(m, k)
+	if len(_def) > 1 {
+		return env.Errorf("too many arguments provided")
+	}
+	var def *LVal
+	if len(_def) > 0 {
+		def = _def[0]
+	}
+	return mapGet(m, k, def)
+}
+
+func builtinKeys(env *LEnv, args *LVal) *LVal {
+	m := args.Cells[0]
+	if m.Type != LSortMap {
+		return env.Errorf("first argument is not a map: %s", m.Type)
+	}
+	return m.MapKeys()
 }
 
 func builtinSortedMap(env *LEnv, args *LVal) *LVal {
@@ -425,12 +565,22 @@ func builtinConcat(env *LEnv, v *LVal) *LVal {
 }
 
 func builtinSort(env *LEnv, args *LVal) *LVal {
-	less, list := args.Cells[0], args.Cells[1]
+	less, list, optArgs := args.Cells[0], args.Cells[1], args.Cells[2:]
+	var keyFun *LVal
 	if less.Type != LFun {
 		return env.Errorf("first argument is not a function: %v", less.Type)
 	}
 	if list.Type != LSExpr {
 		return env.Errorf("second arument is not a list: %v", list.Type)
+	}
+	if len(optArgs) > 1 {
+		return env.Errorf("too many optional arguments provided")
+	}
+	if len(optArgs) > 0 {
+		keyFun = optArgs[0]
+		if keyFun.Type != LFun {
+			return env.Errorf("third argument is not a function: %v", keyFun.Type)
+		}
 	}
 	sortErr := Nil()
 	sort.Slice(list.Cells, func(i, j int) bool {
@@ -440,7 +590,15 @@ func builtinSort(env *LEnv, args *LVal) *LVal {
 		a, b := list.Cells[i], list.Cells[j]
 		// Functions are always copied when being invoked. But the arguments
 		// are not copied in general.
-		expr := SExpr([]*LVal{less, a, b})
+		var expr *LVal
+		if keyFun == nil {
+			expr = SExpr([]*LVal{less, a.Copy(), b.Copy()})
+		} else {
+			expr = SExpr([]*LVal{less,
+				SExpr([]*LVal{keyFun, a.Copy()}),
+				SExpr([]*LVal{keyFun, b.Copy()}),
+			})
+		}
 		ok := env.Eval(expr)
 		if ok.Type == LError {
 			sortErr = ok
@@ -452,6 +610,101 @@ func builtinSort(env *LEnv, args *LVal) *LVal {
 		return sortErr
 	}
 	return list
+}
+
+func builtinInsertIndex(env *LEnv, args *LVal) *LVal {
+	list, index, item := args.Cells[0], args.Cells[1], args.Cells[2]
+	if list.Type != LSExpr {
+		return env.Errorf("first argument is not a list: %v", list.Type)
+	}
+	if index.Type != LInt {
+		return env.Errorf("second arument is not a integer: %v", index.Type)
+	}
+	if index.Int > list.Len() {
+		return env.Errorf("index out of bounds")
+	}
+	newCells := make([]*LVal, len(list.Cells)+1)
+	copy(newCells[:index.Int], list.Cells[:index.Int])
+	copy(newCells[index.Int+1:], list.Cells[index.Int:])
+	newCells[index.Int] = item
+	return QExpr(newCells)
+}
+
+func builtinInsertSorted(env *LEnv, args *LVal) *LVal {
+	list, p, item, optArgs := args.Cells[0], args.Cells[1], args.Cells[2], args.Cells[3:]
+	var keyFun *LVal
+	if list.Type != LSExpr {
+		return env.Errorf("first argument is not a list: %v", list.Type)
+	}
+	if p.Type != LFun {
+		return env.Errorf("second arument is not a function: %v", p.Type)
+	}
+	if len(optArgs) > 1 {
+		return env.Errorf("too many optional arguments provided")
+	}
+	if len(optArgs) > 0 {
+		keyFun = optArgs[0]
+		if keyFun.Type != LFun {
+			return env.Errorf("third argument is not a function: %v", keyFun.Type)
+		}
+	}
+	sortErr := Nil()
+	i := sort.Search(len(list.Cells), func(i int) bool {
+		var expr *LVal
+		if keyFun == nil {
+			expr = SExpr([]*LVal{p, item.Copy(), list.Cells[i].Copy()})
+		} else {
+			expr = SExpr([]*LVal{
+				p,
+				SExpr([]*LVal{
+					keyFun,
+					item.Copy(),
+				}),
+				SExpr([]*LVal{
+					keyFun,
+					list.Cells[i].Copy(),
+				}),
+			})
+		}
+		ok := env.Eval(expr)
+		if ok.Type == LError {
+			sortErr = ok
+			return false
+		}
+		return True(ok)
+	})
+	if !sortErr.IsNil() {
+		return sortErr
+	}
+	newCells := make([]*LVal, len(list.Cells)+1)
+	copy(newCells[:i], list.Cells[:i])
+	copy(newCells[i+1:], list.Cells[i:])
+	newCells[i] = item
+	return QExpr(newCells)
+}
+
+func builtinSearchSorted(env *LEnv, args *LVal) *LVal {
+	n, p := args.Cells[0], args.Cells[1]
+	if n.Type != LInt {
+		return env.Errorf("first argument is not an integer: %v", n.Type)
+	}
+	if p.Type != LFun {
+		return env.Errorf("second arument is not a function: %v", p.Type)
+	}
+	sortErr := Nil()
+	i := sort.Search(n.Int, func(i int) bool {
+		expr := SExpr([]*LVal{p, Int(i)})
+		ok := env.Eval(expr)
+		if ok.Type == LError {
+			sortErr = ok
+			return false
+		}
+		return True(ok)
+	})
+	if !sortErr.IsNil() {
+		return sortErr
+	}
+	return Int(i)
 }
 
 func builtinSelect(env *LEnv, args *LVal) *LVal {
@@ -625,6 +878,19 @@ func builtinNot(env *LEnv, v *LVal) *LVal {
 		}
 	}
 	return Nil()
+}
+
+func builtinIsNil(env *LEnv, args *LVal) *LVal {
+	v := args.Cells[0]
+	if v.IsNil() {
+		return Symbol("t")
+	}
+	return Nil()
+}
+
+func builtinIsString(env *LEnv, args *LVal) *LVal {
+	v := args.Cells[0]
+	return Bool(v.Type == LString)
 }
 
 func builtinEqual(env *LEnv, args *LVal) *LVal {
@@ -902,20 +1168,22 @@ func builtinAdd(env *LEnv, v *LVal) *LVal {
 }
 
 func builtinSub(env *LEnv, v *LVal) *LVal {
+	for _, c := range v.Cells {
+		if !c.IsNumeric() {
+			return env.Errorf("argument is not a number: %v", c.Type)
+		}
+	}
+
 	if len(v.Cells) == 0 {
 		return Int(0)
 	}
+
 	if len(v.Cells) == 1 {
 		v.Cells[0].Int = -v.Cells[0].Int
 		v.Cells[0].Float = -v.Cells[0].Float
 		return v.Cells[0]
 	}
 
-	for _, c := range v.Cells {
-		if !c.IsNumeric() {
-			return env.Errorf("argument is not a number: %v", c.Type)
-		}
-	}
 	elemt := numericListType(v.Cells)
 	if elemt == LInt {
 		diff := v.Cells[0].Int

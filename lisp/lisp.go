@@ -22,6 +22,7 @@ const (
 	LFun
 	LQuote
 	LString
+	LBytes
 	LSortMap
 	LNative
 	LMarkTailRec
@@ -39,6 +40,7 @@ var lvalTypeStrings = []string{
 	LFun:           "function",
 	LQuote:         "quoted",
 	LString:        "string",
+	LBytes:         "bytes",
 	LSortMap:       "sortmap",
 	LNative:        "native",
 	LMarkTailRec:   "marker-tail-recursion",
@@ -74,6 +76,9 @@ type LVal struct {
 	// Str used by LSymbol and LString values
 	Str string
 
+	// Bytes used by LBytes values
+	Bytes []byte
+
 	// Package name for symbols and functions.
 	Package string
 
@@ -105,6 +110,26 @@ type LVal struct {
 	Terminal bool // LVal is the terminal expression in a function body
 }
 
+// Value conveniently converts v to an LVal.  Types which can be represented
+// directly in lisp will be converted to the appropriate LVal.  All other types
+// will be turned into a Native LVal.  Value is the GoValue function.
+func Value(v interface{}) *LVal {
+	switch v := v.(type) {
+	case string:
+		return String(v)
+	case []byte:
+		return Bytes(v)
+	case int:
+		return Int(v)
+	case float64:
+		return Float(v)
+	case []*LVal:
+		return QExpr(v)
+	default:
+		return Native(v)
+	}
+}
+
 // Bool returns an LVal with truthiness identical to b.
 func Bool(b bool) *LVal {
 	if b {
@@ -134,6 +159,14 @@ func String(str string) *LVal {
 	return &LVal{
 		Type: LString,
 		Str:  str,
+	}
+}
+
+// Bytes returns an LVal representing binary data b.
+func Bytes(b []byte) *LVal {
+	return &LVal{
+		Type:  LBytes,
+		Bytes: b,
 	}
 }
 
@@ -316,6 +349,16 @@ func (v *LVal) Len() int {
 	return len(v.Cells)
 }
 
+// MapKeys returns a list of keys in the map.  MapKeys panics if v.Type is not
+// LSortMap.
+func (v *LVal) MapKeys() *LVal {
+	if v.Type != LSortMap {
+		panic("not sortmap: " + v.Type.String())
+	}
+	list := QExpr(sortedMapKeys(v))
+	return list
+}
+
 // MapGet returns the value corresponding to k in v or an LError if k is not
 // present in v.  MapGet panics if v.Type is not LSortMap.
 func (v *LVal) MapGet(k interface{}) *LVal {
@@ -324,9 +367,9 @@ func (v *LVal) MapGet(k interface{}) *LVal {
 	}
 	switch k := k.(type) {
 	case *LVal:
-		return mapGet(v, k)
+		return mapGet(v, k, nil)
 	case string:
-		return mapGet(v, String(k))
+		return mapGet(v, String(k), nil)
 	// numerics unsupported
 	default:
 		return Errorf("invalid key type: %T", k)
@@ -409,7 +452,7 @@ func (v *LVal) Equal(other *LVal) *LVal {
 			return Nil()
 		}
 		for i := range v.Cells {
-			if True(v.Cells[i].Equal(other.Cells[i])) {
+			if !True(v.Cells[i].Equal(other.Cells[i])) {
 				return Nil()
 			}
 		}
@@ -502,6 +545,8 @@ func (v *LVal) str(onTheRecord bool) string {
 		return quote + strconv.FormatFloat(v.Float, 'g', -1, 64)
 	case LString:
 		return quote + fmt.Sprintf("%q", v.Str)
+	case LBytes:
+		return quote + fmt.Sprint(v.Bytes)
 	case LError:
 		return quote + v.Str
 	case LSymbol:

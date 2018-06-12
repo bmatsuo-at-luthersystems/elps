@@ -27,6 +27,8 @@ func GoValue(v *LVal) interface{} {
 		return (error)((*ErrorVal)(v))
 	case LSymbol, LString:
 		return v.Str
+	case LBytes:
+		return v.Bytes
 	case LInt:
 		return v.Int
 	case LFloat:
@@ -39,6 +41,8 @@ func GoValue(v *LVal) interface{} {
 	case LSortMap:
 		m, _ := GoMap(v)
 		return m
+	case LNative:
+		return v.Native
 	}
 	return v
 }
