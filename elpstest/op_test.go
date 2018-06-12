@@ -42,6 +42,12 @@ func TestSpecialOp(t *testing.T) {
 			{`((expr %2) 'a 'b)`, "'b"},
 			{`((expr (reverse %&)) 1 2 3)`, "'(3 2 1)"},
 		}},
+		{"threading", TestSequence{
+			{`(thread-last 1 (+ 2) (< 2))`, `t`},
+			{`(thread-last 1 (+ 2) (> 2))`, `()`},
+			{`(thread-first 1 (+   2) (<   2))`, `()`},
+			{`(thread-first 1 (+   2) (>   2))`, `t`},
+		}},
 	}
 	RunTestSuite(t, tests)
 }

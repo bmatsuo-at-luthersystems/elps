@@ -14,6 +14,8 @@ var langSpecialOps = []*langBuiltin{
 	{"quasiquote", Formals("expr"), opQuasiquote},
 	{"lambda", Formals("formals", VarArgSymbol, "expr"), opLambda},
 	{"expr", Formals("pattern"), opExpr},
+	{"thread-first", Formals("value", VarArgSymbol, "exprs"), opThreadFirst},
+	{"thread-last", Formals("value", VarArgSymbol, "exprs"), opThreadLast},
 	{"let*", Formals("bindings", VarArgSymbol, "expr"), opLetSeq},
 	{"let", Formals("bindings", VarArgSymbol, "expr"), opLet},
 	{"progn", Formals(VarArgSymbol, "expr"), opProgn},
@@ -234,6 +236,49 @@ func countExprArgs(expr *LVal) (nargs int, short bool, vargs bool, err error) {
 	default:
 		return 0, false, false, fmt.Errorf("invalid internal expression type: %s", expr.Type)
 	}
+}
+
+func opThreadLast(env *LEnv, args *LVal) *LVal {
+	val, exprs := args.Cells[0], args.Cells[1:]
+	for _, expr := range exprs {
+		if expr.Type != LSExpr || expr.Quoted {
+			return env.Errorf("expression argument is not a function call")
+		}
+		if expr.Len() < 1 {
+			return env.Errorf("expression argument is nil")
+		}
+	}
+	for _, expr := range exprs {
+		expr.Cells = append(expr.Cells, val)
+		val = env.Eval(expr)
+		if val.Type == LError {
+			return val
+		}
+	}
+	return val
+}
+
+func opThreadFirst(env *LEnv, args *LVal) *LVal {
+	val, exprs := args.Cells[0], args.Cells[1:]
+	for _, expr := range exprs {
+		if expr.Type != LSExpr || expr.Quoted {
+			return env.Errorf("expression argument is not a function call")
+		}
+		if expr.Len() < 1 {
+			return env.Errorf("expression argument is nil")
+		}
+	}
+	for _, expr := range exprs {
+		cells := make([]*LVal, len(expr.Cells)+1)
+		cells[0] = expr.Cells[0]
+		cells[1] = val
+		copy(cells[2:], expr.Cells[1:])
+		val = env.Eval(SExpr(cells))
+		if val.Type == LError {
+			return val
+		}
+	}
+	return val
 }
 
 func opLet(env *LEnv, args *LVal) *LVal {

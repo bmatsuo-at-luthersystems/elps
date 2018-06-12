@@ -367,9 +367,9 @@ func (v *LVal) MapGet(k interface{}) *LVal {
 	}
 	switch k := k.(type) {
 	case *LVal:
-		return mapGet(v, k)
+		return mapGet(v, k, nil)
 	case string:
-		return mapGet(v, String(k))
+		return mapGet(v, String(k), nil)
 	// numerics unsupported
 	default:
 		return Errorf("invalid key type: %T", k)

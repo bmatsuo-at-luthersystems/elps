@@ -14,7 +14,7 @@ func sortedMapString(m *LVal) string {
 		buf.WriteString(" ")
 		buf.WriteString(key.String())
 		buf.WriteString(" ")
-		buf.WriteString(mapGet(m, key).String())
+		buf.WriteString(mapGet(m, key, nil).String())
 	}
 	buf.WriteString(")")
 	return buf.String()
@@ -33,7 +33,7 @@ func sortedMapKeys(m *LVal) []*LVal {
 	return ks
 }
 
-func mapGet(m *LVal, key *LVal) *LVal {
+func mapGet(m, key, def *LVal) *LVal {
 	k := toSortedMapKey(key)
 	if k == nil {
 		return Errorf("unhashable type: %s", key.Type)
@@ -58,7 +58,10 @@ func mapGet(m *LVal, key *LVal) *LVal {
 			return v.Copy()
 		}
 	}
-	return Errorf("key not found: %s", key)
+	if def == nil {
+		return Errorf("key not found: %s", key)
+	}
+	return def
 }
 
 func mapSet(m *LVal, key *LVal, val *LVal, coerce bool) *LVal {

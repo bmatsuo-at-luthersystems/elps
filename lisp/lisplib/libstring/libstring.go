@@ -1,6 +1,7 @@
 package libstring
 
 import (
+	"bytes"
 	"strings"
 
 	"bitbucket.org/luthersystems/elps/lisp"
@@ -31,6 +32,7 @@ var builtins = []*libutil.Builtin{
 	libutil.Function("lowercase", lisp.Formals("str"), builtinLower),
 	libutil.Function("uppercase", lisp.Formals("str"), builtinUpper),
 	libutil.Function("split", lisp.Formals("str", "sep"), builtinSplit),
+	libutil.Function("join", lisp.Formals("list", "sep"), builtinSplit),
 }
 
 func builtinLower(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
@@ -63,4 +65,25 @@ func builtinSplit(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
 		cells[i] = lisp.String(s)
 	}
 	return lisp.SExpr(cells)
+}
+
+func builtinJoin(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
+	list, sep := args.Cells[0], args.Cells[1]
+	if list.Type != lisp.LSExpr {
+		return env.Errorf("first argument is not a list: %v", list.Type)
+	}
+	if sep.Type != lisp.LString {
+		return env.Errorf("second argument is not a string: %v", sep.Type)
+	}
+	var buf bytes.Buffer
+	for i, cell := range list.Cells {
+		if cell.Type != lisp.LString {
+			return env.Errorf("first argument is not a list of strings: %v", cell.Type)
+		}
+		buf.WriteString(cell.Str)
+		if i < len(list.Cells)-1 {
+			buf.WriteString(sep.Str)
+		}
+	}
+	return lisp.String(buf.String())
 }

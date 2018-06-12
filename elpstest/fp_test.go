@@ -17,6 +17,11 @@ func TestFP(t *testing.T) {
 			{"(unpack cons '(1 '(2)))", "'(1 2)"},
 			{"(unpack (cons 1) '('(2)))", "'(1 2)"},
 		}},
+		{"flip", TestSequence{
+			{"((flip +) 1 2)", "3"},
+			{"((flip <) 1 2)", "()"},
+			{"(((flip cons) '(2 3)) 1)", "'(1 2 3)"},
+		}},
 		{"zip", TestSequence{
 			{"(zip '(1 2 3) '('a 'b 'c))", "'('(1 'a) '(2 'b) '(3 'c))"},
 			{"(unpack zip (zip '(1 2 3) '('a 'b 'c)))", "'('(1 2 3) '('a 'b 'c))"},
@@ -29,7 +34,7 @@ func TestFP(t *testing.T) {
 		}},
 		{"complex composition", TestSequence{
 			{"(defun g (x & xs) (cons x xs))", "()"},
-			{"(compose reverse g)", "(lambda (x & xs) (<builtin> (unpack (lambda (x & xs) (cons x xs)) (concat '(x) xs))))"},
+			{"(compose reverse g)", "(lambda (x & xs) (<builtin> (lisp:unpack (lambda (x & xs) (cons x xs)) (lisp:concat '(x) xs))))"},
 			{"((compose reverse list) 1 2 3)", "'(3 2 1)"},
 			{"((compose reverse g) 1 2 3)", "'(3 2 1)"},
 		}},
