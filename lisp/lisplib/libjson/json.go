@@ -42,7 +42,7 @@ func LoadPackage(env *lisp.LEnv) *lisp.LVal {
 	return lisp.Nil()
 }
 
-// Bulitins takes the default serializer for a lisp environment and returns a
+// Builtins takes the default serializer for a lisp environment and returns a
 // set of package builtin functions that use it.
 func Builtins(s *Serializer) []*libutil.Builtin {
 	return []*libutil.Builtin{
@@ -121,6 +121,14 @@ func (s *Serializer) loadInterface(x interface{}) *lisp.LVal {
 	}
 }
 
+func (s *Serializer) attachStack(env *lisp.LEnv, lerr *lisp.LVal) *lisp.LVal {
+	if lerr.Type != lisp.LError {
+		return lerr
+	}
+	lerr.Stack = env.Stack.Copy()
+	return lerr
+}
+
 // Dump serializes v as JSON and returns any error.
 func (s *Serializer) Dump(v *lisp.LVal) ([]byte, error) {
 	m := s.GoValue(v)
@@ -145,7 +153,7 @@ func (s *Serializer) LoadBytesBuiltin(env *lisp.LEnv, args *lisp.LVal) *lisp.LVa
 	if js.Type != lisp.LBytes {
 		return env.Errorf("argument is not bytes: %v", js.Type)
 	}
-	return s.Load(js.Bytes)
+	return s.attachStack(env, s.Load(js.Bytes))
 }
 
 func (s *Serializer) DumpStringBuiltin(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
@@ -162,7 +170,7 @@ func (s *Serializer) LoadStringBuiltin(env *lisp.LEnv, args *lisp.LVal) *lisp.LV
 	if js.Type != lisp.LString {
 		return env.Errorf("argument is not a string: %v", js.Type)
 	}
-	return s.Load([]byte(js.Str))
+	return s.attachStack(env, s.Load([]byte(js.Str)))
 }
 
 // GoValue converts v to its natural representation in Go.  Quotes are ignored
