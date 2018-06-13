@@ -283,21 +283,31 @@ func Lambda(formals *LVal, body []*LVal) *LVal {
 	}
 }
 
-// Error returns an LVal representing the error corresponding to err.
+// Error returns an LVal representing the error corresponding to err.  Errors
+// store their message in the Str field and their type in their Cells[0].
+// Errors generated during expression evaluation typically have a non-nil Stack
+// field.  The Env.Error() method is typically the preferred method for
+// creating error LVal objects.
 func Error(err error) *LVal {
-	// TODO:  Add somewhere to store the original error so that the embedding
-	// program can potentially pick it out and inspect it.
+	// TODO:  Consider storing the original error in the Native field so that
+	// the embedding program can extract it verbatim..
 	return &LVal{
-		Type: LError,
-		Str:  err.Error(),
+		Type:  LError,
+		Str:   err.Error(),
+		Cells: []*LVal{Symbol("error")},
 	}
 }
 
-// Errorf returns an LVal representing with a formatted error message.
+// Errorf returns an LVal representing with a formatted error message. Errors
+// store their message in the Str field and their type in their Cells[0].
+// Errors generated during expression evaluation typically have a non-nil Stack
+// field.  The Env.Errorf() method is typically the preferred method for
+// creating formatted error LVal objects.
 func Errorf(format string, v ...interface{}) *LVal {
 	return &LVal{
-		Type: LError,
-		Str:  fmt.Sprintf(format, v...),
+		Type:  LError,
+		Str:   fmt.Sprintf(format, v...),
+		Cells: []*LVal{Symbol("error")},
 	}
 }
 

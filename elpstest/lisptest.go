@@ -28,9 +28,9 @@ type Runner struct {
 
 func (r *Runner) NewEnv() (*lisp.LEnv, error) {
 	env := lisp.NewEnv(nil)
-	lerr := lisp.InitializeUserEnv(env)
-	if lerr.Type == lisp.LError {
-		return nil, fmt.Errorf("Failed to initialize lisp environment: %v", lerr)
+	err := lisp.GoError(lisp.InitializeUserEnv(env))
+	if err != nil {
+		return nil, fmt.Errorf("Failed to initialize lisp environment: %v", err)
 	}
 	env.InPackage(lisp.String(lisp.DefaultUserPackage))
 	env.Reader = parser.NewReader()
@@ -38,13 +38,13 @@ func (r *Runner) NewEnv() (*lisp.LEnv, error) {
 	if loader == nil {
 		loader = lisplib.LoadLibrary
 	}
-	lerr = loader(env)
-	if lerr.Type == lisp.LError {
-		return nil, fmt.Errorf("Failed to load package library: %v", lerr)
+	err = lisp.GoError(loader(env))
+	if err != nil {
+		return nil, fmt.Errorf("Failed to load package library: %v", err)
 	}
-	lerr = env.InPackage(lisp.String(lisp.DefaultUserPackage))
-	if lerr.Type == lisp.LError {
-		return nil, fmt.Errorf("Failed to switch into user package: %v", lerr)
+	err = lisp.GoError(env.InPackage(lisp.String(lisp.DefaultUserPackage)))
+	if err != nil {
+		return nil, fmt.Errorf("Failed to switch into user package: %v", err)
 	}
 
 	return env, nil
@@ -56,14 +56,10 @@ func (r *Runner) LoadTests(t *testing.T, path string, source io.Reader) []string
 		t.Fatal(err.Error())
 	}
 
-	lerr := env.Load(filepath.Base(path), source)
-	if lerr.Type == lisp.LError {
-		t.Error(lerr.String())
-		if lerr.Stack != nil {
-			var buf bytes.Buffer
-			lerr.Stack.DebugPrint(&buf)
-			t.Error(buf.String())
-		}
+	err = lisp.GoError(env.Load(filepath.Base(path), source))
+	if err != nil {
+		r.LispError(t, err)
+		t.FailNow()
 	}
 	suite := libtesting.EnvTestSuite(env)
 	if suite == nil {
@@ -86,17 +82,9 @@ func (r *Runner) RunTest(t *testing.T, i int, path string, source io.Reader) {
 		return
 	}
 
-	lerr := env.Load(filepath.Base(path), source)
-	if lerr.Type == lisp.LError {
-		if lerr.Stack != nil {
-			var buf bytes.Buffer
-			buf.WriteString(lerr.String())
-			buf.WriteString("\n")
-			lerr.Stack.DebugPrint(&buf)
-			t.Error(buf.String())
-		} else {
-			t.Error(lerr.String())
-		}
+	err = lisp.GoError(env.Load(filepath.Base(path), source))
+	if err != nil {
+		r.LispError(t, err)
 		return
 	}
 	if r.Teardown != nil {
@@ -108,17 +96,9 @@ func (r *Runner) RunTest(t *testing.T, i int, path string, source io.Reader) {
 		return
 	}
 	ltest := suite.Test(i)
-	lerr = env.Eval(lisp.SExpr([]*lisp.LVal{ltest.Fun}))
-	if lerr.Type == lisp.LError {
-		if lerr.Stack != nil {
-			var buf bytes.Buffer
-			buf.WriteString(lerr.String())
-			buf.WriteString("\n")
-			lerr.Stack.DebugPrint(&buf)
-			t.Error(buf.String())
-		} else {
-			t.Error(lerr.String())
-		}
+	err = lisp.GoError(env.Eval(lisp.SExpr([]*lisp.LVal{ltest.Fun})))
+	if err != nil {
+		r.LispError(t, err)
 		return
 	}
 }
@@ -148,6 +128,24 @@ func (r *Runner) RunTestFile(t *testing.T, path string) {
 			r.RunTest(t, i, path, bytes.NewReader(source))
 		})
 	}
+}
+
+func (r *Runner) LispError(t *testing.T, err error) {
+	lerr, ok := err.(*lisp.ErrorVal)
+	if !ok {
+		t.Error(err)
+		return
+	}
+	var buf bytes.Buffer
+	buf.WriteString(err.Error())
+	buf.WriteString("\n")
+	_, ioerr := lerr.WriteTrace(&buf)
+	if ioerr != nil {
+		t.Errorf("io error: %v", ioerr)
+		t.Error(err)
+		return
+	}
+	t.Error(buf.String())
 }
 
 // TestSequence is a sequence of lisp expressions which are evaluated sequentially

@@ -13,19 +13,22 @@ type ErrorVal LVal
 
 // Error implements the error interface.
 func (e *ErrorVal) Error() string {
-	return e.Str
-}
-
-// FullError returns a message that details where the function was created.
-func (e *ErrorVal) FullError() string {
 	if e.Stack == nil {
 		return e.Str
 	}
-	top := e.Stack.Top()
-	if top == nil {
+	if e.Stack.Top() == nil {
 		return e.Str
 	}
-	return fmt.Sprintf("%s: %s", top.Name, e.Str)
+	return fmt.Sprintf("%s: %s", e.FunName(), e.Str)
+}
+
+func (e *ErrorVal) FunName() string {
+	return e.Stack.Top().QualifiedFunName(DefaultUserPackage)
+}
+
+// ErrorMessage returns the underlying message in the error.
+func (e *ErrorVal) ErrorMessage() string {
+	return e.Str
 }
 
 // WriteTrace writes the error and a stack trace to w
@@ -38,7 +41,7 @@ func (e *ErrorVal) WriteTrace(w io.Writer) (int, error) {
 		err = _err
 		return err == nil
 	}
-	if !wrote(bw.WriteString(e.FullError())) {
+	if !wrote(bw.WriteString(e.Error())) {
 		return n, err
 	}
 	if !wrote(bw.WriteString("\n")) {

@@ -19,6 +19,32 @@ type CallFrame struct {
 	Terminal bool
 }
 
+// QualifiedFunName returns the qualified name for the function on the top of
+// the stack.  If ignore is non-empty QualifiedFunName returns unqualified
+// names for functions in the given packages.
+func (f *CallFrame) QualifiedFunName(ignore ...string) string {
+	if f == nil {
+		return ""
+	}
+	name := f.Name
+	if f.Name == "" {
+		name = f.FID
+	}
+	if f.Package == "" {
+		return name
+	}
+	for _, pkg := range ignore {
+		if pkg == f.Package {
+			return name
+		}
+	}
+	var buf bytes.Buffer
+	buf.WriteString(f.Package)
+	buf.WriteString(":")
+	buf.WriteString(name)
+	return buf.String()
+}
+
 // Copy creates a copy of the current stack so that it can be attach to a
 // runtime error.
 func (s *CallStack) Copy() *CallStack {

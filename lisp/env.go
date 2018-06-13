@@ -378,6 +378,7 @@ func (env *LEnv) Error(msg ...interface{}) *LVal {
 		Type:  LError,
 		Str:   fullMsg,
 		Stack: env.Stack.Copy(),
+		Cells: []*LVal{Symbol("error")},
 	}
 }
 
@@ -388,6 +389,7 @@ func (env *LEnv) Errorf(format string, v ...interface{}) *LVal {
 		Type:  LError,
 		Str:   fmt.Sprintf(format, v...),
 		Stack: env.Stack.Copy(),
+		Cells: []*LVal{Symbol("error")},
 	}
 }
 
