@@ -137,8 +137,6 @@ func (r *Runner) LispError(t *testing.T, err error) {
 		return
 	}
 	var buf bytes.Buffer
-	buf.WriteString(err.Error())
-	buf.WriteString("\n")
 	_, ioerr := lerr.WriteTrace(&buf)
 	if ioerr != nil {
 		t.Errorf("io error: %v", ioerr)
