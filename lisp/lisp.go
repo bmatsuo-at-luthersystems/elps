@@ -356,7 +356,16 @@ func markMacExpand(expr *LVal) *LVal {
 
 // Len returns the length of the list v.
 func (v *LVal) Len() int {
-	return len(v.Cells)
+	switch v.Type {
+	case LString:
+		return len(v.Str)
+	case LBytes:
+		return len(v.Bytes)
+	case LSExpr:
+		return len(v.Cells)
+	default:
+		return -1
+	}
 }
 
 // MapKeys returns a list of keys in the map.  MapKeys panics if v.Type is not

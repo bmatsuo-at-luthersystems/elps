@@ -853,11 +853,12 @@ func builtinList(env *LEnv, v *LVal) *LVal {
 }
 
 func builtinLength(env *LEnv, args *LVal) *LVal {
-	lis := args.Cells[0]
-	if lis.Type != LSExpr {
-		return env.Errorf("first argument is not a list: %v", lis.Type)
+	seq := args.Cells[0]
+	n := seq.Len()
+	if n < 0 {
+		return env.Errorf("first argument is not a list, bytes, or a string: %v", seq.Type)
 	}
-	return Int(lis.Len())
+	return Int(n)
 }
 
 func builtinCons(env *LEnv, args *LVal) *LVal {
