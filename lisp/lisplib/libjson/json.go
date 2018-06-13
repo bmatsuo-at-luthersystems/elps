@@ -1,9 +1,11 @@
 package libjson
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"sort"
 
 	"bitbucket.org/luthersystems/elps/lisp"
 	"bitbucket.org/luthersystems/elps/lisp/lisplib/internal/libutil"
@@ -273,11 +275,11 @@ func (s *Serializer) GoSlice(v *lisp.LVal) ([]interface{}, bool) {
 // GoMap converts an LSortMap to its Go equivalent and returns it with a true
 // second argument.  If v does not represent a map json serializable map GoMap
 // returns a false second argument
-func (s *Serializer) GoMap(v *lisp.LVal) (map[string]interface{}, bool) {
+func (s *Serializer) GoMap(v *lisp.LVal) (SortedMap, bool) {
 	if v.Type != lisp.LSortMap {
 		return nil, false
 	}
-	m := make(map[string]interface{}, len(v.Map))
+	m := make(SortedMap, len(v.Map))
 	for k, vlisp := range v.Map {
 		vgo := s.GoValue(vlisp)
 		kreflect := reflect.ValueOf(k)
@@ -290,4 +292,34 @@ func (s *Serializer) GoMap(v *lisp.LVal) (map[string]interface{}, bool) {
 		}
 	}
 	return m, true
+}
+
+type SortedMap map[string]interface{}
+
+func (m SortedMap) MarshalJSON() ([]byte, error) {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var buf bytes.Buffer
+	buf.WriteString("{")
+	for i, k := range keys {
+		b, err := json.Marshal(k)
+		if err != nil {
+			return nil, err
+		}
+		buf.Write(b)
+		buf.WriteString(":")
+		b, err = json.Marshal(m[k])
+		if err != nil {
+			return nil, err
+		}
+		buf.Write(b)
+		if i < len(keys)-1 {
+			buf.WriteString(",")
+		}
+	}
+	buf.WriteString("}")
+	return buf.Bytes(), nil
 }
