@@ -41,6 +41,7 @@ func (fun *langBuiltin) Eval(env *LEnv, args *LVal) *LVal {
 var userBuiltins []*langBuiltin
 var langBuiltins = []*langBuiltin{
 	{"load-string", Formals("source-code"), builtinLoadString},
+	{"load-bytes", Formals("source-code"), builtinLoadBytes},
 	{"in-package", Formals("package-name"), builtinInPackage},
 	{"use-package", Formals(VarArgSymbol, "package-name"), builtinUsePackage},
 	{"export", Formals(VarArgSymbol, "symbol"), builtinExport},
@@ -85,6 +86,8 @@ var langBuiltins = []*langBuiltin{
 	{"cons", Formals("head", "tail"), builtinCons},
 	{"not", Formals("expr"), builtinNot},
 	{"nil?", Formals("expr"), builtinIsNil},
+	{"list?", Formals("expr"), builtinIsList},
+	{"sorted-map?", Formals("expr"), builtinIsSortedMap},
 	{"string?", Formals("expr"), builtinIsString},
 	{"equal?", Formals("a", "b"), builtinEqual},
 	{"all?", Formals("predicate", "list"), builtinAllP},
@@ -132,11 +135,19 @@ func DefaultBuiltins() []LBuiltinDef {
 }
 
 func builtinLoadString(env *LEnv, args *LVal) *LVal {
-	if args.Cells[0].Type != LString {
-		return env.Errorf("first argument is not a string: %v", args.Cells[0].Type)
+	source := args.Cells[0]
+	if source.Type != LString {
+		return env.Errorf("first argument is not a string: %v", source.Type)
 	}
-	source := args.Cells[0].Str
-	return env.root().LoadString("load-string", source)
+	return env.root().LoadString("load-string", source.Str)
+}
+
+func builtinLoadBytes(env *LEnv, args *LVal) *LVal {
+	source := args.Cells[0]
+	if source.Type != LBytes {
+		return env.Errorf("first argument is not bytes: %v", source.Type)
+	}
+	return env.root().Load("load-bytes", bytes.NewReader(source.Bytes))
 }
 
 func builtinInPackage(env *LEnv, args *LVal) *LVal {
@@ -309,7 +320,7 @@ func builtinSecond(env *LEnv, args *LVal) *LVal {
 	if list.Type != LSExpr {
 		return env.Errorf("argument is not a list: %v", list.Type)
 	}
-	if len(list.Cells) < 1 {
+	if len(list.Cells) < 2 {
 		return Nil()
 	}
 	return list.Cells[1]
@@ -887,6 +898,16 @@ func builtinIsNil(env *LEnv, args *LVal) *LVal {
 		return Symbol("t")
 	}
 	return Nil()
+}
+
+func builtinIsList(env *LEnv, args *LVal) *LVal {
+	v := args.Cells[0]
+	return Bool(v.Type == LSExpr)
+}
+
+func builtinIsSortedMap(env *LEnv, args *LVal) *LVal {
+	v := args.Cells[0]
+	return Bool(v.Type == LSortMap)
 }
 
 func builtinIsString(env *LEnv, args *LVal) *LVal {

@@ -6,6 +6,13 @@ import (
 
 func TestEval(t *testing.T) {
 	tests := TestSuite{
+		{"raw strings", TestSequence{
+			{`"""a raw string"""`, `"a raw string"`},
+			{`"""a raw
+string"""`, `"a raw\nstring"`},
+			{`"""""a raw
+string"""`, `"\"\"a raw\nstring"`},
+		}},
 		{"quotes", TestSequence{
 			{"3", "3"},
 			// a single quote on a self-evaluating expression does not show up.

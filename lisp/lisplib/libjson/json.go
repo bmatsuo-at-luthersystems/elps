@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"log"
 	"reflect"
 	"sort"
 
@@ -197,6 +198,8 @@ func (s *Serializer) GoValue(v *lisp.LVal) interface{} {
 			}
 		}
 		return v.Str
+	case lisp.LBytes:
+		return v.Bytes
 	case lisp.LInt:
 		return v.Int
 	case lisp.LFloat:
@@ -321,6 +324,7 @@ func (m SortedMap) MarshalJSON() ([]byte, error) {
 		buf.WriteString(":")
 		b, err = json.Marshal(m[k])
 		if err != nil {
+			log.Printf("bad value: %#v", m[k])
 			return nil, err
 		}
 		buf.Write(b)

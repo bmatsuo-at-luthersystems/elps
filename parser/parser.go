@@ -109,6 +109,7 @@ func newParsecParser() parsec.Parser {
 	openB := parsec.Atom("[", "OPENB")
 	closeB := parsec.Atom("]", "CLOSEB")
 	q := parsec.Atom("'", "QUOTE")
+	rawstring := parsec.Token(`"""(?:[^"]|"[^"]|""[^"])*"""`, "RAWSTRING")
 	comment := parsec.Token(`;([^\n]*[^\s])?`, "COMMENT")
 	decimal := parsec.Token(`[+-]?[0-9]+([.][0-9]+)?([eE][+-]?[0-9]+)?`, "DECIMAL")
 	//symbol := parsec.Token(`[^\s()']+`, "SYMBOL")
@@ -116,6 +117,7 @@ func newParsecParser() parsec.Parser {
 	symbol := parsec.Token(`(?:(?:\pL|[._+\-*/\=<>!&~%?$])(?:\pL|[0-9]|[._+\-*/\=<>!&~%?$])*[:])?(?:\pL|[._+\-*/\=<>!&~%?$])(?:\pL|[0-9]|[._+\-*/\=<>!&~%?$])*`, "SYMBOL")
 	//qsymbol := parsec.And(nil, q, symbol)
 	term := parsec.OrdChoice(astNode(nodeTerm), // terminal token
+		rawstring,
 		parsec.String(),
 		decimal,
 		symbol, // symbol comes last because it swallows anything
@@ -156,6 +158,12 @@ func newAST(typ nodeType, nodes []parsec.ParsecNode) parsec.ParsecNode {
 			lval = lisp.String(unquoteString(term))
 		case *parsec.Terminal:
 			switch term.Name {
+			case "RAWSTRING":
+				raw := term.Value
+				if len(raw) < 6 {
+					return lisp.Errorf("invalid raw string syntax")
+				}
+				return lisp.String(raw[3 : len(raw)-3])
 			case "DECIMAL":
 				if strings.ContainsAny(term.Value, ".eE") {
 					f, err := strconv.ParseFloat(term.Value, 64)
