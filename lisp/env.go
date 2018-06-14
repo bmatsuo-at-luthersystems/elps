@@ -482,16 +482,25 @@ func (env *LEnv) EvalSExpr(s *LVal) *LVal {
 	npop := env.Stack.TerminalFID(f.FID)
 	// Push onto the stack here so that we don't trigger tail recursion while
 	// evaluating the arguments to f -- f has to be the recursive call, if
-	// there is recursion at all.
+	// there is to be recursion optimization at all.
+	//
+	// BUG:  Because the function stack frame is pushed here any errors
+	// encountered during argument expression evalutation will appear to happen
+	// inside the function when looking at error messages and stack dumps.
+	//
+	// TODO:  Instead of pushing the function stack frame here we should push a
+	// frame marker that prevents tail recursion optimization beyond this point
+	// on the stack.  When the stack is dumped markers can be filtered out to
+	// produce a clean stack.
 	env.Stack.PushFID(f.FID, f.Package, env.GetFunName(f))
 	defer env.Stack.Pop()
 
 	if f.IsSpecialFun() {
-		// Argument to a macro a not evaluated but they aren't quoted either.
-		// This behavior is what allows ``unquote'' to properly resolve macro
-		// argument symbols during and still produce valid code during macro
-		// expansion.  That is, if x is a macro argument then what do the
-		// following expressions return?
+		// Arguments to a macro are not evaluated but they aren't quoted
+		// either.  This behavior is what allows ``unquote'' to properly
+		// resolve macro argument symbols during and still produce valid code
+		// during macro expansion.  That is, if x is a macro argument then what
+		// do the following expressions return?
 		//		(quasiquote (unquote x))             	  => {expression bound to x}
 		//		(quasiquote (unquote '(if 1 '(1) '(2))))  => '(1)
 		// If the value given to x was quoted by eval then ``unquote'' would
@@ -590,7 +599,7 @@ func (env *LEnv) Call(fun *LVal, args *LVal) *LVal {
 		argSym := formals.Cells[0]
 		if argSym.Str == VarArgSymbol {
 			if len(formals.Cells) == 1 {
-				return env.Errorf("%s: function argument format list ends with symbol ``%s''", fun.FID, VarArgSymbol)
+				return env.Errorf("%s: function formal argument list ends with symbol ``%s''", fun.FID, VarArgSymbol)
 			}
 			argSym = formals.Cells[1]
 			q := QExpr(args.Cells[i:])
@@ -608,7 +617,7 @@ func (env *LEnv) Call(fun *LVal, args *LVal) *LVal {
 			return fun
 		}
 		if len(formals.Cells) != 2 {
-			return env.Errorf("function argument format list ends with symbol ``%s''", VarArgSymbol)
+			return env.Errorf("function formal argument list ends with symbol ``%s''", VarArgSymbol)
 		}
 		// We never bound the final argument to a value so we do it here.
 		putVarArg(formals.Cells[1], Nil())
