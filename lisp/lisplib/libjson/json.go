@@ -14,9 +14,9 @@ import (
 
 func init() {
 	DefaultSerializer = &Serializer{
-		True:  lisp.Symbol("json:true"),
-		False: lisp.Symbol("json:false"),
-		Null:  lisp.Symbol("json:null"),
+		//True:  lisp.Symbol("json:true"),
+		//False: lisp.Symbol("json:false"),
+		Null: lisp.Symbol("json:null"),
 	}
 }
 
@@ -35,8 +35,8 @@ func LoadPackage(env *lisp.LEnv) *lisp.LVal {
 		return e
 	}
 	env.PutGlobal(lisp.Symbol("null"), lisp.Symbol("json:null"))
-	env.PutGlobal(lisp.Symbol("true"), lisp.Symbol("json:true"))
-	env.PutGlobal(lisp.Symbol("false"), lisp.Symbol("json:false"))
+	//env.PutGlobal(lisp.Symbol("true"), lisp.Symbol("json:true"))
+	//env.PutGlobal(lisp.Symbol("false"), lisp.Symbol("json:false"))
 	for _, fn := range Builtins(DefaultSerializer) {
 		env.AddBuiltins(true, fn)
 	}
@@ -91,10 +91,7 @@ func (s *Serializer) loadInterface(x interface{}) *lisp.LVal {
 	}
 	switch x := x.(type) {
 	case bool:
-		if x {
-			return lisp.Symbol("t")
-		}
-		return lisp.Nil()
+		return lisp.Bool(x)
 	case string:
 		return lisp.String(x)
 	case float64:
@@ -187,11 +184,9 @@ func (s *Serializer) GoValue(v *lisp.LVal) interface{} {
 	case lisp.LSymbol, lisp.LString:
 		if v.Type == lisp.LSymbol {
 			switch v.Str {
-			case "t":
+			case "true":
 				return true
-			case s.True.Str:
-				return true
-			case s.False.Str:
+			case "false":
 				return false
 			case s.Null.Str:
 				return nil

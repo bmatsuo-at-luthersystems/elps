@@ -615,7 +615,7 @@ func builtinSort(env *LEnv, args *LVal) *LVal {
 			sortErr = ok
 			return false
 		}
-		return !ok.IsNil()
+		return True(ok)
 	})
 	if !sortErr.IsNil() {
 		return sortErr
@@ -733,7 +733,7 @@ func builtinSelect(env *LEnv, args *LVal) *LVal {
 		if ok.Type == LError {
 			return ok
 		}
-		if !ok.IsNil() {
+		if True(ok) {
 			out.Cells = append(out.Cells, v)
 		}
 	}
@@ -755,7 +755,7 @@ func builtinReject(env *LEnv, args *LVal) *LVal {
 		if ok.Type == LError {
 			return ok
 		}
-		if ok.IsNil() {
+		if !True(ok) {
 			out.Cells = append(out.Cells, v)
 		}
 	}
@@ -882,22 +882,15 @@ func builtinCons(env *LEnv, args *LVal) *LVal {
 }
 
 func builtinNot(env *LEnv, v *LVal) *LVal {
-	switch v.Cells[0].Type {
-	case LSExpr:
-		if len(v.Cells[0].Cells) == 0 {
-			// v.Cells[0] is nil
-			return Symbol("t")
-		}
-	}
-	return Nil()
+	return Bool(Not(v.Cells[0]))
 }
 
 func builtinIsNil(env *LEnv, args *LVal) *LVal {
 	v := args.Cells[0]
 	if v.IsNil() {
-		return Symbol("t")
+		return Bool(true)
 	}
-	return Nil()
+	return Bool(false)
 }
 
 func builtinIsList(env *LEnv, args *LVal) *LVal {
@@ -934,11 +927,11 @@ func builtinAllP(env *LEnv, args *LVal) *LVal {
 		if ok.Type == LError {
 			return ok
 		}
-		if ok.IsNil() {
-			return Nil()
+		if !True(ok) {
+			return Bool(false)
 		}
 	}
-	return Symbol("t")
+	return Bool(true)
 }
 
 func builtinAnyP(env *LEnv, args *LVal) *LVal {
@@ -955,11 +948,11 @@ func builtinAnyP(env *LEnv, args *LVal) *LVal {
 		if ok.Type == LError {
 			return ok
 		}
-		if !ok.IsNil() {
-			return Symbol("t")
+		if True(ok) {
+			return ok
 		}
 	}
-	return Nil()
+	return Bool(false)
 }
 
 func builtinMax(env *LEnv, args *LVal) *LVal {

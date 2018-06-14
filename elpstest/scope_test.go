@@ -18,7 +18,8 @@ func TestScope(t *testing.T) {
 		{"special operators", TestSequence{
 			{"(let ((x 1) (y 2)) (if x (+ x y) y))", "3"},
 			{`(let ((x 1) (y 2))
-				(cond ((< y 0) y)
+				(cond
+					((< y 0) y)
 					(else x)))`, "1"},
 		}},
 		{"docs", TestSequence{

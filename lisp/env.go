@@ -38,7 +38,7 @@ func InitializeUserEnv(env *LEnv) *LVal {
 	env.AddBuiltins(true)
 	env.Registry.DefinePackage(DefaultUserPackage)
 	rc := env.InPackage(Symbol(DefaultUserPackage))
-	if !rc.IsNil() {
+	if GoError(rc) != nil {
 		return rc
 	}
 	return env.UsePackage(Symbol(env.Registry.Lang))
@@ -183,8 +183,11 @@ func (env *LEnv) get(k *LVal) *LVal {
 	if k.Type != LSymbol && k.Type != LQSymbol {
 		return Nil()
 	}
-	if k.Str == "t" {
-		return Symbol("t")
+	if k.Str == "true" {
+		return Symbol("true")
+	}
+	if k.Str == "false" {
+		return Symbol("false")
 	}
 	v, ok := env.Scope[k.Str]
 	if ok {
@@ -231,7 +234,10 @@ func (env *LEnv) Put(k, v *LVal) {
 	if k.Type != LSymbol && k.Type != LQSymbol {
 		return
 	}
-	if k.Str == "t" {
+	if k.Str == "true" {
+		panic("constant value")
+	}
+	if k.Str == "false" {
 		panic("constant value")
 	}
 	if v == nil {

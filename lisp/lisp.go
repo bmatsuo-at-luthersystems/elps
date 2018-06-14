@@ -133,9 +133,9 @@ func Value(v interface{}) *LVal {
 // Bool returns an LVal with truthiness identical to b.
 func Bool(b bool) *LVal {
 	if b {
-		return Symbol("t")
+		return Symbol("true")
 	}
-	return Nil()
+	return Symbol("false")
 }
 
 // Int returns an LVal representing the number x.
@@ -458,7 +458,7 @@ func (v *LVal) IsNumeric() bool {
 // BUG:  sorted-map comparison is not implemented
 func (v *LVal) Equal(other *LVal) *LVal {
 	if v.Type != other.Type {
-		return Nil()
+		return Bool(false)
 	}
 	if v.IsNumeric() {
 		return v.equalNum(other)
@@ -468,22 +468,22 @@ func (v *LVal) Equal(other *LVal) *LVal {
 		return Bool(v.Str == other.Str)
 	case LSExpr:
 		if v.Len() != other.Len() {
-			return Nil()
+			return Bool(false)
 		}
 		for i := range v.Cells {
 			if !True(v.Cells[i].Equal(other.Cells[i])) {
-				return Nil()
+				return Bool(false)
 			}
 		}
-		return Symbol("t")
+		return Bool(true)
 	case LSortMap:
 		if len(v.Map) != len(other.Map) {
-			return Nil()
+			return Bool(false)
 		}
 
-		return Nil()
+		return Bool(false)
 	}
-	return Nil()
+	return Bool(false)
 }
 
 func (v *LVal) EqualNum(other *LVal) *LVal {

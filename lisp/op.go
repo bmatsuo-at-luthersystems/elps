@@ -383,7 +383,7 @@ func opCond(env *LEnv, args *LVal) *LVal {
 		if test.Type == LError {
 			return test
 		}
-		if test.IsNil() {
+		if Not(test) {
 			continue
 		}
 		branch.Cells[1].Terminal = true
@@ -401,8 +401,7 @@ func opIf(env *LEnv, s *LVal) *LVal {
 	if r.Type == LError {
 		return r
 	}
-	ok := r.IsNil()
-	if ok {
+	if Not(r) {
 		// test-form evaluated to nil (false)
 		s.Cells[2].Terminal = true
 		return env.Eval(s.Cells[2])

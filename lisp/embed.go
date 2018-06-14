@@ -4,12 +4,18 @@ package lisp
 //
 // NOTE:  I don't like this name, really.  But I can't think of a better one.
 func True(v *LVal) bool {
-	return !v.IsNil()
+	if v.IsNil() {
+		return false
+	}
+	if v.Type != LSymbol {
+		return true
+	}
+	return v.Str != "false"
 }
 
 // Not interprets v as a boolean value and returns its negation.
 func Not(v *LVal) bool {
-	return v.IsNil()
+	return !True(v)
 }
 
 // GoValue converts v to its natural representation in Go.  Quotes are ignored

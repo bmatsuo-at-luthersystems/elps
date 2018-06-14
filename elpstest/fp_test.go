@@ -19,7 +19,7 @@ func TestFP(t *testing.T) {
 		}},
 		{"flip", TestSequence{
 			{"((flip +) 1 2)", "3"},
-			{"((flip <) 1 2)", "()"},
+			{"((flip <) 1 2)", "false"},
 			{"(((flip cons) '(2 3)) 1)", "'(1 2 3)"},
 		}},
 		{"zip", TestSequence{

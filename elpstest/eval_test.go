@@ -22,8 +22,10 @@ string"""`, `"\"\"a raw\nstring"`},
 		}},
 		{"symbols", TestSequence{
 			{"()", "()"},
-			{"'t", "'t"},
-			{"t", "t"},
+			{"'true", "'true"},
+			{"true", "true"},
+			{"'false", "'false"},
+			{"false", "false"},
 			// A bit brittle, but it's ok for now. Replace with a more robust
 			// test later if problematic.
 			{"a", "unbound symbol: a"},

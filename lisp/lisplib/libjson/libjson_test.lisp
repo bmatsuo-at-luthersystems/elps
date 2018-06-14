@@ -2,7 +2,8 @@
 
 (test "mashal"
     (assert (string= """null""" (json:dump-string ())))
-    (assert (string= """true""" (json:dump-string t)))
+    (assert (string= """true""" (json:dump-string true)))
+    (assert (string= """false""" (json:dump-string false)))
     (assert (string= """12""" (json:dump-string 12)))
     (assert (string= """[1,2]""" (json:dump-string '(1 2))))
     (assert (string= """[1,2]""" (json:dump-string [1 2])))
