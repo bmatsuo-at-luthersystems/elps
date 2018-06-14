@@ -204,6 +204,8 @@ func (s *Serializer) GoValue(v *lisp.LVal) interface{} {
 		return v.Int
 	case lisp.LFloat:
 		return v.Float
+	case lisp.LNative:
+		return v.Native
 	case lisp.LQuote:
 		return s.GoValue(v.Cells[0])
 	case lisp.LSExpr:
