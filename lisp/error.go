@@ -22,6 +22,8 @@ func (e *ErrorVal) Error() string {
 	return fmt.Sprintf("%s: %s", e.FunName(), e.Str)
 }
 
+// FunName returns the qualified name of function on the top of the call stack
+// when the error occurred.
 func (e *ErrorVal) FunName() string {
 	return e.Stack.Top().QualifiedFunName(DefaultUserPackage)
 }

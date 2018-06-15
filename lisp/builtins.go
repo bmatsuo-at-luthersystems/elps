@@ -52,7 +52,7 @@ var langBuiltins = []*langBuiltin{
 	{"to-int", Formals("value"), builtinToInt},
 	{"to-float", Formals("value"), builtinToFloat},
 	{"eval", Formals("expr"), builtinEval},
-	{"error", Formals(VarArgSymbol, "args"), builtinError},
+	{"error", Formals("condition", VarArgSymbol, "args"), builtinError},
 	{"car", Formals("lis"), builtinCAR},
 	{"cdr", Formals("lis"), builtinCDR},
 	{"first", Formals("seq"), builtinFirst},
@@ -218,19 +218,29 @@ func builtinIdentity(env *LEnv, args *LVal) *LVal {
 
 func builtinToString(env *LEnv, args *LVal) *LVal {
 	val := args.Cells[0]
+	s, err := toString(val)
+	if err != nil {
+		return env.Error(err)
+	}
+	return String(s)
+}
+
+func toString(val *LVal) (string, error) {
 	switch val.Type {
 	case LString:
-		return val
+		return val.Str, nil
 	case LSymbol:
-		return String(val.Str)
+		return val.Str, nil
 	case LBytes:
-		return String(string(val.Bytes))
+		return string(val.Bytes), nil
 	case LInt:
-		return String(strconv.Itoa(val.Int))
+		i := strconv.Itoa(val.Int)
+		return i, nil
 	case LFloat:
-		return String(strconv.FormatFloat(val.Float, 'g', -1, 64))
+		f := strconv.FormatFloat(val.Float, 'g', -1, 64)
+		return f, nil
 	default:
-		return env.Errorf("cannot convert type to string: %v", val.Type)
+		return "", fmt.Errorf("cannot convert type to string: %v", val.Type)
 	}
 }
 
@@ -280,11 +290,16 @@ func builtinEval(env *LEnv, args *LVal) *LVal {
 }
 
 func builtinError(env *LEnv, args *LVal) *LVal {
-	iargs := make([]interface{}, args.Len())
-	for i, arg := range args.Cells {
+	condition, rest := args.Cells[0], args.Cells[1:]
+	if condition.Type != LSymbol {
+		return env.Errorf("condition type is not a symbol: %v", condition.Type)
+	}
+
+	iargs := make([]interface{}, len(rest))
+	for i, arg := range rest {
 		iargs[i] = arg
 	}
-	return env.Error(iargs...)
+	return env.ErrorCondition(condition.Str, iargs...)
 }
 
 func builtinCAR(env *LEnv, v *LVal) *LVal {

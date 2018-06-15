@@ -349,14 +349,33 @@ func (env *LEnv) AddBuiltins(external bool, funs ...LBuiltinDef) {
 }
 
 // Error returns an LError value with an error message given by rendering msg.
+//
 // Error may be called either with an error or with any number of *LVal values.
 // It is invalid to pass an error argument with any other values and doing so
-// will result in a runtime panic.  The returned LVal contains a copy
+// will result in a runtime panic.
+//
+// Unlike the exported function, the Error method returns LVal with a copy
 // env.Stack.
 func (env *LEnv) Error(msg ...interface{}) *LVal {
+	return env.ErrorCondition("error", msg...)
+}
+
+// ErrorCondition returns an LError the given condition type and an error
+// message computed by rendering msg.
+//
+// ErrorCondition may be called either with an error or with any number of
+// *LVal values.  It is invalid to pass ErrorCondition an error argument with
+// any other values and doing so will result in a runtime panic.
+//
+// Unlike the exported function, the ErrorCondition method returns an LVal with
+// a copy env.Stack.
+func (env *LEnv) ErrorCondition(condition string, v ...interface{}) *LVal {
+	//log.Printf("stack %v", env.Stack.Copy())
+
+	narg := len(v)
 	fullMsg := ""
 	var buf bytes.Buffer
-	for i, v := range msg {
+	for i, v := range v {
 		switch v := v.(type) {
 		case *LVal:
 			if i > 0 {
@@ -368,34 +387,49 @@ func (env *LEnv) Error(msg ...interface{}) *LVal {
 				buf.WriteString(v.String())
 			}
 		case error:
-			if len(msg) > 1 {
+			if narg > 1 {
 				panic("invalid error argument")
 			}
-			// TODO:  Add somewhere to store the original error so that the embedding
-			// program can potentially pick it out and inspect it.
-			fullMsg = v.Error()
+			return &LVal{
+				Type:  LError,
+				Str:   condition,
+				Stack: env.Stack.Copy(),
+				Cells: []*LVal{Native(v)},
+			}
+		default:
+			fmt.Fprint(&buf, v)
 		}
 	}
 	if fullMsg == "" {
 		fullMsg = buf.String()
 	}
-	//log.Printf("stack %v", env.Stack.Copy())
 	return &LVal{
 		Type:  LError,
-		Str:   fullMsg,
+		Str:   condition,
 		Stack: env.Stack.Copy(),
-		Cells: []*LVal{Symbol("error")},
+		Cells: []*LVal{String(fullMsg)},
 	}
 }
 
-// Errorf returns an LError value with a formatted error message.  The returned
-// LVal contains a copy env.Stack.
+// Errorf returns an LError value with a formatted error message.
+//
+// Unlike the exported function, the Errorf method returns an LVal with a copy
+// env.Stack.
 func (env *LEnv) Errorf(format string, v ...interface{}) *LVal {
+	return env.ErrorConditionf("error", format, v...)
+}
+
+// ErrorConditionf returns an LError value with the given condition type and a
+// a formatted error message rendered using fmt.Sprintf.
+//
+// Unlike the exported function, the ErrorConditionf method returns an LVal
+// with a copy env.Stack.
+func (env *LEnv) ErrorConditionf(condition string, format string, v ...interface{}) *LVal {
 	return &LVal{
 		Type:  LError,
-		Str:   fmt.Sprintf(format, v...),
+		Str:   condition,
 		Stack: env.Stack.Copy(),
-		Cells: []*LVal{Symbol("error")},
+		Cells: []*LVal{String(fmt.Sprintf(format, v...))},
 	}
 }
 

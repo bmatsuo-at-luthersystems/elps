@@ -325,31 +325,59 @@ func Lambda(formals *LVal, body []*LVal) *LVal {
 	}
 }
 
-// Error returns an LVal representing the error corresponding to err.  Errors
-// store their message in the Str field and their type in their Cells[0].
+// Error returns an LError representing err.  Errors store their message in
+// Cells and their condition type in Str.  The error condition type must be a
+// valid lisp symbol.
+//
 // Errors generated during expression evaluation typically have a non-nil Stack
 // field.  The Env.Error() method is typically the preferred method for
-// creating error LVal objects.
+// creating error LVal objects because it initializes Stack with an appropriate
+// value.
 func Error(err error) *LVal {
-	// TODO:  Consider storing the original error in the Native field so that
-	// the embedding program can extract it verbatim..
+	return ErrorCondition("error", err)
+}
+
+// ErrorCondition returns an LError representing err and having the given
+// condition type.  Errors store their message/data in Cells and their
+// condition type in Str.  The condition type must be a valid lisp symbol.
+//
+// Errors generated during expression evaluation typically have a non-nil Stack
+// field.  The Env.Error() method is typically the preferred method for
+// creating error LVal objects because it initializes Stack with an appropriate
+// value.
+func ErrorCondition(condition string, err error) *LVal {
 	return &LVal{
 		Type:  LError,
-		Str:   err.Error(),
-		Cells: []*LVal{Symbol("error")},
+		Str:   condition,
+		Cells: []*LVal{Native(err)},
 	}
 }
 
-// Errorf returns an LVal representing with a formatted error message. Errors
-// store their message in the Str field and their type in their Cells[0].
+// Errorf returns an LError with a formatted error message. Errors store their
+// message in Cells and their condition type in Str. The condition type must be
+// a valid symbol.
+//
 // Errors generated during expression evaluation typically have a non-nil Stack
 // field.  The Env.Errorf() method is typically the preferred method for
-// creating formatted error LVal objects.
+// creating error LVal objects because it initializes Stack with an appropriate
+// value.
 func Errorf(format string, v ...interface{}) *LVal {
+	return ErrorConditionf("error", format, v...)
+}
+
+// ErrorConditionf returns an LError with a formatted error message. Errors
+// store their message in Cells and their condition type in Str. The condition
+// type must be a valid symbol.
+//
+// Errors generated during expression evaluation typically have a non-nil Stack
+// field.  The Env.ErrorConditionf() method is typically the preferred method
+// for creating error LVal objects because it initializes Stack with an
+// appropriate value.
+func ErrorConditionf(condition string, format string, v ...interface{}) *LVal {
 	return &LVal{
 		Type:  LError,
-		Str:   fmt.Sprintf(format, v...),
-		Cells: []*LVal{Symbol("error")},
+		Str:   condition,
+		Cells: []*LVal{String(fmt.Sprintf(format, v...))},
 	}
 }
 
@@ -667,7 +695,15 @@ func (v *LVal) str(onTheRecord bool) string {
 	case LBytes:
 		return quote + fmt.Sprint(v.Bytes)
 	case LError:
-		return quote + v.Str
+		if v.Quoted {
+			quote = QUOTE
+			return quote + fmt.Sprintf("(error '%s %v)", v.Str, v.Cells[0])
+		}
+		s, err := toString(v.Cells[0])
+		if err != nil {
+			return v.Cells[0].String()
+		}
+		return s
 	case LSymbol:
 		if v.Quoted {
 			quote = QUOTE
