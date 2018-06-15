@@ -215,16 +215,41 @@ probably not desired.
 
 ###Lists
 
-The only primative data structure is a list, a quoted s-expression.
+The most primative data structure is a list, a quoted s-expression.
 
-```
+```lisp
 '(1 2 3 4 "hello" ok)
 ```
 
 Lists can be nested (it is not necessary to quote inner lists).
 
-```
+```lisp
 '(1 2 (3 4 ()))
+```
+
+An empty list is equivalent to nil.
+
+```lisp
+(assert (nil? '()))
+```
+
+###Arrays
+
+Arrays are references to continuous memory ranges.  The most common kind of
+array is a vector -- a one dimensional array.  Zero dimensional arrays are a
+reference to a single value.
+
+```lisp
+(vector 1 2 3)
+```
+
+Generally, functions in the standard library allow the programmer to specify
+whether the output should be a vector or a list.
+
+```lisp
+(defun double (x) (* 2 x)
+(map 'vector double '(1 2 3))      ; evaluates to (vector 2 4 6)
+(map 'list double (vector 1 2 3))  ; evaluates to '(2 4 6)
 ```
 
 ###Sorted Maps
@@ -235,14 +260,14 @@ keys that are either symbols or strings.  Looking up values by key can be done
 with either a string or a symbol, regardless which type was used to insert/set
 the value originally.
 
-```
+```lisp
 (let ((m (sorted-map 'alice 0 'bob 1 'carol 2)))
     (get m "carol"))    ; evaluates to 2
 ```
 
 Maps are mutable values and can be updated with the `assoc!` function.
 
-```
+```lisp
 (let ((m (sorted-map 'alice 0 'bob 1)))
     (assoc! m 'carol 2)
     (get m 'carol))     ; evaluates to 2

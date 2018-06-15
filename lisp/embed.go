@@ -47,6 +47,18 @@ func GoValue(v *LVal) interface{} {
 	case LSortMap:
 		m, _ := GoMap(v)
 		return m
+	case LArray:
+		s, _ := GoSlice(SExpr(v.Cells[1:]))
+		switch v.Cells[0].Len() {
+		case 0:
+			return s[0]
+		case 1:
+			return s
+		default:
+			// TODO:  Slice up the backing storage s to create a multidimensional
+			// slice (e.g.  [][]interface{}).
+			return v
+		}
 	case LNative:
 		return v.Native
 	}

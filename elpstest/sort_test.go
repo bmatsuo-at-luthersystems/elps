@@ -24,11 +24,11 @@ func TestSort(t *testing.T) {
 		{"insert-sorted", TestSequence{
 			// inserting into sorted lists
 			{"(set 'lis '(1 2 3 4 5))", "'(1 2 3 4 5)"},
-			{"(insert-sorted lis < 2.5)", "'(1 2 2.5 3 4 5)"},
-			{"(insert-sorted lis < 2.5 identity)", "'(1 2 2.5 3 4 5)"},
+			{"(insert-sorted 'list lis < 2.5)", "'(1 2 2.5 3 4 5)"},
+			{"(insert-sorted 'list lis < 2.5 identity)", "'(1 2 2.5 3 4 5)"},
 			{"lis", "'(1 2 3 4 5)"},
 			{"(set 'lis '('(1 'a) '(2 'b) '(3 'c)))", "'('(1 'a) '(2 'b) '(3 'c))"},
-			{"(insert-sorted lis < '(2.5 'ba) first)", "'('(1 'a) '(2 'b) '(2.5 'ba) '(3 'c))"},
+			{"(insert-sorted 'list lis < '(2.5 'ba) first)", "'('(1 'a) '(2 'b) '(2.5 'ba) '(3 'c))"},
 		}},
 	}
 	RunTestSuite(t, tests)

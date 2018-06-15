@@ -55,12 +55,12 @@ var langBuiltins = []*langBuiltin{
 	{"error", Formals(VarArgSymbol, "args"), builtinError},
 	{"car", Formals("lis"), builtinCAR},
 	{"cdr", Formals("lis"), builtinCDR},
-	{"first", Formals("lis"), builtinFirst},
-	{"second", Formals("lis"), builtinSecond},
-	{"nth", Formals("lis", "n"), builtinNth},
-	{"map", Formals("fn", "lis"), builtinMap},
-	{"foldl", Formals("fn", "z", "lis"), builtinFoldLeft},
-	{"foldr", Formals("fn", "z", "lis"), builtinFoldRight},
+	{"first", Formals("seq"), builtinFirst},
+	{"second", Formals("seq"), builtinSecond},
+	{"nth", Formals("seq", "n"), builtinNth},
+	{"map", Formals("type-specifier", "fn", "seq"), builtinMap},
+	{"foldl", Formals("fn", "z", "seq"), builtinFoldLeft},
+	{"foldr", Formals("fn", "z", "seq"), builtinFoldRight},
 	{"compose", Formals("f", "g"), builtinCompose},
 	{"unpack", Formals("f", "lis"), builtinUnpack},
 	{"flip", Formals("binary-function"), builtinFlip},
@@ -69,18 +69,18 @@ var langBuiltins = []*langBuiltin{
 	{"get", Formals("map", "key", VarArgSymbol, "default"), builtinGet},
 	{"keys", Formals("map"), builtinKeys},
 	{"sorted-map", Formals(VarArgSymbol, "args"), builtinSortedMap},
-	{"concat", Formals(VarArgSymbol, "args"), builtinConcat},
-	{"insert-index", Formals("list", "index", "item"), builtinInsertIndex},
+	{"concat", Formals("type-specifier", VarArgSymbol, "args"), builtinConcat},
+	{"insert-index", Formals("type-specifier", "seq", "index", "item"), builtinInsertIndex},
 	{"sort", Formals("less-predicate", "list", VarArgSymbol, "key-fun"), builtinSort},
-	{"insert-sorted", Formals("list", "predicate", "item", VarArgSymbol, "key-fun"), builtinInsertSorted},
+	{"insert-sorted", Formals("type-specifier", "list", "predicate", "item", VarArgSymbol, "key-fun"), builtinInsertSorted},
 	{"search-sorted", Formals("n", "predicate"), builtinSearchSorted},
-	{"select", Formals("predicate", "list"), builtinSelect},
-	{"reject", Formals("predicate", "list"), builtinReject},
-	{"zip", Formals(VarArgSymbol, "lists"), builtinZip},
+	{"select", Formals("type-specifier", "predicate", "seq"), builtinSelect},
+	{"reject", Formals("type-specifier", "predicate", "seq"), builtinReject},
+	{"zip", Formals("type-specifier", "list", VarArgSymbol, "lists"), builtinZip},
 	{"make-sequence", Formals("start", "stop", VarArgSymbol, "step"), builtinMakeSequence},
 	{"format-string", Formals("format", VarArgSymbol, "values"), builtinFormatString},
-	{"reverse", Formals("lis"), builtinReverse},
-	{"slice", Formals("list", "start", "end"), builtinSlice},
+	{"reverse", Formals("type-specifier", "seq"), builtinReverse},
+	{"slice", Formals("type-specifier", "seq", "start", "end"), builtinSlice},
 	{"list", Formals(VarArgSymbol, "args"), builtinList},
 	{"vector", Formals(VarArgSymbol, "args"), builtinVector},
 	{"aref", Formals("a", VarArgSymbol, "indices"), builtinARef},
@@ -90,10 +90,12 @@ var langBuiltins = []*langBuiltin{
 	{"nil?", Formals("expr"), builtinIsNil},
 	{"list?", Formals("expr"), builtinIsList},
 	{"sorted-map?", Formals("expr"), builtinIsSortedMap},
+	{"array?", Formals("expr"), builtinIsArray},
+	{"vector?", Formals("expr"), builtinIsVector},
 	{"string?", Formals("expr"), builtinIsString},
 	{"equal?", Formals("a", "b"), builtinEqual},
-	{"all?", Formals("predicate", "list"), builtinAllP},
-	{"any?", Formals("predicate", "list"), builtinAnyP},
+	{"all?", Formals("predicate", "seq"), builtinAllP},
+	{"any?", Formals("predicate", "seq"), builtinAnyP},
 	{"max", Formals("real", VarArgSymbol, "rest"), builtinMax},
 	{"min", Formals("real", VarArgSymbol, "rest"), builtinMin},
 	{"string>=", Formals("a", "b"), builtinStringGEq},
@@ -308,58 +310,84 @@ func builtinCDR(env *LEnv, v *LVal) *LVal {
 
 func builtinFirst(env *LEnv, args *LVal) *LVal {
 	list := args.Cells[0]
-	if list.Type != LSExpr {
-		return env.Errorf("argument is not a list: %v", list.Type)
+	if !isSeq(list) {
+		return env.Errorf("argument is not a proper sequence: %v", list.Type)
 	}
-	if len(list.Cells) == 0 {
+	cells := seqCells(list)
+	if len(cells) == 0 {
 		return Nil()
 	}
-	return list.Cells[0]
+	return cells[0]
 }
 
 func builtinSecond(env *LEnv, args *LVal) *LVal {
 	list := args.Cells[0]
-	if list.Type != LSExpr {
-		return env.Errorf("argument is not a list: %v", list.Type)
+	if !isSeq(list) {
+		return env.Errorf("argument is not a proper sequence: %v", list.Type)
 	}
-	if len(list.Cells) < 2 {
+	cells := seqCells(list)
+	if len(cells) < 2 {
 		return Nil()
 	}
-	return list.Cells[1]
+	return cells[1]
 }
 
 func builtinNth(env *LEnv, args *LVal) *LVal {
 	list, n := args.Cells[0], args.Cells[1]
-	if list.Type != LSExpr {
-		return env.Errorf("first argument is not a list: %v", list.Type)
+	if !isSeq(list) {
+		return env.Errorf("first argument is not a proper sequence: %v", list.Type)
 	}
 	if n.Type != LInt {
 		return env.Errorf("second argument is not an integer: %v", n.Type)
 	}
-	if len(list.Cells) < n.Int {
+	cells := seqCells(list)
+	if len(cells) < n.Int {
 		return Nil()
 	}
-	return list.Cells[n.Int]
+	return cells[n.Int]
 }
 
 func builtinMap(env *LEnv, args *LVal) *LVal {
-	f := args.Cells[0]
+	typespec, f, lis := args.Cells[0], args.Cells[1], args.Cells[2]
+	nilReturn := false
+	if typespec.IsNil() {
+		nilReturn = true
+	} else if typespec.Type != LSymbol {
+		return env.Errorf("first argument is not a valid type specification: %v", typespec.Type)
+	}
 	if f.Type != LFun {
-		return env.Errorf("first argument is not a function: %s", f.Type)
+		return env.Errorf("second argument is not a function: %s", f.Type)
 	}
-	lis := args.Cells[1]
-	if lis.Type != LSExpr {
-		return env.Errorf("second argument is not a list: %s", lis.Type)
+	if !isSeq(lis) {
+		return env.Errorf("third argument is not a proper sequence: %s", lis.Type)
 	}
-	for i, c := range lis.Cells {
+	var v *LVal
+	var cells []*LVal
+	if nilReturn {
+		v = Nil()
+	} else {
+		switch typespec.Str {
+		case "vector":
+			v = Array(QExpr([]*LVal{Int(lis.Len())}), nil)
+			cells = v.Cells[1:]
+		case "list":
+			cells = make([]*LVal, lis.Len())
+			v = QExpr(cells)
+		default:
+			return env.Errorf("type specifier is invalid: %v", typespec)
+		}
+	}
+	for i, c := range seqCells(lis) {
 		fargs := QExpr([]*LVal{c})
 		fret := env.Call(f, fargs)
 		if fret.Type == LError {
 			return fret
 		}
-		lis.Cells[i] = fret
+		if !nilReturn {
+			cells[i] = fret
+		}
 	}
-	return lis
+	return v
 }
 
 func builtinFoldLeft(env *LEnv, args *LVal) *LVal {
@@ -369,10 +397,10 @@ func builtinFoldLeft(env *LEnv, args *LVal) *LVal {
 	}
 	acc := args.Cells[1]
 	lis := args.Cells[2]
-	if lis.Type != LSExpr {
-		return env.Errorf("third argument is not a list: %s", lis.Type)
+	if !isSeq(lis) {
+		return env.Errorf("third argument is not a proper sequence: %s", lis.Type)
 	}
-	for _, c := range lis.Cells {
+	for _, c := range seqCells(lis) {
 		fargs := QExpr([]*LVal{
 			// args reversed from foldr function invocation
 			acc,
@@ -394,11 +422,12 @@ func builtinFoldRight(env *LEnv, args *LVal) *LVal {
 	}
 	acc := args.Cells[1]
 	lis := args.Cells[2]
-	if lis.Type != LSExpr {
-		return env.Errorf("third argument is not a list: %s", lis.Type)
+	if !isSeq(lis) {
+		return env.Errorf("third argument is not a proper sequence: %s", lis.Type)
 	}
-	for i := len(lis.Cells) - 1; i >= 0; i-- {
-		c := lis.Cells[i]
+	cells := seqCells(lis)
+	for i := len(cells) - 1; i >= 0; i-- {
+		c := cells[i]
 		fargs := QExpr([]*LVal{
 			// args reversed from foldl function invocation
 			c,
@@ -450,6 +479,7 @@ func builtinCompose(env *LEnv, args *LVal) *LVal {
 		concatPrefix := QExpr(gcall.Cells[1:])
 		concatCall := SExpr(nil)
 		concatCall.Cells = append(concatCall.Cells, Symbol("lisp:concat"))
+		concatCall.Cells = append(concatCall.Cells, Quote(Symbol("list")))
 		concatCall.Cells = append(concatCall.Cells, concatPrefix)
 		concatCall.Cells = append(concatCall.Cells, restSym.Copy())
 		unpackCall := SExpr(nil)
@@ -566,15 +596,35 @@ func builtinSortedMap(env *LEnv, args *LVal) *LVal {
 	return m
 }
 
-func builtinConcat(env *LEnv, v *LVal) *LVal {
-	q := QExpr(nil)
-	for _, c := range v.Cells {
-		if c.Type != LSExpr {
-			return env.Errorf("argument is not a list: %v", c.Type)
-		}
-		q.Cells = append(q.Cells, c.Cells...)
+func builtinConcat(env *LEnv, args *LVal) *LVal {
+	typespec, rest := args.Cells[0], args.Cells[1:]
+	if typespec.Type != LSymbol {
+		return env.Errorf("first argument is not a valid type specification: %v", typespec.Type)
 	}
-	return q
+	size := 0
+	for _, v := range rest {
+		if !isSeq(v) {
+			return env.Errorf("argument is not a proper sequence: %v", v.Type)
+		}
+		size += v.Len()
+	}
+	var ret *LVal
+	var cells []*LVal
+	switch typespec.Str {
+	case "vector":
+		ret = Array(QExpr([]*LVal{Int(size)}), nil)
+		cells = seqCells(ret)
+		cells = cells[0:0:size]
+	case "list":
+		ret = QExpr(make([]*LVal, size))
+		cells = ret.Cells[0:0:size]
+	default:
+		return env.Errorf("type specifier is not valid: %v", typespec)
+	}
+	for _, v := range rest {
+		cells = append(cells, seqCells(v)...)
+	}
+	return ret
 }
 
 func builtinSort(env *LEnv, args *LVal) *LVal {
@@ -626,31 +676,49 @@ func builtinSort(env *LEnv, args *LVal) *LVal {
 }
 
 func builtinInsertIndex(env *LEnv, args *LVal) *LVal {
-	list, index, item := args.Cells[0], args.Cells[1], args.Cells[2]
-	if list.Type != LSExpr {
-		return env.Errorf("first argument is not a list: %v", list.Type)
+	typespec, list, index, item := args.Cells[0], args.Cells[1], args.Cells[2], args.Cells[3]
+	if typespec.Type != LSymbol {
+		return env.Errorf("first argument is not a valid type specifier: %v", typespec.Type)
+	}
+	if !isSeq(list) {
+		return env.Errorf("second argument is not a proper sequence: %v", list.Type)
 	}
 	if index.Type != LInt {
-		return env.Errorf("second arument is not a integer: %v", index.Type)
+		return env.Errorf("third arument is not a integer: %v", index.Type)
 	}
 	if index.Int > list.Len() {
 		return env.Errorf("index out of bounds")
 	}
-	newCells := make([]*LVal, len(list.Cells)+1)
-	copy(newCells[:index.Int], list.Cells[:index.Int])
-	copy(newCells[index.Int+1:], list.Cells[index.Int:])
-	newCells[index.Int] = item
-	return QExpr(newCells)
+	var v *LVal
+	var cells []*LVal
+	switch typespec.Str {
+	case "vector":
+		v = Array(QExpr([]*LVal{Int(1 + list.Len())}), nil)
+		cells = v.Cells[1:]
+	case "list":
+		cells = make([]*LVal, 1+list.Len())
+		v = QExpr(cells)
+	default:
+		return env.Errorf("type specifier is invalid: %v", typespec)
+	}
+	inCells := seqCells(list)
+	copy(cells[:index.Int], inCells[:index.Int])
+	copy(cells[index.Int+1:], inCells[index.Int:])
+	cells[index.Int] = item
+	return v
 }
 
 func builtinInsertSorted(env *LEnv, args *LVal) *LVal {
-	list, p, item, optArgs := args.Cells[0], args.Cells[1], args.Cells[2], args.Cells[3:]
+	typespec, list, p, item, optArgs := args.Cells[0], args.Cells[1], args.Cells[2], args.Cells[3], args.Cells[4:]
 	var keyFun *LVal
-	if list.Type != LSExpr {
-		return env.Errorf("first argument is not a list: %v", list.Type)
+	if typespec.Type != LSymbol {
+		return env.Errorf("first argument is not a valid type specifier: %v", typespec.Type)
+	}
+	if !isSeq(list) {
+		return env.Errorf("second argument is not a proper sequence: %v", list.Type)
 	}
 	if p.Type != LFun {
-		return env.Errorf("second arument is not a function: %v", p.Type)
+		return env.Errorf("third arument is not a function: %v", p.Type)
 	}
 	if len(optArgs) > 1 {
 		return env.Errorf("too many optional arguments provided")
@@ -658,14 +726,15 @@ func builtinInsertSorted(env *LEnv, args *LVal) *LVal {
 	if len(optArgs) > 0 {
 		keyFun = optArgs[0]
 		if keyFun.Type != LFun {
-			return env.Errorf("third argument is not a function: %v", keyFun.Type)
+			return env.Errorf("last argument is not a function: %v", keyFun.Type)
 		}
 	}
 	sortErr := Nil()
-	i := sort.Search(len(list.Cells), func(i int) bool {
+	inCells := seqCells(list)
+	i := sort.Search(len(inCells), func(i int) bool {
 		var expr *LVal
 		if keyFun == nil {
-			expr = SExpr([]*LVal{p, item.Copy(), list.Cells[i].Copy()})
+			expr = SExpr([]*LVal{p, item.Copy(), inCells[i].Copy()})
 		} else {
 			expr = SExpr([]*LVal{
 				p,
@@ -675,7 +744,7 @@ func builtinInsertSorted(env *LEnv, args *LVal) *LVal {
 				}),
 				SExpr([]*LVal{
 					keyFun,
-					list.Cells[i].Copy(),
+					inCells[i].Copy(),
 				}),
 			})
 		}
@@ -689,11 +758,22 @@ func builtinInsertSorted(env *LEnv, args *LVal) *LVal {
 	if !sortErr.IsNil() {
 		return sortErr
 	}
-	newCells := make([]*LVal, len(list.Cells)+1)
-	copy(newCells[:i], list.Cells[:i])
-	copy(newCells[i+1:], list.Cells[i:])
-	newCells[i] = item
-	return QExpr(newCells)
+	var v *LVal
+	var cells []*LVal
+	switch typespec.Str {
+	case "vector":
+		v = Array(QExpr([]*LVal{Int(1 + list.Len())}), nil)
+		cells = v.Cells[1:]
+	case "list":
+		cells = make([]*LVal, 1+list.Len())
+		v = QExpr(cells)
+	default:
+		return env.Errorf("type specifier is invalid: %v", typespec)
+	}
+	copy(cells[:i], inCells[:i])
+	copy(cells[i+1:], inCells[i:])
+	cells[i] = item
+	return v
 }
 
 func builtinSearchSorted(env *LEnv, args *LVal) *LVal {
@@ -721,68 +801,137 @@ func builtinSearchSorted(env *LEnv, args *LVal) *LVal {
 }
 
 func builtinSelect(env *LEnv, args *LVal) *LVal {
-	pred, list := args.Cells[0], args.Cells[1]
+	typespec, pred, list := args.Cells[0], args.Cells[1], args.Cells[2]
+	if typespec.Type != LSymbol {
+		return env.Errorf("first argument is not a valid type specifier: %v", typespec.Type)
+	}
 	if pred.Type != LFun {
-		return env.Errorf("first argument is not a function: %v", pred.Type)
+		return env.Errorf("second argument is not a function: %v", pred.Type)
 	}
-	if list.Type != LSExpr {
-		return env.Errorf("second argument is not a function: %v", list.Type)
+	if !isSeq(list) {
+		return env.Errorf("third argument is not a proper sequence: %v", list.Type)
 	}
-	out := QExpr(nil)
-	for _, v := range list.Cells {
+	var v *LVal
+	var cells []*LVal
+	switch typespec.Str {
+	case "vector":
+		v = Array(QExpr([]*LVal{Int(list.Len())}), nil)
+		cells = v.Cells[1:]
+		cells = cells[0:0:list.Len()]
+	case "list":
+		v = QExpr(nil)
+	default:
+		return env.Errorf("type specifier is invalid: %v", typespec)
+	}
+	for _, v := range seqCells(list) {
 		expr := SExpr([]*LVal{pred, v})
 		ok := env.Eval(expr)
 		if ok.Type == LError {
 			return ok
 		}
 		if True(ok) {
-			out.Cells = append(out.Cells, v)
+			cells = append(cells, v)
 		}
 	}
-	return out
+	switch typespec.Str {
+	case "list":
+		v.Cells = cells
+	case "vector":
+		v.Cells[0].Cells[0].Int = len(cells)
+		v.Cells = v.Cells[:1+len(cells)]
+	}
+	return v
 }
 
 func builtinReject(env *LEnv, args *LVal) *LVal {
-	pred, list := args.Cells[0], args.Cells[1]
+	typespec, pred, list := args.Cells[0], args.Cells[1], args.Cells[2]
+	if typespec.Type != LSymbol {
+		return env.Errorf("first argument is not a valid type specifier: %v", typespec.Type)
+	}
 	if pred.Type != LFun {
-		return env.Errorf("first argument is not a function: %v", pred.Type)
+		return env.Errorf("second argument is not a function: %v", pred.Type)
 	}
-	if list.Type != LSExpr {
-		return env.Errorf("second argument is not a function: %v", list.Type)
+	if !isSeq(list) {
+		return env.Errorf("third argument is not a proper sequence: %v", list.Type)
 	}
-	out := QExpr(nil)
-	for _, v := range list.Cells {
+	var v *LVal
+	var cells []*LVal
+	switch typespec.Str {
+	case "vector":
+		v = Array(QExpr([]*LVal{Int(list.Len())}), nil)
+		cells = v.Cells[1:]
+		cells = cells[0:0:list.Len()]
+	case "list":
+		v = QExpr(nil)
+	default:
+		return env.Errorf("type specifier is invalid: %v", typespec)
+	}
+	for _, v := range seqCells(list) {
 		expr := SExpr([]*LVal{pred, v})
 		ok := env.Eval(expr)
 		if ok.Type == LError {
 			return ok
 		}
 		if !True(ok) {
-			out.Cells = append(out.Cells, v)
+			cells = append(cells, v)
 		}
 	}
-	return out
+	switch typespec.Str {
+	case "list":
+		v.Cells = cells
+	case "vector":
+		v.Cells[0].Cells[0].Int = len(cells)
+		v.Cells = v.Cells[:1+len(cells)]
+	}
+	return v
 }
 
 func builtinZip(env *LEnv, args *LVal) *LVal {
+	typespec, lists := args.Cells[0], args.Cells[1:]
+	if typespec.Type != LSymbol {
+		return env.Errorf("first argument is not a valid type specifier: %v", typespec.Type)
+	}
 	n := 0
-	for _, list := range args.Cells {
-		if list.Type != LSExpr {
-			return env.Errorf("argument is not a list: %v", list.Type)
+	for _, list := range lists {
+		if !isSeq(list) {
+			return env.Errorf("argument is not a proper list: %v", list.Type)
 		}
-		if n == 0 || len(list.Cells) < n {
-			n = len(list.Cells)
+		m := list.Len()
+		if n == 0 || m < n {
+			n = m
 		}
 	}
-	cells := make([]*LVal, n)
+	var v *LVal
+	var cells []*LVal
+	switch typespec.Str {
+	case "vector":
+		v = Array(QExpr([]*LVal{Int(n)}), nil)
+		cells = v.Cells[1 : 1+n]
+	case "list":
+		cells = make([]*LVal, n)
+		v = QExpr(cells)
+	default:
+		return env.Errorf("type specifier is invalid: %v", typespec)
+	}
 	for i := range cells {
-		elem := QExpr(make([]*LVal, 0, len(args.Cells)))
-		for _, list := range args.Cells {
-			elem.Cells = append(elem.Cells, list.Cells[i])
+		var elem *LVal
+		var elemCells []*LVal
+		switch typespec.Str {
+		case "vector":
+			elem = Array(QExpr([]*LVal{Int(len(lists))}), nil)
+			elemCells = elem.Cells[1 : 1+len(lists)]
+		case "list":
+			elemCells = make([]*LVal, len(lists))
+			elem = QExpr(elemCells)
+		default:
+			return env.Errorf("type specifier is invalid: %v", typespec)
+		}
+		for j, list := range lists {
+			elemCells[j] = seqCells(list)[i]
 		}
 		cells[i] = elem
 	}
-	return QExpr(cells)
+	return v
 }
 
 func builtinMakeSequence(env *LEnv, args *LVal) *LVal {
@@ -820,45 +969,72 @@ func builtinMakeSequence(env *LEnv, args *LVal) *LVal {
 }
 
 func builtinReverse(env *LEnv, args *LVal) *LVal {
-	if args.Cells[0].Type != LSExpr {
-		return env.Errorf("first argument is not a list: %v", args.Cells[0].Type)
+	typespec, list := args.Cells[0], args.Cells[1]
+	if typespec.Type != LSymbol {
+		return env.Errorf("first argument is not a valid type specifier: %v", typespec.Type)
 	}
-	q := QExpr(args.Cells[0].Cells)
-	for i := 0; i < len(q.Cells)-1; i++ {
-		q.Cells[i], q.Cells[len(q.Cells)-1-i] = q.Cells[len(q.Cells)-1-i], q.Cells[i]
+	if !isSeq(list) {
+		return env.Errorf("first argument is not a proper sequence: %v", args.Cells[0].Type)
 	}
-	return q
+	var v *LVal
+	var cells []*LVal
+	switch typespec.Str {
+	case "vector":
+		v = Array(QExpr([]*LVal{Int(list.Len())}), nil)
+		cells = v.Cells[1 : 1+list.Len()]
+	case "list":
+		cells = make([]*LVal, list.Len())
+		v = QExpr(cells)
+	default:
+		return env.Errorf("type specifier is invalid: %v", typespec)
+	}
+	for i, v := range seqCells(list) {
+		cells[len(cells)-1-i] = v
+	}
+	return v
 }
 
 func builtinSlice(env *LEnv, args *LVal) *LVal {
-	list, start, end := args.Cells[0], args.Cells[1], args.Cells[2]
-	if list.Type != LSExpr {
-		return env.Errorf("first argument is not a list")
+	typespec, list, start, end := args.Cells[0], args.Cells[1], args.Cells[2], args.Cells[3]
+	if typespec.Type != LSymbol {
+		return env.Errorf("first argument is not a valid type specifier: %v", typespec.Type)
+	}
+	if !isSeq(list) {
+		return env.Errorf("second argument is not a proper sequence: %v", list.Type)
 	}
 	if start.Type != LInt {
-		return env.Errorf("second argument is not an integer")
+		return env.Errorf("third argument is not an integer: %v", start.Type)
 	}
 	if end.Type != LInt {
-		return env.Errorf("third argument is not an integer")
+		return env.Errorf("forth argument is not an integer: %v", end.Type)
 	}
+	n := list.Len()
 	i := start.Int
 	j := end.Int
 	if i < 0 {
 		return env.Errorf("index out of range")
 	}
-	if i > len(list.Cells) {
+	if i > n {
 		return env.Errorf("index out of range")
 	}
 	if j < 0 {
 		return env.Errorf("index out of range")
 	}
-	if j > len(list.Cells) {
+	if j > n {
 		return env.Errorf("index out of range")
 	}
 	if i > j {
 		return env.Errorf("end before start")
 	}
-	return QExpr(list.Cells[i:j])
+	switch typespec.Str {
+	case "list":
+		return QExpr(seqCells(list)[i:j])
+	case "vector":
+		cells := seqCells(list)[i:j]
+		return Array(QExpr([]*LVal{Int(len(cells))}), cells)
+	default:
+		return env.Errorf("type specifier is not valid: %v", typespec)
+	}
 }
 
 func builtinList(env *LEnv, v *LVal) *LVal {
@@ -899,8 +1075,8 @@ func builtinCons(env *LEnv, args *LVal) *LVal {
 	return args
 }
 
-func builtinNot(env *LEnv, v *LVal) *LVal {
-	return Bool(Not(v.Cells[0]))
+func builtinNot(env *LEnv, args *LVal) *LVal {
+	return Bool(Not(args.Cells[0]))
 }
 
 func builtinIsNil(env *LEnv, args *LVal) *LVal {
@@ -921,6 +1097,16 @@ func builtinIsSortedMap(env *LEnv, args *LVal) *LVal {
 	return Bool(v.Type == LSortMap)
 }
 
+func builtinIsArray(env *LEnv, args *LVal) *LVal {
+	v := args.Cells[0]
+	return Bool(v.Type == LArray)
+}
+
+func builtinIsVector(env *LEnv, args *LVal) *LVal {
+	v := args.Cells[0]
+	return Bool(v.Type == LArray && v.Cells[0].Len() == 1)
+}
+
 func builtinIsString(env *LEnv, args *LVal) *LVal {
 	v := args.Cells[0]
 	return Bool(v.Type == LString)
@@ -936,10 +1122,10 @@ func builtinAllP(env *LEnv, args *LVal) *LVal {
 	if pred.Type != LFun {
 		return env.Errorf("first argument is not a function: %v", pred.Type)
 	}
-	if list.Type != LSExpr {
-		return env.Errorf("first argument is not a list: %v", list.Type)
+	if !isSeq(list) {
+		return env.Errorf("second argument is not a proper sequence: %v", list.Type)
 	}
-	for _, v := range list.Cells {
+	for _, v := range seqCells(list) {
 		expr := SExpr([]*LVal{pred, v})
 		ok := env.Eval(expr)
 		if ok.Type == LError {
@@ -957,10 +1143,10 @@ func builtinAnyP(env *LEnv, args *LVal) *LVal {
 	if pred.Type != LFun {
 		return env.Errorf("first argument is not a function: %v", pred.Type)
 	}
-	if list.Type != LSExpr {
-		return env.Errorf("first argument is not a list: %v", list.Type)
+	if !isSeq(list) {
+		return env.Errorf("second argument is not a list: %v", list.Type)
 	}
-	for _, v := range list.Cells {
+	for _, v := range seqCells(list) {
 		expr := SExpr([]*LVal{pred, v})
 		ok := env.Eval(expr)
 		if ok.Type == LError {

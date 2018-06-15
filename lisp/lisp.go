@@ -117,6 +117,8 @@ type LVal struct {
 // will be turned into a Native LVal.  Value is the GoValue function.
 func Value(v interface{}) *LVal {
 	switch v := v.(type) {
+	case bool:
+		return Bool(v)
 	case string:
 		return String(v)
 	case []byte:
@@ -403,6 +405,11 @@ func (v *LVal) Len() int {
 		return len(v.Bytes)
 	case LSExpr:
 		return len(v.Cells)
+	case LArray:
+		if v.Cells[0].Len() == 1 {
+			return v.Cells[0].Cells[0].Int
+		}
+		fallthrough
 	default:
 		return -1
 	}
@@ -534,6 +541,9 @@ func (v *LVal) IsNumeric() bool {
 // BUG:  sorted-map comparison is not implemented
 func (v *LVal) Equal(other *LVal) *LVal {
 	if v.Type != other.Type {
+		if v.IsNumeric() && other.IsNumeric() {
+			return v.equalNum(other)
+		}
 		return Bool(false)
 	}
 	if v.IsNumeric() {
@@ -548,6 +558,16 @@ func (v *LVal) Equal(other *LVal) *LVal {
 		}
 		for i := range v.Cells {
 			if !True(v.Cells[i].Equal(other.Cells[i])) {
+				return Bool(false)
+			}
+		}
+		return Bool(true)
+	case LArray:
+		// NOTE:  This is a pretty cheeky for loop.  The first comparison it
+		// does will compare array dimensions, which will ensure that we don't
+		// hit an index out of bounds while comparing later indices.
+		for i := range v.Cells {
+			if Not(v.Cells[i].Equal(other.Cells[i])) {
 				return Bool(false)
 			}
 		}
@@ -674,7 +694,11 @@ func (v *LVal) str(onTheRecord bool) string {
 		return quote + sortedMapString(v)
 	case LArray:
 		if v.Cells[0].Len() == 1 {
-			return exprString(v, 1, quote+"(vector ", ")")
+			if v.Len() > 0 {
+				return exprString(v, 1, quote+"(vector ", ")")
+			} else {
+				return quote + "(vector)"
+			}
 		}
 		return fmt.Sprintf("<array dims=%s>", v.Cells[0])
 	case LNative:
@@ -698,7 +722,7 @@ func bodyStr(exprs []*LVal) string {
 }
 
 func lambdaVars(formals *LVal, bound *LVal) *LVal {
-	s := SExpr([]*LVal{formals, bound})
+	s := SExpr([]*LVal{Quote(Symbol("list")), formals, bound})
 	s = builtinConcat(nil, s)
 	s.Quoted = false
 	return s

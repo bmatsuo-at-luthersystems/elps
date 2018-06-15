@@ -106,11 +106,12 @@ func (s *Serializer) loadInterface(x interface{}) *lisp.LVal {
 		}
 		return m
 	case []interface{}:
-		lis := lisp.QExpr(make([]*lisp.LVal, len(x)))
+		lis := lisp.Array(lisp.QExpr([]*lisp.LVal{lisp.Int(len(x))}), nil)
+		cells := lis.Cells[1 : 1+len(x)] // bounds may avoid bounds check later
 		for i, v := range x {
-			lis.Cells[i] = s.loadInterface(v)
-			if lis.Cells[i].Type == lisp.LError {
-				return lis.Cells[i]
+			cells[i] = s.loadInterface(v)
+			if cells[i].Type == lisp.LError {
+				return cells[i]
 			}
 		}
 		return lis
@@ -206,6 +207,16 @@ func (s *Serializer) GoValue(v *lisp.LVal) interface{} {
 	case lisp.LSExpr:
 		s, _ := s.GoSlice(v)
 		return s
+	case lisp.LArray:
+		s, _ := s.GoSlice(lisp.QExpr(v.Cells[1:]))
+		switch v.Cells[0].Len() {
+		case 0:
+			return s[0]
+		case 1:
+			return s
+		default:
+			return fmt.Errorf("cannot serialize array with dimensions: %v", v.Cells[0])
+		}
 	case lisp.LSortMap:
 		m, _ := s.GoMap(v)
 		return m
