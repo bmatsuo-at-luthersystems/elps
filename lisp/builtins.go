@@ -82,6 +82,8 @@ var langBuiltins = []*langBuiltin{
 	{"reverse", Formals("lis"), builtinReverse},
 	{"slice", Formals("list", "start", "end"), builtinSlice},
 	{"list", Formals(VarArgSymbol, "args"), builtinList},
+	{"vector", Formals(VarArgSymbol, "args"), builtinVector},
+	{"aref", Formals("a", VarArgSymbol, "indices"), builtinARef},
 	{"length", Formals("lis"), builtinLength},
 	{"cons", Formals("head", "tail"), builtinCons},
 	{"not", Formals("expr"), builtinNot},
@@ -861,6 +863,22 @@ func builtinSlice(env *LEnv, args *LVal) *LVal {
 
 func builtinList(env *LEnv, v *LVal) *LVal {
 	return QExpr(v.Cells)
+}
+
+func builtinVector(env *LEnv, args *LVal) *LVal {
+	return Array(nil, args.Cells)
+}
+
+func builtinARef(env *LEnv, args *LVal) *LVal {
+	array, indices := args.Cells[0], args.Cells[1:]
+	if array.Type != LArray {
+		return env.Errorf("first argument is not an array: %v", array.Type)
+	}
+	v := array.ArrayIndex(indices...)
+	if v.Type == LError {
+		return env.Error(v)
+	}
+	return v
 }
 
 func builtinLength(env *LEnv, args *LVal) *LVal {
