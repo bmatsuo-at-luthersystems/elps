@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"os"
 	"strings"
 	"sync/atomic"
 )
@@ -77,7 +78,7 @@ func (env *LEnv) getFID() string {
 }
 
 func (env *LEnv) GenSym() *LVal {
-	return String(fmt.Sprintf("gensym%d", gensym()))
+	return Symbol(fmt.Sprintf("gensym%d", gensym()))
 }
 
 func (env *LEnv) DefinePackage(name *LVal) *LVal {
@@ -395,6 +396,8 @@ func (env *LEnv) ErrorCondition(condition string, v ...interface{}) *LVal {
 				Stack: env.Stack.Copy(),
 				Cells: []*LVal{Native(v)},
 			}
+		case string:
+			cells = append(cells, String(v))
 		default:
 			cells = append(cells, Native(v))
 		}
@@ -567,6 +570,10 @@ func (env *LEnv) EvalSExpr(s *LVal) *LVal {
 	}
 callf:
 	r := env.Call(f, s)
+	if r == nil {
+		env.Stack.DebugPrint(os.Stderr)
+		panic("nil LVal returned from function call")
+	}
 	if r.Type == LError {
 		return r
 	}

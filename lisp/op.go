@@ -444,12 +444,15 @@ func opOr(env *LEnv, s *LVal) *LVal {
 }
 
 func opAnd(env *LEnv, s *LVal) *LVal {
+	if len(s.Cells) == 0 {
+		return Bool(true)
+	}
 	if len(s.Cells) > 0 {
 		s.Cells[len(s.Cells)-1].Terminal = true
 	}
 	var r *LVal
 	for _, c := range s.Cells {
-		r := env.Eval(c)
+		r = env.Eval(c)
 		if r.Type == LError {
 			return r
 		}
