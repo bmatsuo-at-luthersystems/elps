@@ -71,7 +71,7 @@ var langBuiltins = []*langBuiltin{
 	{"sorted-map", Formals(VarArgSymbol, "args"), builtinSortedMap},
 	{"concat", Formals("type-specifier", VarArgSymbol, "args"), builtinConcat},
 	{"insert-index", Formals("type-specifier", "seq", "index", "item"), builtinInsertIndex},
-	{"sort", Formals("less-predicate", "list", VarArgSymbol, "key-fun"), builtinSort},
+	{"stable-sort", Formals("less-predicate", "list", VarArgSymbol, "key-fun"), builtinSortStable},
 	{"insert-sorted", Formals("type-specifier", "list", "predicate", "item", VarArgSymbol, "key-fun"), builtinInsertSorted},
 	{"search-sorted", Formals("n", "predicate"), builtinSearchSorted},
 	{"select", Formals("type-specifier", "predicate", "seq"), builtinSelect},
@@ -642,14 +642,14 @@ func builtinConcat(env *LEnv, args *LVal) *LVal {
 	return ret
 }
 
-func builtinSort(env *LEnv, args *LVal) *LVal {
+func builtinSortStable(env *LEnv, args *LVal) *LVal {
 	less, list, optArgs := args.Cells[0], args.Cells[1], args.Cells[2:]
 	var keyFun *LVal
 	if less.Type != LFun {
 		return env.Errorf("first argument is not a function: %v", less.Type)
 	}
-	if list.Type != LSExpr {
-		return env.Errorf("second arument is not a list: %v", list.Type)
+	if !isSeq(list) {
+		return env.Errorf("second arument is not a proper list: %v", list.Type)
 	}
 	if len(optArgs) > 1 {
 		return env.Errorf("too many optional arguments provided")
@@ -660,34 +660,59 @@ func builtinSort(env *LEnv, args *LVal) *LVal {
 			return env.Errorf("third argument is not a function: %v", keyFun.Type)
 		}
 	}
-	sortErr := Nil()
-	sort.Slice(list.Cells, func(i, j int) bool {
-		if !sortErr.IsNil() {
-			return false
-		}
-		a, b := list.Cells[i], list.Cells[j]
-		// Functions are always copied when being invoked. But the arguments
-		// are not copied in general.
-		var expr *LVal
-		if keyFun == nil {
-			expr = SExpr([]*LVal{less, a.Copy(), b.Copy()})
-		} else {
-			expr = SExpr([]*LVal{less,
-				SExpr([]*LVal{keyFun, a.Copy()}),
-				SExpr([]*LVal{keyFun, b.Copy()}),
-			})
-		}
-		ok := env.Eval(expr)
-		if ok.Type == LError {
-			sortErr = ok
-			return false
-		}
-		return True(ok)
-	})
-	if !sortErr.IsNil() {
-		return sortErr
+	cells := seqCells(list)
+	sortCells := &lvalByFun{
+		env:    env,
+		fun:    less,
+		keyfun: keyFun,
+		cells:  cells,
+	}
+	sort.Stable(sortCells)
+	if sortCells.err != nil {
+		return sortCells.err
 	}
 	return list
+}
+
+type lvalByFun struct {
+	env    *LEnv
+	fun    *LVal
+	keyfun *LVal
+	err    *LVal
+	cells  []*LVal
+}
+
+func (s *lvalByFun) Len() int {
+	return len(s.cells)
+}
+func (s *lvalByFun) Swap(i, j int) {
+	if s.err != nil {
+		return
+	}
+	s.cells[i], s.cells[j] = s.cells[j], s.cells[i]
+}
+func (s *lvalByFun) Less(i, j int) bool {
+	if s.err != nil {
+		return false
+	}
+	a, b := s.cells[i], s.cells[j]
+	// Functions are always copied when being invoked. But the arguments
+	// are not copied in general.
+	var expr *LVal
+	if s.keyfun == nil {
+		expr = SExpr([]*LVal{s.fun, a.Copy(), b.Copy()})
+	} else {
+		expr = SExpr([]*LVal{s.fun,
+			SExpr([]*LVal{s.keyfun, a.Copy()}),
+			SExpr([]*LVal{s.keyfun, b.Copy()}),
+		})
+	}
+	ok := s.env.Eval(expr)
+	if ok.Type == LError {
+		s.err = ok
+		return false
+	}
+	return True(ok)
 }
 
 func builtinInsertIndex(env *LEnv, args *LVal) *LVal {
