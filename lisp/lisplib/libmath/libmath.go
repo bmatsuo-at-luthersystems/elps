@@ -32,7 +32,6 @@ func LoadPackage(env *lisp.LEnv) *lisp.LVal {
 var builtins = []*libutil.Builtin{
 	libutil.Function("ceil", lisp.Formals("number"), builtinCeil),
 	libutil.Function("floor", lisp.Formals("number"), builtinFloor),
-	libutil.Function("round", lisp.Formals("number"), builtinRound),
 	libutil.Function("sqrt", lisp.Formals("number"), builtinSqrt),
 	libutil.Function("exp", lisp.Formals("number"), builtinExp),
 	libutil.Function("ln", lisp.Formals("number"), builtinLn),
@@ -59,17 +58,6 @@ func builtinFloor(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
 		return x
 	}
 	return lisp.Float(math.Floor(x.Float))
-}
-
-func builtinRound(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
-	x := args.Cells[0]
-	if !x.IsNumeric() {
-		return env.Errorf("argument is not a number: %v", x.Type)
-	}
-	if x.Type == lisp.LInt {
-		return x
-	}
-	return lisp.Float(math.Round(x.Float))
 }
 
 func builtinSqrt(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
