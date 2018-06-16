@@ -153,7 +153,7 @@ func opExpr(env *LEnv, args *LVal) *LVal {
 	}
 	body := args.Cells[0]
 	body.Terminal = true
-	n, short, vargs, err := countExprArgs(body)
+	n, short, nopt, vargs, err := countExprArgs(body)
 	if err != nil {
 		return env.Errorf("%s", err)
 	}
@@ -167,8 +167,13 @@ func opExpr(env *LEnv, args *LVal) *LVal {
 			formals.Cells[i] = Symbol(fmt.Sprintf("%%%d", i+1))
 		}
 	}
+	if nopt == 1 {
+		formals.Cells = append(formals.Cells, Symbol(OptArgSymbol), Symbol("%"+OptArgSymbol))
+	} else {
+		// multple optional args aren't supported currently
+	}
 	if vargs {
-		formals.Cells = append(formals.Cells, Symbol(VarArgSymbol), Symbol("%&"))
+		formals.Cells = append(formals.Cells, Symbol(VarArgSymbol), Symbol("%"+VarArgSymbol))
 	}
 	fun := Lambda(formals, []*LVal{body})
 	fun.Env.Parent = env
@@ -178,24 +183,28 @@ func opExpr(env *LEnv, args *LVal) *LVal {
 	return fun
 }
 
-func countExprArgs(expr *LVal) (nargs int, short bool, vargs bool, err error) {
+func countExprArgs(expr *LVal) (nargs int, short bool, nopt int, vargs bool, err error) {
 	switch expr.Type {
 	case LSymbol:
 		if !strings.HasPrefix(expr.Str, "%") {
-			return 0, false, false, nil
+			return 0, false, 0, false, nil
 		}
 		numStr := expr.Str[1:]
 		if numStr == "" {
-			return 1, true, false, nil
+			return 1, true, 0, false, nil
 		}
 		if numStr == VarArgSymbol {
-			return 0, false, true, nil
+			return 0, false, 0, true, nil
+		}
+		if numStr == OptArgSymbol {
+			// multple optional args aren't supported currently
+			return 0, false, 1, false, nil
 		}
 		num, err := strconv.Atoi(numStr)
 		if err != nil {
-			return 0, false, false, fmt.Errorf("invalid expr argument symbol: %s", expr.Str)
+			return 0, false, 0, false, fmt.Errorf("invalid expr argument symbol: %s", expr.Str)
 		}
-		return num, false, false, nil
+		return num, false, 0, false, nil
 	case LSExpr:
 		short := false
 		for _, cell := range expr.Cells {
@@ -209,33 +218,40 @@ func countExprArgs(expr *LVal) (nargs int, short bool, vargs bool, err error) {
 						err := fmt.Errorf("invalid mixing of expr argument symbols: %s and %s",
 							fmt.Sprintf("%%%d", nargs),
 							cell.Str)
-						return 0, false, false, err
+						return 0, false, 0, false, err
 					}
 					short = true
 				}
+				continue
+			}
+			if numStr == OptArgSymbol {
+				nopt = 1 // multple optional args aren't supported currently
 				continue
 			}
 			if numStr == VarArgSymbol {
 				vargs = true
 				continue
 			}
+			if strings.HasPrefix(numStr, MetaArgPrefix) {
+				return 0, false, 0, false, fmt.Errorf("invalid expr argument symbol: %v", expr.Str)
+			}
 			num, err := strconv.Atoi(numStr)
 			if err != nil {
-				return 0, false, false, fmt.Errorf("invalid expr argument symbol: %s", expr.Str)
+				return 0, false, 0, false, fmt.Errorf("invalid expr argument symbol: %s", expr.Str)
 			}
 			if short {
 				err := fmt.Errorf("invalid mix of expr argument symbols: %s and %s", "%", cell.Str)
-				return 0, false, false, err
+				return 0, false, 0, false, err
 			}
 			if num > nargs {
 				nargs = num
 			}
 		}
-		return nargs, short, vargs, nil
+		return nargs, short, nopt, vargs, nil
 	case LInt, LFloat, LString:
-		return 0, false, false, nil
+		return 0, false, 0, false, nil
 	default:
-		return 0, false, false, fmt.Errorf("invalid internal expression type: %s", expr.Type)
+		return 0, false, 0, false, fmt.Errorf("invalid internal expression type: %s", expr.Type)
 	}
 }
 
@@ -412,11 +428,13 @@ func opIf(env *LEnv, s *LVal) *LVal {
 }
 
 func opOr(env *LEnv, s *LVal) *LVal {
-	if len(s.Cells) > 0 {
-		s.Cells[len(s.Cells)-1].Terminal = true
+	if len(s.Cells) == 0 {
+		return Nil()
 	}
+	s.Cells[len(s.Cells)-1].Terminal = true
+	var r *LVal
 	for _, c := range s.Cells {
-		r := env.Eval(c)
+		r = env.Eval(c)
 		if r.Type == LError {
 			return r
 		}
@@ -424,22 +442,41 @@ func opOr(env *LEnv, s *LVal) *LVal {
 			return r
 		}
 	}
-	return Bool(false)
+	// In the common lisp standard the ``or'' function returns the evaluated
+	// result of its final argument if no arguments evaluated true.
+	//		(or) == nil
+	//		(or x) == x
+	//		(or x1 x2 ... xn) == (cond (x1 x1) (x2 x2) ... (t xn))
+	return r
 }
 
 func opAnd(env *LEnv, s *LVal) *LVal {
-	if len(s.Cells) > 0 {
-		s.Cells[len(s.Cells)-1].Terminal = true
+	if len(s.Cells) == 0 {
+		// The identity for and is a true value.
+		return Bool(true)
 	}
+	s.Cells[len(s.Cells)-1].Terminal = true
 	var r *LVal
 	for _, c := range s.Cells {
-		r := env.Eval(c)
+		r = env.Eval(c)
 		if r.Type == LError {
 			return r
 		}
 		if !True(r) {
-			return Bool(false)
+			// In the common lisp standard short circuiting the ``and''
+			// function always causes a nil return, even if r is the symbol
+			// false.
+			return Nil()
 		}
 	}
+	// In the common lisp standard the ``and'' function returns the evaluated
+	// result of its final argument if all arguments evaluated true.
+	//		(and) == nil
+	//		(and x) == x
+	//		(and x1 x2 ... xn) == (cond
+	//		                       ((not x1) nil)
+	//		                       ((not x2) nil)
+	//		                       ...
+	//		                       (t xn))
 	return r
 }

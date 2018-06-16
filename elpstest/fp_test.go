@@ -4,6 +4,15 @@ import "testing"
 
 func TestFP(t *testing.T) {
 	tests := TestSuite{
+		{"curry", TestSequence{
+			{"(defun f (a b) (+ a b))", "()"},
+			{"((f 1) 2)", "3"},
+			// BUG:  This error message has to be tested with defun and can't
+			// be tested in an earlier test (say eval_test.go) because the
+			// function id used in the error messages of anonymous functions
+			// is not deterministic.
+			{"(f 1 2 3)", "f: invalid number of arguments: 3"},
+		}},
 		{"map-reduce", TestSequence{
 			{"(map 'list (lambda (x) (+ x x)) '(1 2 3))", "'(2 4 6)"},
 			{"(map 'vector (lambda (x) (+ x x)) '(1 2 3))", "(vector 2 4 6)"},
@@ -38,8 +47,8 @@ func TestFP(t *testing.T) {
 			{"((compose f g) 2)", "5"},
 		}},
 		{"complex composition", TestSequence{
-			{"(defun g (x & xs) (cons x xs))", "()"},
-			{"(compose (reverse 'list) g)", "(lambda (x & xs) (<builtin> (lisp:unpack (lambda (x & xs) (cons x xs)) (lisp:concat 'list '(x) xs))))"},
+			{"(defun g (x &rest xs) (cons x xs))", "()"},
+			{"(compose (reverse 'list) g)", "(lambda (x &rest xs) (<builtin> (lisp:unpack (lambda (x &rest xs) (cons x xs)) (lisp:concat 'list '(x) xs))))"},
 			{"((compose (reverse 'list) list) 1 2 3)", "'(3 2 1)"},
 			{"((compose (reverse 'list) g) 1 2 3)", "'(3 2 1)"},
 		}},

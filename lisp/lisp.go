@@ -444,7 +444,10 @@ func (v *LVal) Len() int {
 }
 
 // MapKeys returns a list of keys in the map.  MapKeys panics if v.Type is not
-// LSortMap.
+// LSortMap.  The type of each map key is retained from the first type a value
+// was set for that key.  For example, if the MapSet(Symbol("a"), Int(1)) is
+// called before MapSet(String("a"), Int(2)) then MapKey() will contain the
+// symbol and not the string.
 func (v *LVal) MapKeys() *LVal {
 	if v.Type != LSortMap {
 		panic("not sortmap: " + v.Type.String())
@@ -506,17 +509,17 @@ func (v *LVal) MapGet(k interface{}) *LVal {
 	}
 }
 
-// MapSet sets k to val in v.  MapSet panics if v.Type is not LSortMap.  If k
-// is a string (not LString) then MapSet will try to associate either an
-// existing LString key or an existing LSymbol key with val before associating
-// a new LString key with val.
+// MapSet sets k to val in v.  MapSet panics if v.Type is not LSortMap.
+// String and symbol keys are coerced to avoid programming errors causing
+// symbol and string keys with equal string values from existing in the same
+// map.
 func (v *LVal) MapSet(k interface{}, val *LVal) *LVal {
 	if v.Type != LSortMap {
 		panic("not sortmap: " + v.Type.String())
 	}
 	switch k := k.(type) {
 	case *LVal:
-		return mapSet(v, k, val, false)
+		return mapSet(v, k, val, true)
 	case string:
 		return mapSet(v, String(k), val, true)
 	// numerics unsupported

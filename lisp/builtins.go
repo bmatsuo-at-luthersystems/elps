@@ -66,8 +66,9 @@ var langBuiltins = []*langBuiltin{
 	{"flip", Formals("binary-function"), builtinFlip},
 	{"assoc", Formals("map", "key", "value"), builtinAssoc},
 	{"assoc!", Formals("map", "key", "value"), builtinAssocMutate},
-	{"get", Formals("map", "key", VarArgSymbol, "default"), builtinGet},
+	{"get", Formals("map", "key"), builtinGet},
 	{"keys", Formals("map"), builtinKeys},
+	{"key?", Formals("map", "key"), builtinIsKey},
 	{"sorted-map", Formals(VarArgSymbol, "args"), builtinSortedMap},
 	{"concat", Formals("type-specifier", VarArgSymbol, "args"), builtinConcat},
 	{"insert-index", Formals("type-specifier", "seq", "index", "item"), builtinInsertIndex},
@@ -143,7 +144,11 @@ func builtinLoadString(env *LEnv, args *LVal) *LVal {
 	if source.Type != LString {
 		return env.Errorf("first argument is not a string: %v", source.Type)
 	}
-	return env.root().LoadString("load-string", source.Str)
+	v := env.root().LoadString("load-string", source.Str)
+	if v.Type == LError && v.Stack == nil {
+		v.Stack = env.Stack.Copy()
+	}
+	return v
 }
 
 func builtinLoadBytes(env *LEnv, args *LVal) *LVal {
@@ -151,7 +156,11 @@ func builtinLoadBytes(env *LEnv, args *LVal) *LVal {
 	if source.Type != LBytes {
 		return env.Errorf("first argument is not bytes: %v", source.Type)
 	}
-	return env.root().Load("load-bytes", bytes.NewReader(source.Bytes))
+	v := env.root().Load("load-bytes", bytes.NewReader(source.Bytes))
+	if v.Type == LError && v.Stack == nil {
+		v.Stack = env.Stack.Copy()
+	}
+	return v
 }
 
 func builtinInPackage(env *LEnv, args *LVal) *LVal {
@@ -548,7 +557,7 @@ func builtinAssoc(env *LEnv, args *LVal) *LVal {
 		m = m.Copy()
 		m.Map = m.copyMap()
 	}
-	err := mapSet(m, k, v, false)
+	err := mapSet(m, k, v, true)
 	if !err.IsNil() {
 		return env.Errorf("%s", err)
 	}
@@ -564,7 +573,7 @@ func builtinAssocMutate(env *LEnv, args *LVal) *LVal {
 	} else if m.Type != LSortMap {
 		return env.Errorf("first argument is not a map: %s", m.Type)
 	}
-	err := mapSet(m, k, v, false)
+	err := mapSet(m, k, v, true)
 	if !err.IsNil() {
 		return env.Error(err.String())
 	}
@@ -572,18 +581,11 @@ func builtinAssocMutate(env *LEnv, args *LVal) *LVal {
 }
 
 func builtinGet(env *LEnv, args *LVal) *LVal {
-	m, k, _def := args.Cells[0], args.Cells[1], args.Cells[2:]
+	m, k := args.Cells[0], args.Cells[1]
 	if m.Type != LSortMap {
 		return env.Errorf("first argument is not a map: %s", m.Type)
 	}
-	if len(_def) > 1 {
-		return env.Errorf("too many arguments provided")
-	}
-	var def *LVal
-	if len(_def) > 0 {
-		def = _def[0]
-	}
-	return mapGet(m, k, def)
+	return mapGet(m, k, nil)
 }
 
 func builtinKeys(env *LEnv, args *LVal) *LVal {
@@ -592,6 +594,18 @@ func builtinKeys(env *LEnv, args *LVal) *LVal {
 		return env.Errorf("first argument is not a map: %s", m.Type)
 	}
 	return m.MapKeys()
+}
+
+func builtinIsKey(env *LEnv, args *LVal) *LVal {
+	m, k := args.Cells[0], args.Cells[1]
+	if m.Type != LSortMap {
+		return env.Errorf("first argument is not a map: %s", m.Type)
+	}
+	ok := mapHasKey(m, k)
+	if ok.Type == LError {
+		ok.Stack = env.Stack.Copy()
+	}
+	return ok
 }
 
 func builtinSortedMap(env *LEnv, args *LVal) *LVal {

@@ -9,6 +9,9 @@ var userMacros []*langBuiltin
 var langMacros = []*langBuiltin{
 	{"defmacro", Formals("name", "formals", "expr"), macroDefmacro},
 	{"defun", Formals("name", "formals", VarArgSymbol, "expr"), macroDefun},
+	// get-default is a macro because we only want to evaluate the expression
+	// bound to default if the key doesn't exist in the map.
+	{"get-default", Formals("map", "key", "default"), macroGetDefault},
 	{"trace", Formals("expr"), macroTrace},
 }
 
@@ -92,6 +95,39 @@ func macroDefun(env *LEnv, args *LVal) *LVal {
 	})
 	//env.PutGlobal(sym, fun)
 	//return Nil()
+}
+
+func macroGetDefault(env *LEnv, args *LVal) *LVal {
+	mapExpr, keyExpr, defExpr := args.Cells[0], args.Cells[1], args.Cells[2]
+	mapSym, keySym := env.GenSym(), env.GenSym()
+	let := QExpr([]*LVal{
+		Symbol("lisp:let"),
+		SExpr([]*LVal{
+			SExpr([]*LVal{
+				mapSym,
+				mapExpr,
+			}),
+			SExpr([]*LVal{
+				keySym,
+				keyExpr,
+			}),
+		}),
+		SExpr([]*LVal{
+			Symbol("lisp:if"),
+			SExpr([]*LVal{
+				Symbol("lisp:key?"),
+				mapSym,
+				keySym,
+			}),
+			SExpr([]*LVal{
+				Symbol("lisp:get"),
+				mapSym,
+				keySym,
+			}),
+			defExpr,
+		}),
+	})
+	return let
 }
 
 func isUnquote(v *LVal) bool {

@@ -33,6 +33,34 @@ func sortedMapKeys(m *LVal) []*LVal {
 	return ks
 }
 
+func mapHasKey(m *LVal, key *LVal) *LVal {
+	k := toSortedMapKey(key)
+	if k == nil {
+		return Errorf("unhashable type: %v", key.Type)
+	}
+	switch k := k.(type) {
+	case string:
+		v := m.Map[k]
+		if v != nil {
+			return Bool(true)
+		}
+		v = m.Map[mapSymbol(k)]
+		if v != nil {
+			return Bool(true)
+		}
+	case mapSymbol:
+		v := m.Map[k]
+		if v != nil {
+			return Bool(true)
+		}
+		v = m.Map[string(k)]
+		if v != nil {
+			return Bool(true)
+		}
+	}
+	return Bool(false)
+}
+
 func mapGet(m, key, def *LVal) *LVal {
 	k := toSortedMapKey(key)
 	if k == nil {
@@ -59,7 +87,7 @@ func mapGet(m, key, def *LVal) *LVal {
 		}
 	}
 	if def == nil {
-		return Errorf("key not found: %s", key)
+		return Nil()
 	}
 	return def
 }

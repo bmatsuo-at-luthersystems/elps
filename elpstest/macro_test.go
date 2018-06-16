@@ -30,7 +30,7 @@ func TestMacros(t *testing.T) {
 			{"(m1 z)", "4"},
 		}},
 		{"my-defun", TestSequence{
-			{"(defmacro my-defun (name formals & exprs) (quasiquote (defun (unquote name) (unquote formals) (unquote-splicing exprs))))", "()"},
+			{"(defmacro my-defun (name formals &rest exprs) (quasiquote (defun (unquote name) (unquote formals) (unquote-splicing exprs))))", "()"},
 			{"(my-defun test-fun (x y) (debug-print x) (debug-print y) (+ x y))", "()"},
 			{"(test-fun 1 2)", "3"},
 			{"test-fun", "(lambda (x y) (debug-print x) (debug-print y) (+ x y))"},
