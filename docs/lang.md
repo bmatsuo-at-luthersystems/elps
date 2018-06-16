@@ -73,7 +73,7 @@ to a function).  Then expr2 is evaluated, followed by expr3.  A new scope is
 created, binding expr1's function arguments to the values of expr2 and expr3,
 and then the expr1's function in that scope.
 
-##Functions
+Functions
 
 A function is a symbolic expression that utilizes some number of unbound
 argument symbols.
@@ -98,19 +98,100 @@ The builtin macro `defun` is provided to bind names to functions.
 (neg 3)                 ; evaluates to -3
 ```
 
+###Optional function arguments
+
+If a function's formal argument list contains the special symbol `&optional`
+the following arguments are not required to call the function.
+
+```lisp
+(defun add1 (&optional x) (+ 1 (or x 0)))
+```
+
+The above function may be called with either zero or one argument.  If the
+function is called without any arguments the optional argument x is bound to
+the value nil.
+
+```lisp
+(add1)    ; evaluates to 1
+(add1 2)  ; evaluates to 3
+```
+
+Functions can have multiple optional arguments.  Arguments are bound to
+optional arguments in the order the arguments are defined and any left over
+symbols are bound to the value nil.
+
+```lisp
+(defun add (&optional x y) (+ (or x 1) (or y 2)))
+(add)     ; evaluates to 3
+(add 2)   ; evaluates to 4
+(add 2 0) ; evaluates to 2
+```
+
+There is no limit to the number of optional arguments a function can have. But if the number of optional arguments is too large it may be better to use keyward arguments instead.
+
 ###Variable argument functions
 
-A function's formal argument list may use the special symbol `&` before the
-final argument to denote that the final argument should be bound to a list
+A function's formal argument list may use the special symbol `&rest` before
+the final argument to denote that the final argument should be bound to a list
 containing all arguments not bound by previous argument symbols.
 
 ```lisp
-(lambda (x & xs) (cons x (reverse xs)))
+(defun cons-reverse (x &rest xs) (cons x (reverse xs)))
 ```
 
 The above function can evaluate with one or more arguments.  The symbol `x`
 will be bound to the first argument and `xs` will be bound to the remaining
 (possibly empty) list of arguments.
+
+```lisp
+(cons-reverse 1)      ; evaluates to '(1)
+(cons-reverse 1 2 3)  ; evaluates to '(1 3 2)
+```
+
+Variadic functions are prohibited from having keyword arguments due to
+confusing semantics when mixing the two styles.  When keyword arguments are
+needed avoid using `&rest` and just pass the variable argument as an
+additional keyword argument.
+
+###Keyward arguments
+
+If a function's formal argument list contains the special symbol `&key` the
+following symbols are keyword arguments.  Keyword arguments are like optional
+arguments, in that they are not required to invoke the function.  Furthermore
+they are bound to nil values when not provided.  However, keyword arguments
+are unordered and when passed must be preceded by a keyword symbol indicating
+which are follows.
+
+```lisp
+(defun point2d (&key x y) (list (or x 0) (or y 0)))
+```
+
+The above function defines two keyword arguments and may be called specifying
+values for both, one, or neither.
+
+```lisp
+(point2d)           ; evaluates to '(0 0)
+(point2d :y 1)      ; evaluates to '(0 1)
+(point2d :x 1)      ; evaluates to '(1 0)
+(point2d :y 1 :x 1) ; evaluates to '(1 1)
+```
+
+Keyword arguments are useful but they can also lead to some confusing errors.
+Keywords are values.  And as values keywards can be passed to functions as
+normal, required arguments.
+
+```lisp
+(defun single (x) (cons x ()))
+(single :foo)  ; evaluates to '(:foo)
+```
+
+This unavoidable property of keyword arguments can lead to confusing runtime
+errors when accidentally omitting required arguments or mixing keyword arguments and optional arguments.
+
+**NOTE**: Due to the properties of keyword arguments it follows that a
+function utilizing both optional and keyword arguments may only have values
+bound to their keyword arguments once values have been bound to *all* optional
+arguments.
 
 ###Currying (partial function evaluation)
 
@@ -142,11 +223,11 @@ functions.
 
 The special symbol `%` indicates an anonymous function argument.  Functions of
 muiltple arguments can be defined by using the anonymous argument symbols `%1`,
-`%2`, ... or the variadic anonymous argument `%&`.
+`%2`, ... or the variadic anonymous argument `%&rest`.
 
 ```lisp
-(expr (+ %1 %2))        ; evaluates to (lambda (%1 %2) (+ %1 %2))
-(expr (reverse %&))     ; evaluates to (lambda (& %&) (reverse %&))
+(expr (+ %1 %2))         ; evaluates to (lambda (%1 %2) (+ %1 %2))
+(expr (reverse %&rest))  ; evaluates to (lambda (&rest %&rest) (reverse %&rest))
 ```
 
 ##Macros

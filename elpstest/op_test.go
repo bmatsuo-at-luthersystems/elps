@@ -40,7 +40,11 @@ func TestSpecialOp(t *testing.T) {
 			{`((expr "hello"))`, `"hello"`},
 			{`((expr %) 123)`, "123"},
 			{`((expr %2) 'a 'b)`, "'b"},
-			{`((expr (reverse 'list %&)) 1 2 3)`, "'(3 2 1)"},
+			{`((expr (reverse 'list %&rest)) 1 2 3)`, "'(3 2 1)"},
+			{`((expr %&optional))`, "()"},
+			{`((expr %&optional) 1)`, "1"},
+			{`((expr (cons 1 %&optional)))`, "'(1)"},
+			{`((expr (cons 1 %&optional)) '(2))`, "'(1 2)"},
 		}},
 		{"threading", TestSequence{
 			{`(thread-last 1 (+ 2) (< 2))`, `true`},
