@@ -73,7 +73,7 @@ to a function).  Then expr2 is evaluated, followed by expr3.  A new scope is
 created, binding expr1's function arguments to the values of expr2 and expr3,
 and then the expr1's function in that scope.
 
-Functions
+##Functions
 
 A function is a symbolic expression that utilizes some number of unbound
 argument symbols.
