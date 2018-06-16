@@ -1,9 +1,12 @@
 package libjson
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"log"
 	"reflect"
+	"sort"
 
 	"bitbucket.org/luthersystems/elps/lisp"
 	"bitbucket.org/luthersystems/elps/lisp/lisplib/internal/libutil"
@@ -11,9 +14,9 @@ import (
 
 func init() {
 	DefaultSerializer = &Serializer{
-		True:  lisp.Symbol("json:true"),
-		False: lisp.Symbol("json:false"),
-		Null:  lisp.Symbol("json:null"),
+		//True:  lisp.Symbol("json:true"),
+		//False: lisp.Symbol("json:false"),
+		Null: lisp.Symbol("json:null"),
 	}
 }
 
@@ -32,18 +35,20 @@ func LoadPackage(env *lisp.LEnv) *lisp.LVal {
 		return e
 	}
 	env.PutGlobal(lisp.Symbol("null"), lisp.Symbol("json:null"))
-	env.PutGlobal(lisp.Symbol("true"), lisp.Symbol("json:true"))
-	env.PutGlobal(lisp.Symbol("false"), lisp.Symbol("json:false"))
+	//env.PutGlobal(lisp.Symbol("true"), lisp.Symbol("json:true"))
+	//env.PutGlobal(lisp.Symbol("false"), lisp.Symbol("json:false"))
 	for _, fn := range Builtins(DefaultSerializer) {
 		env.AddBuiltins(true, fn)
 	}
 	return lisp.Nil()
 }
 
-// Bulitins takes the default serializer for a lisp environment and returns a
+// Builtins takes the default serializer for a lisp environment and returns a
 // set of package builtin functions that use it.
 func Builtins(s *Serializer) []*libutil.Builtin {
 	return []*libutil.Builtin{
+		libutil.Function("dump-bytes", lisp.Formals("object"), s.DumpBytesBuiltin),
+		libutil.Function("load-bytes", lisp.Formals("object"), s.LoadBytesBuiltin),
 		libutil.Function("dump-string", lisp.Formals("object"), s.DumpStringBuiltin),
 		libutil.Function("load-string", lisp.Formals("json-string"), s.LoadStringBuiltin),
 	}
@@ -86,10 +91,7 @@ func (s *Serializer) loadInterface(x interface{}) *lisp.LVal {
 	}
 	switch x := x.(type) {
 	case bool:
-		if x {
-			return lisp.Symbol("t")
-		}
-		return lisp.Nil()
+		return lisp.Bool(x)
 	case string:
 		return lisp.String(x)
 	case float64:
@@ -104,17 +106,26 @@ func (s *Serializer) loadInterface(x interface{}) *lisp.LVal {
 		}
 		return m
 	case []interface{}:
-		lis := lisp.QExpr(make([]*lisp.LVal, len(x)))
+		lis := lisp.Array(lisp.QExpr([]*lisp.LVal{lisp.Int(len(x))}), nil)
+		cells := lis.Cells[1 : 1+len(x)] // bounds may avoid bounds check later
 		for i, v := range x {
-			lis.Cells[i] = s.loadInterface(v)
-			if lis.Cells[i].Type == lisp.LError {
-				return lis.Cells[i]
+			cells[i] = s.loadInterface(v)
+			if cells[i].Type == lisp.LError {
+				return cells[i]
 			}
 		}
 		return lis
 	default:
 		return lisp.Errorf("unable to load json type: %T", x)
 	}
+}
+
+func (s *Serializer) attachStack(env *lisp.LEnv, lerr *lisp.LVal) *lisp.LVal {
+	if lerr.Type != lisp.LError {
+		return lerr
+	}
+	lerr.Stack = env.Stack.Copy()
+	return lerr
 }
 
 // Dump serializes v as JSON and returns any error.
@@ -125,6 +136,23 @@ func (s *Serializer) Dump(v *lisp.LVal) ([]byte, error) {
 		return nil, fmt.Errorf("type cannot be converted to json: %v", v.Type)
 	}
 	return json.Marshal(m)
+}
+
+func (s *Serializer) DumpBytesBuiltin(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
+	obj := args.Cells[0]
+	b, err := s.Dump(obj)
+	if err != nil {
+		return env.Error(err)
+	}
+	return lisp.Bytes(b)
+}
+
+func (s *Serializer) LoadBytesBuiltin(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
+	js := args.Cells[0]
+	if js.Type != lisp.LBytes {
+		return env.Errorf("argument is not bytes: %v", js.Type)
+	}
+	return s.attachStack(env, s.Load(js.Bytes))
 }
 
 func (s *Serializer) DumpStringBuiltin(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
@@ -141,7 +169,7 @@ func (s *Serializer) LoadStringBuiltin(env *lisp.LEnv, args *lisp.LVal) *lisp.LV
 	if js.Type != lisp.LString {
 		return env.Errorf("argument is not a string: %v", js.Type)
 	}
-	return s.Load([]byte(js.Str))
+	return s.attachStack(env, s.Load([]byte(js.Str)))
 }
 
 // GoValue converts v to its natural representation in Go.  Quotes are ignored
@@ -157,26 +185,38 @@ func (s *Serializer) GoValue(v *lisp.LVal) interface{} {
 	case lisp.LSymbol, lisp.LString:
 		if v.Type == lisp.LSymbol {
 			switch v.Str {
-			case "t":
+			case "true":
 				return true
-			case s.True.Str:
-				return true
-			case s.False.Str:
+			case "false":
 				return false
 			case s.Null.Str:
 				return nil
 			}
 		}
 		return v.Str
+	case lisp.LBytes:
+		return v.Bytes
 	case lisp.LInt:
 		return v.Int
 	case lisp.LFloat:
 		return v.Float
+	case lisp.LNative:
+		return v.Native
 	case lisp.LQuote:
 		return s.GoValue(v.Cells[0])
 	case lisp.LSExpr:
 		s, _ := s.GoSlice(v)
 		return s
+	case lisp.LArray:
+		s, _ := s.GoSlice(lisp.QExpr(v.Cells[1:]))
+		switch v.Cells[0].Len() {
+		case 0:
+			return s[0]
+		case 1:
+			return s
+		default:
+			return fmt.Errorf("cannot serialize array with dimensions: %v", v.Cells[0])
+		}
 	case lisp.LSortMap:
 		m, _ := s.GoMap(v)
 		return m
@@ -254,11 +294,11 @@ func (s *Serializer) GoSlice(v *lisp.LVal) ([]interface{}, bool) {
 // GoMap converts an LSortMap to its Go equivalent and returns it with a true
 // second argument.  If v does not represent a map json serializable map GoMap
 // returns a false second argument
-func (s *Serializer) GoMap(v *lisp.LVal) (map[string]interface{}, bool) {
+func (s *Serializer) GoMap(v *lisp.LVal) (SortedMap, bool) {
 	if v.Type != lisp.LSortMap {
 		return nil, false
 	}
-	m := make(map[string]interface{}, len(v.Map))
+	m := make(SortedMap, len(v.Map))
 	for k, vlisp := range v.Map {
 		vgo := s.GoValue(vlisp)
 		kreflect := reflect.ValueOf(k)
@@ -271,4 +311,35 @@ func (s *Serializer) GoMap(v *lisp.LVal) (map[string]interface{}, bool) {
 		}
 	}
 	return m, true
+}
+
+type SortedMap map[string]interface{}
+
+func (m SortedMap) MarshalJSON() ([]byte, error) {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var buf bytes.Buffer
+	buf.WriteString("{")
+	for i, k := range keys {
+		b, err := json.Marshal(k)
+		if err != nil {
+			return nil, err
+		}
+		buf.Write(b)
+		buf.WriteString(":")
+		b, err = json.Marshal(m[k])
+		if err != nil {
+			log.Printf("bad value: %#v", m[k])
+			return nil, err
+		}
+		buf.Write(b)
+		if i < len(keys)-1 {
+			buf.WriteString(",")
+		}
+	}
+	buf.WriteString("}")
+	return buf.Bytes(), nil
 }

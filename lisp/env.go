@@ -1,7 +1,6 @@
 package lisp
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"log"
@@ -38,7 +37,7 @@ func InitializeUserEnv(env *LEnv) *LVal {
 	env.AddBuiltins(true)
 	env.Registry.DefinePackage(DefaultUserPackage)
 	rc := env.InPackage(Symbol(DefaultUserPackage))
-	if !rc.IsNil() {
+	if GoError(rc) != nil {
 		return rc
 	}
 	return env.UsePackage(Symbol(env.Registry.Lang))
@@ -183,8 +182,11 @@ func (env *LEnv) get(k *LVal) *LVal {
 	if k.Type != LSymbol && k.Type != LQSymbol {
 		return Nil()
 	}
-	if k.Str == "t" {
-		return Symbol("t")
+	if k.Str == "true" {
+		return Symbol("true")
+	}
+	if k.Str == "false" {
+		return Symbol("false")
 	}
 	v, ok := env.Scope[k.Str]
 	if ok {
@@ -231,7 +233,10 @@ func (env *LEnv) Put(k, v *LVal) {
 	if k.Type != LSymbol && k.Type != LQSymbol {
 		return
 	}
-	if k.Str == "t" {
+	if k.Str == "true" {
+		panic("constant value")
+	}
+	if k.Str == "false" {
 		panic("constant value")
 	}
 	if v == nil {
@@ -343,51 +348,76 @@ func (env *LEnv) AddBuiltins(external bool, funs ...LBuiltinDef) {
 }
 
 // Error returns an LError value with an error message given by rendering msg.
+//
 // Error may be called either with an error or with any number of *LVal values.
 // It is invalid to pass an error argument with any other values and doing so
-// will result in a runtime panic.  The returned LVal contains a copy
+// will result in a runtime panic.
+//
+// Unlike the exported function, the Error method returns LVal with a copy
 // env.Stack.
 func (env *LEnv) Error(msg ...interface{}) *LVal {
-	fullMsg := ""
-	var buf bytes.Buffer
-	for i, v := range msg {
+	return env.ErrorCondition("error", msg...)
+}
+
+// ErrorCondition returns an LError the given condition type and an error
+// message computed by rendering msg.
+//
+// ErrorCondition may be called either with an error or with any number of
+// *LVal values.  It is invalid to pass ErrorCondition an error argument with
+// any other values and doing so will result in a runtime panic.
+//
+// Unlike the exported function, the ErrorCondition method returns an LVal with
+// a copy env.Stack.
+func (env *LEnv) ErrorCondition(condition string, v ...interface{}) *LVal {
+	//log.Printf("stack %v", env.Stack.Copy())
+
+	narg := len(v)
+	cells := make([]*LVal, 0, len(v))
+	for _, v := range v {
 		switch v := v.(type) {
 		case *LVal:
-			if i > 0 {
-				buf.WriteString(" ")
-			}
-			if v.Type == LString {
-				buf.WriteString(v.Str)
-			} else {
-				buf.WriteString(v.String())
-			}
+			cells = append(cells, v)
 		case error:
-			if len(msg) > 1 {
+			if narg > 1 {
 				panic("invalid error argument")
 			}
-			// TODO:  Add somewhere to store the original error so that the embedding
-			// program can potentially pick it out and inspect it.
-			fullMsg = v.Error()
+			return &LVal{
+				Type:  LError,
+				Str:   condition,
+				Stack: env.Stack.Copy(),
+				Cells: []*LVal{Native(v)},
+			}
+		default:
+			cells = append(cells, Native(v))
 		}
 	}
-	if fullMsg == "" {
-		fullMsg = buf.String()
-	}
-	//log.Printf("stack %v", env.Stack.Copy())
 	return &LVal{
 		Type:  LError,
-		Str:   fullMsg,
+		Str:   condition,
 		Stack: env.Stack.Copy(),
+		Cells: cells,
 	}
 }
 
-// Errorf returns an LError value with a formatted error message.  The returned
-// LVal contains a copy env.Stack.
+// Errorf returns an LError value with a formatted error message.
+//
+// Unlike the exported function, the Errorf method returns an LVal with a copy
+// env.Stack.
 func (env *LEnv) Errorf(format string, v ...interface{}) *LVal {
+	return env.ErrorConditionf("error", format, v...)
+}
+
+// ErrorConditionf returns an LError value with the given condition type and a
+// a formatted error message rendered using fmt.Sprintf.
+//
+// Unlike the exported function, the ErrorConditionf method returns an LVal
+// with a copy env.Stack.
+func (env *LEnv) ErrorConditionf(condition string, format string, v ...interface{}) *LVal {
 	return &LVal{
 		Type:  LError,
-		Str:   fmt.Sprintf(format, v...),
+		Str:   condition,
 		Stack: env.Stack.Copy(),
+		Cells: []*LVal{String(fmt.Sprintf(format, v...))},
 	}
 }
 
@@ -474,16 +504,25 @@ func (env *LEnv) EvalSExpr(s *LVal) *LVal {
 	npop := env.Stack.TerminalFID(f.FID)
 	// Push onto the stack here so that we don't trigger tail recursion while
 	// evaluating the arguments to f -- f has to be the recursive call, if
-	// there is recursion at all.
+	// there is to be recursion optimization at all.
+	//
+	// BUG:  Because the function stack frame is pushed here any errors
+	// encountered during argument expression evalutation will appear to happen
+	// inside the function when looking at error messages and stack dumps.
+	//
+	// TODO:  Instead of pushing the function stack frame here we should push a
+	// frame marker that prevents tail recursion optimization beyond this point
+	// on the stack.  When the stack is dumped markers can be filtered out to
+	// produce a clean stack.
 	env.Stack.PushFID(f.FID, f.Package, env.GetFunName(f))
 	defer env.Stack.Pop()
 
 	if f.IsSpecialFun() {
-		// Argument to a macro a not evaluated but they aren't quoted either.
-		// This behavior is what allows ``unquote'' to properly resolve macro
-		// argument symbols during and still produce valid code during macro
-		// expansion.  That is, if x is a macro argument then what do the
-		// following expressions return?
+		// Arguments to a macro are not evaluated but they aren't quoted
+		// either.  This behavior is what allows ``unquote'' to properly
+		// resolve macro argument symbols during and still produce valid code
+		// during macro expansion.  That is, if x is a macro argument then what
+		// do the following expressions return?
 		//		(quasiquote (unquote x))             	  => {expression bound to x}
 		//		(quasiquote (unquote '(if 1 '(1) '(2))))  => '(1)
 		// If the value given to x was quoted by eval then ``unquote'' would
@@ -582,7 +621,7 @@ func (env *LEnv) Call(fun *LVal, args *LVal) *LVal {
 		argSym := formals.Cells[0]
 		if argSym.Str == VarArgSymbol {
 			if len(formals.Cells) == 1 {
-				return env.Errorf("%s: function argument format list ends with symbol ``%s''", fun.FID, VarArgSymbol)
+				return env.Errorf("%s: function formal argument list ends with symbol ``%s''", fun.FID, VarArgSymbol)
 			}
 			argSym = formals.Cells[1]
 			q := QExpr(args.Cells[i:])
@@ -600,7 +639,7 @@ func (env *LEnv) Call(fun *LVal, args *LVal) *LVal {
 			return fun
 		}
 		if len(formals.Cells) != 2 {
-			return env.Errorf("function argument format list ends with symbol ``%s''", VarArgSymbol)
+			return env.Errorf("function formal argument list ends with symbol ``%s''", VarArgSymbol)
 		}
 		// We never bound the final argument to a value so we do it here.
 		putVarArg(formals.Cells[1], Nil())

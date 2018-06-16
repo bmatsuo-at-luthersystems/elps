@@ -4,12 +4,18 @@ package lisp
 //
 // NOTE:  I don't like this name, really.  But I can't think of a better one.
 func True(v *LVal) bool {
-	return !v.IsNil()
+	if v.IsNil() {
+		return false
+	}
+	if v.Type != LSymbol {
+		return true
+	}
+	return v.Str != "false"
 }
 
 // Not interprets v as a boolean value and returns its negation.
 func Not(v *LVal) bool {
-	return v.IsNil()
+	return !True(v)
 }
 
 // GoValue converts v to its natural representation in Go.  Quotes are ignored
@@ -41,6 +47,18 @@ func GoValue(v *LVal) interface{} {
 	case LSortMap:
 		m, _ := GoMap(v)
 		return m
+	case LArray:
+		s, _ := GoSlice(SExpr(v.Cells[1:]))
+		switch v.Cells[0].Len() {
+		case 0:
+			return s[0]
+		case 1:
+			return s
+		default:
+			// TODO:  Slice up the backing storage s to create a multidimensional
+			// slice (e.g.  [][]interface{}).
+			return v
+		}
 	case LNative:
 		return v.Native
 	}

@@ -6,6 +6,13 @@ import (
 
 func TestEval(t *testing.T) {
 	tests := TestSuite{
+		{"raw strings", TestSequence{
+			{`"""a raw string"""`, `"a raw string"`},
+			{`"""a raw
+string"""`, `"a raw\nstring"`},
+			{`"""""a raw
+string"""`, `"\"\"a raw\nstring"`},
+		}},
 		{"quotes", TestSequence{
 			{"3", "3"},
 			// a single quote on a self-evaluating expression does not show up.
@@ -15,8 +22,10 @@ func TestEval(t *testing.T) {
 		}},
 		{"symbols", TestSequence{
 			{"()", "()"},
-			{"'t", "'t"},
-			{"t", "t"},
+			{"'true", "'true"},
+			{"true", "true"},
+			{"'false", "'false"},
+			{"false", "false"},
 			// A bit brittle, but it's ok for now. Replace with a more robust
 			// test later if problematic.
 			{"a", "unbound symbol: a"},
@@ -40,25 +49,43 @@ func TestEval(t *testing.T) {
 		{"lists", TestSequence{
 			{"(cons 1 (cons 2 (cons 3 ())))", "'(1 2 3)"},
 			{"(list 1 2 3)", "'(1 2 3)"},
-			{"(concat (list 1 2) (list 3))", "'(1 2 3)"},
+			{"(concat 'list (list 1 2) (list 3))", "'(1 2 3)"},
 			{"(cons 1 (cons 2 (cons 3 ())))", "'(1 2 3)"},
 			{"(list 1 2 3)", "'(1 2 3)"},
-			{"(reverse (list 1 2 3))", "'(3 2 1)"},
-			{"(reverse (list 1 2))", "'(2 1)"},
-			{"(concat (list 1 2) (list 3))", "'(1 2 3)"},
-			{"(slice '(0 1 2 3 4) 1 3)", "'(1 2)"},
+			{"(reverse 'list (list 1 2 3))", "'(3 2 1)"},
+			{"(reverse 'list (list 1 2))", "'(2 1)"},
+			{"(reverse 'vector (list 1 2 3))", "(vector 3 2 1)"},
+			{"(reverse 'vector (list 1 2))", "(vector 2 1)"},
+			{"(reverse 'list (vector 1 2 3))", "'(3 2 1)"},
+			{"(reverse 'list (vector 1 2))", "'(2 1)"},
+			{"(reverse 'vector (vector 1 2 3))", "(vector 3 2 1)"},
+			{"(reverse 'vector (vector 1 2))", "(vector 2 1)"},
+			{"(concat 'list (list 1 2) (list 3))", "'(1 2 3)"},
+			{"(slice 'list '(0 1 2 3 4) 1 3)", "'(1 2)"},
 		}},
 		{"make-sequence", TestSequence{
 			{"(make-sequence 0 5)", "'(0 1 2 3 4)"},
 			{"(make-sequence 0 5 2)", "'(0 2 4)"},
 		}},
 		{"filtering", TestSequence{
-			{"(select (expr (< % 3)) '())", "'()"},
-			{"(select (expr (< % 3)) '(0 1 2 3 4 5))", "'(0 1 2)"},
-			{"(select (expr (< % 3)) '(3 4 5 6))", "'()"},
-			{"(reject (expr (< % 3)) '())", "'()"},
-			{"(reject (expr (< % 3)) '(0 1 2 3 4 5))", "'(3 4 5)"},
-			{"(reject (expr (< % 3)) '(0 1 1 -1 2 2))", "'()"},
+			{"(select 'list (expr (< % 3)) '())", "'()"},
+			{"(select 'list (expr (< % 3)) '(0 1 2 3 4 5))", "'(0 1 2)"},
+			{"(select 'list (expr (< % 3)) '(3 4 5 6))", "'()"},
+			{"(reject 'list (expr (< % 3)) '())", "'()"},
+			{"(reject 'list (expr (< % 3)) '(0 1 2 3 4 5))", "'(3 4 5)"},
+			{"(reject 'list (expr (< % 3)) '(0 1 1 -1 2 2))", "'()"},
+			{"(select 'list (expr (< % 3)) (vector))", "'()"},
+			{"(select 'list (expr (< % 3)) (vector 0 1 2 3 4 5))", "'(0 1 2)"},
+			{"(select 'list (expr (< % 3)) (vector 3 4 5 6))", "'()"},
+			{"(reject 'list (expr (< % 3)) (vector ))", "'()"},
+			{"(reject 'list (expr (< % 3)) (vector 0 1 2 3 4 5))", "'(3 4 5)"},
+			{"(reject 'list (expr (< % 3)) (vector 0 1 1 -1 2 2))", "'()"},
+			{"(select 'vector (expr (< % 3)) '())", "(vector)"},
+			{"(select 'vector (expr (< % 3)) '(0 1 2 3 4 5))", "(vector 0 1 2)"},
+			{"(select 'vector (expr (< % 3)) '(3 4 5 6))", "(vector)"},
+			{"(reject 'vector (expr (< % 3)) '())", "(vector)"},
+			{"(reject 'vector (expr (< % 3)) '(0 1 2 3 4 5))", "(vector 3 4 5)"},
+			{"(reject 'vector (expr (< % 3)) '(0 1 1 -1 2 2))", "(vector)"},
 		}},
 		{"defun", TestSequence{
 			// defun macro
@@ -70,7 +97,7 @@ func TestEval(t *testing.T) {
 			{"(fn2 1 2)", "3"},
 		}},
 		{"errors", TestSequence{
-			{`(list 1 2 (error "testerror") 4)`, "testerror"},
+			{`(list 1 2 (error 'test-error "test message") 4)`, "test-error: test message"},
 		}},
 	}
 	RunTestSuite(t, tests)

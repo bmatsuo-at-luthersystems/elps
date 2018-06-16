@@ -40,13 +40,13 @@ func TestSpecialOp(t *testing.T) {
 			{`((expr "hello"))`, `"hello"`},
 			{`((expr %) 123)`, "123"},
 			{`((expr %2) 'a 'b)`, "'b"},
-			{`((expr (reverse %&)) 1 2 3)`, "'(3 2 1)"},
+			{`((expr (reverse 'list %&)) 1 2 3)`, "'(3 2 1)"},
 		}},
 		{"threading", TestSequence{
-			{`(thread-last 1 (+ 2) (< 2))`, `t`},
-			{`(thread-last 1 (+ 2) (> 2))`, `()`},
-			{`(thread-first 1 (+   2) (<   2))`, `()`},
-			{`(thread-first 1 (+   2) (>   2))`, `t`},
+			{`(thread-last 1 (+ 2) (< 2))`, `true`},
+			{`(thread-last 1 (+ 2) (> 2))`, `false`},
+			{`(thread-first 1 (+   2) (<   2))`, `false`},
+			{`(thread-first 1 (+   2) (>   2))`, `true`},
 		}},
 	}
 	RunTestSuite(t, tests)

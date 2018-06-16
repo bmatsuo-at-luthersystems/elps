@@ -19,6 +19,7 @@ var langSpecialOps = []*langBuiltin{
 	{"let*", Formals("bindings", VarArgSymbol, "expr"), opLetSeq},
 	{"let", Formals("bindings", VarArgSymbol, "expr"), opLet},
 	{"progn", Formals(VarArgSymbol, "expr"), opProgn},
+	{"ignore-errors", Formals(VarArgSymbol, "exprs"), opIgnoreErrors},
 	{"cond", Formals(VarArgSymbol, "branch"), opCond},
 	{"if", Formals("condition", "then", "else"), opIf},
 	{"or", Formals(VarArgSymbol, "expr"), opOr},
@@ -345,6 +346,21 @@ func opProgn(env *LEnv, args *LVal) *LVal {
 	return val
 }
 
+func opIgnoreErrors(env *LEnv, args *LVal) *LVal {
+	if len(args.Cells) == 0 {
+		return Nil()
+	}
+	args.Cells[len(args.Cells)-1].Terminal = true
+	var val *LVal
+	for _, c := range args.Cells {
+		val = env.Eval(c)
+		if val.Type == LError {
+			return Nil()
+		}
+	}
+	return val
+}
+
 // (cond (test-form then-form)*)
 func opCond(env *LEnv, args *LVal) *LVal {
 	last := len(args.Cells) - 1
@@ -367,7 +383,7 @@ func opCond(env *LEnv, args *LVal) *LVal {
 		if test.Type == LError {
 			return test
 		}
-		if test.IsNil() {
+		if Not(test) {
 			continue
 		}
 		branch.Cells[1].Terminal = true
@@ -385,8 +401,7 @@ func opIf(env *LEnv, s *LVal) *LVal {
 	if r.Type == LError {
 		return r
 	}
-	ok := r.IsNil()
-	if ok {
+	if Not(r) {
 		// test-form evaluated to nil (false)
 		s.Cells[2].Terminal = true
 		return env.Eval(s.Cells[2])
@@ -405,9 +420,8 @@ func opOr(env *LEnv, s *LVal) *LVal {
 		if r.Type == LError {
 			return r
 		}
-		ok := r.IsNil()
-		if ok {
-			return Bool(true)
+		if True(r) {
+			return r
 		}
 	}
 	return Bool(false)
@@ -417,15 +431,15 @@ func opAnd(env *LEnv, s *LVal) *LVal {
 	if len(s.Cells) > 0 {
 		s.Cells[len(s.Cells)-1].Terminal = true
 	}
+	var r *LVal
 	for _, c := range s.Cells {
 		r := env.Eval(c)
 		if r.Type == LError {
 			return r
 		}
-		ok := r.IsNil()
-		if !ok {
+		if !True(r) {
 			return Bool(false)
 		}
 	}
-	return Bool(true)
+	return r
 }

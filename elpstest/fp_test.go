@@ -5,7 +5,10 @@ import "testing"
 func TestFP(t *testing.T) {
 	tests := TestSuite{
 		{"map-reduce", TestSequence{
-			{"(map (lambda (x) (+ x x)) '(1 2 3))", "'(2 4 6)"},
+			{"(map 'list (lambda (x) (+ x x)) '(1 2 3))", "'(2 4 6)"},
+			{"(map 'vector (lambda (x) (+ x x)) '(1 2 3))", "(vector 2 4 6)"},
+			{"(map 'list (lambda (x) (+ x x)) (vector 1 2 3))", "'(2 4 6)"},
+			{"(map 'vector (lambda (x) (+ x x)) (vector 1 2 3))", "(vector 2 4 6)"},
 			{"(defun flip (fn x y) (fn y x))", "()"},
 			{"(foldl (flip cons) () '(1 2 3))", "'(3 2 1)"},
 			{"(foldr cons () '(1 2 3))", "'(1 2 3)"},
@@ -19,12 +22,14 @@ func TestFP(t *testing.T) {
 		}},
 		{"flip", TestSequence{
 			{"((flip +) 1 2)", "3"},
-			{"((flip <) 1 2)", "()"},
+			{"((flip <) 1 2)", "false"},
 			{"(((flip cons) '(2 3)) 1)", "'(1 2 3)"},
 		}},
 		{"zip", TestSequence{
-			{"(zip '(1 2 3) '('a 'b 'c))", "'('(1 'a) '(2 'b) '(3 'c))"},
-			{"(unpack zip (zip '(1 2 3) '('a 'b 'c)))", "'('(1 2 3) '('a 'b 'c))"},
+			{"(zip 'list '(1 2 3) '('a 'b 'c))", "'('(1 'a) '(2 'b) '(3 'c))"},
+			{"(unpack (zip 'list) (zip 'list '(1 2 3) '('a 'b 'c)))", "'('(1 2 3) '('a 'b 'c))"},
+			{"(zip 'vector '(1 2 3) '('a 'b 'c))", "(vector (vector 1 'a) (vector 2 'b) (vector 3 'c))"},
+			{"(unpack (zip 'vector) (map 'list identity (zip 'vector '(1 2 3) '('a 'b 'c))))", "(vector (vector 1 2 3) (vector 'a 'b 'c))"},
 		}},
 		{"simple composition", TestSequence{
 			{"(defun f (x) (+ x 1))", "()"},
@@ -34,9 +39,9 @@ func TestFP(t *testing.T) {
 		}},
 		{"complex composition", TestSequence{
 			{"(defun g (x & xs) (cons x xs))", "()"},
-			{"(compose reverse g)", "(lambda (x & xs) (<builtin> (lisp:unpack (lambda (x & xs) (cons x xs)) (lisp:concat '(x) xs))))"},
-			{"((compose reverse list) 1 2 3)", "'(3 2 1)"},
-			{"((compose reverse g) 1 2 3)", "'(3 2 1)"},
+			{"(compose (reverse 'list) g)", "(lambda (x & xs) (<builtin> (lisp:unpack (lambda (x & xs) (cons x xs)) (lisp:concat 'list '(x) xs))))"},
+			{"((compose (reverse 'list) list) 1 2 3)", "'(3 2 1)"},
+			{"((compose (reverse 'list) g) 1 2 3)", "'(3 2 1)"},
 		}},
 	}
 	RunTestSuite(t, tests)
