@@ -19,7 +19,7 @@ func (e *ErrorVal) Error() string {
 	if e.Stack.Top() == nil {
 		return e.Str
 	}
-	return fmt.Sprintf("%s: %s", e.FunName(), e.Str)
+	return fmt.Sprintf("%s: %s", e.FunName(), e.Cells[0])
 }
 
 // FunName returns the qualified name of function on the top of the call stack
@@ -30,7 +30,7 @@ func (e *ErrorVal) FunName() string {
 
 // ErrorMessage returns the underlying message in the error.
 func (e *ErrorVal) ErrorMessage() string {
-	return e.Str
+	return e.Cells[0].String()
 }
 
 // WriteTrace writes the error and a stack trace to w
