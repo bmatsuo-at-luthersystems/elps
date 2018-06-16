@@ -428,11 +428,13 @@ func opIf(env *LEnv, s *LVal) *LVal {
 }
 
 func opOr(env *LEnv, s *LVal) *LVal {
-	if len(s.Cells) > 0 {
-		s.Cells[len(s.Cells)-1].Terminal = true
+	if len(s.Cells) == 0 {
+		return Nil()
 	}
+	s.Cells[len(s.Cells)-1].Terminal = true
+	var r *LVal
 	for _, c := range s.Cells {
-		r := env.Eval(c)
+		r = env.Eval(c)
 		if r.Type == LError {
 			return r
 		}
@@ -440,16 +442,20 @@ func opOr(env *LEnv, s *LVal) *LVal {
 			return r
 		}
 	}
-	return Bool(false)
+	// In the common lisp standard the ``or'' function returns the evaluated
+	// result of its final argument if no arguments evaluated true.
+	//		(or) == nil
+	//		(or x) == x
+	//		(or x1 x2 ... xn) == (cond (x1 x1) (x2 x2) ... (t xn))
+	return r
 }
 
 func opAnd(env *LEnv, s *LVal) *LVal {
 	if len(s.Cells) == 0 {
+		// The identity for and is a true value.
 		return Bool(true)
 	}
-	if len(s.Cells) > 0 {
-		s.Cells[len(s.Cells)-1].Terminal = true
-	}
+	s.Cells[len(s.Cells)-1].Terminal = true
 	var r *LVal
 	for _, c := range s.Cells {
 		r = env.Eval(c)
@@ -457,8 +463,20 @@ func opAnd(env *LEnv, s *LVal) *LVal {
 			return r
 		}
 		if !True(r) {
-			return Bool(false)
+			// In the common lisp standard short circuiting the ``and''
+			// function always causes a nil return, even if r is the symbol
+			// false.
+			return Nil()
 		}
 	}
+	// In the common lisp standard the ``and'' function returns the evaluated
+	// result of its final argument if all arguments evaluated true.
+	//		(and) == nil
+	//		(and x) == x
+	//		(and x1 x2 ... xn) == (cond
+	//		                       ((not x1) nil)
+	//		                       ((not x2) nil)
+	//		                       ...
+	//		                       (t xn))
 	return r
 }
