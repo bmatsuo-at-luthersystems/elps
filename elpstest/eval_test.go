@@ -97,7 +97,7 @@ string"""`, `"\"\"a raw\nstring"`},
 			{"(fn2 1 2)", "3"},
 		}},
 		{"errors", TestSequence{
-			{`(list 1 2 (error 'test-error "test message") 4)`, "test message"},
+			{`(list 1 2 (error 'test-error "test message") 4)`, "test-error: test message"},
 		}},
 	}
 	RunTestSuite(t, tests)

@@ -699,11 +699,7 @@ func (v *LVal) str(onTheRecord bool) string {
 			quote = QUOTE
 			return quote + fmt.Sprintf("(error '%s %v)", v.Str, v.Cells[0])
 		}
-		s, err := toString(v.Cells[0])
-		if err != nil {
-			return v.Cells[0].String()
-		}
-		return s
+		return GoError(v).Error()
 	case LSymbol:
 		if v.Quoted {
 			quote = QUOTE

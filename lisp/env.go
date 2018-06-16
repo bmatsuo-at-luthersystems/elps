@@ -1,7 +1,6 @@
 package lisp
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"log"
@@ -373,19 +372,11 @@ func (env *LEnv) ErrorCondition(condition string, v ...interface{}) *LVal {
 	//log.Printf("stack %v", env.Stack.Copy())
 
 	narg := len(v)
-	fullMsg := ""
-	var buf bytes.Buffer
-	for i, v := range v {
+	cells := make([]*LVal, 0, len(v))
+	for _, v := range v {
 		switch v := v.(type) {
 		case *LVal:
-			if i > 0 {
-				buf.WriteString(" ")
-			}
-			if v.Type == LString {
-				buf.WriteString(v.Str)
-			} else {
-				buf.WriteString(v.String())
-			}
+			cells = append(cells, v)
 		case error:
 			if narg > 1 {
 				panic("invalid error argument")
@@ -397,17 +388,14 @@ func (env *LEnv) ErrorCondition(condition string, v ...interface{}) *LVal {
 				Cells: []*LVal{Native(v)},
 			}
 		default:
-			fmt.Fprint(&buf, v)
+			cells = append(cells, Native(v))
 		}
-	}
-	if fullMsg == "" {
-		fullMsg = buf.String()
 	}
 	return &LVal{
 		Type:  LError,
 		Str:   condition,
 		Stack: env.Stack.Copy(),
-		Cells: []*LVal{String(fullMsg)},
+		Cells: cells,
 	}
 }
 
