@@ -143,7 +143,11 @@ func builtinLoadString(env *LEnv, args *LVal) *LVal {
 	if source.Type != LString {
 		return env.Errorf("first argument is not a string: %v", source.Type)
 	}
-	return env.root().LoadString("load-string", source.Str)
+	v := env.root().LoadString("load-string", source.Str)
+	if v.Type == LError && v.Stack == nil {
+		v.Stack = env.Stack.Copy()
+	}
+	return v
 }
 
 func builtinLoadBytes(env *LEnv, args *LVal) *LVal {
@@ -151,7 +155,11 @@ func builtinLoadBytes(env *LEnv, args *LVal) *LVal {
 	if source.Type != LBytes {
 		return env.Errorf("first argument is not bytes: %v", source.Type)
 	}
-	return env.root().Load("load-bytes", bytes.NewReader(source.Bytes))
+	v := env.root().Load("load-bytes", bytes.NewReader(source.Bytes))
+	if v.Type == LError && v.Stack == nil {
+		v.Stack = env.Stack.Copy()
+	}
+	return v
 }
 
 func builtinInPackage(env *LEnv, args *LVal) *LVal {

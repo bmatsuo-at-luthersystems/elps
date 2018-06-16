@@ -134,6 +134,8 @@ func (env *LEnv) Load(name string, r io.Reader) *LVal {
 	}
 	exprs, err := env.Reader.Read(name, r)
 	if err != nil {
+		// The error returned here explicitly lacks a stack so that its trace
+		// can be associated with the lisp function that called it (if any).
 		return Error(err)
 	}
 	if len(exprs) == 0 {
