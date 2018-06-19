@@ -10,21 +10,21 @@ func TestErrors(t *testing.T) {
 		}},
 		{"handler-bind", TestSequence{
 			// handling specific types of errors and returning meaningful data.
-			{`(handler-bind ((condition identity))
+			{`(handler-bind ((condition list))
 				(progn
 					(debug-print "do stuff")
 					(error 'custom-error "custom data")))`,
-				`"custom data"`},
-			{`(handler-bind ((custom-error (lambda (&rest _) 1)) (condition identity))
+				`'('custom-error "custom data")`},
+			{`(handler-bind ((custom-error (lambda (c &rest _) 1)) (condition list))
 				(progn
 					(debug-print "do stuff")
 					(error 'custom-error "custom data")))`,
 				`1`},
-			{`(handler-bind ((custom-error (lambda (&rest _) 1)) (condition identity))
+			{`(handler-bind ((custom-error (lambda (c &rest _) 1)) (condition list))
 				(progn
 					(debug-print "do stuff")
 					(error 'other-error "other data")))`,
-				`"other data"`},
+				`'('other-error "other data")`},
 		}},
 	}
 	RunTestSuite(t, tests)

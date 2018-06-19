@@ -42,8 +42,8 @@
 
 (test "unmarshal-syntax-error"
     (assert (string= "syntax-error"
-                     (handler-bind ([json:syntax-error (lambda (_) "syntax-error")])
+                     (handler-bind ([json:syntax-error (lambda (c _) "syntax-error")])
                        (json:load-string "{false:true}"))))
     (assert (string= "ok-json"
-                     (handler-bind ([json:syntax-error (lambda (_) "syntax-error")])
+                     (handler-bind ([json:syntax-error (lambda (c _) "syntax-error")])
                        (json:load-string "\"ok-json\"")))))

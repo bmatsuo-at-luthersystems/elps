@@ -93,7 +93,9 @@ var langBuiltins = []*langBuiltin{
 	{"sorted-map?", Formals("expr"), builtinIsSortedMap},
 	{"array?", Formals("expr"), builtinIsArray},
 	{"vector?", Formals("expr"), builtinIsVector},
+	{"symbol?", Formals("expr"), builtinIsSymbol},
 	{"string?", Formals("expr"), builtinIsString},
+	{"bytes?", Formals("expr"), builtinIsBytes},
 	{"equal?", Formals("a", "b"), builtinEqual},
 	{"all?", Formals("predicate", "seq"), builtinAllP},
 	{"any?", Formals("predicate", "seq"), builtinAnyP},
@@ -104,6 +106,7 @@ var langBuiltins = []*langBuiltin{
 	{"string<=", Formals("a", "b"), builtinStringLEq},
 	{"string<", Formals("a", "b"), builtinStringLT},
 	{"string=", Formals("a", "b"), builtinStringEq},
+	{"symbol=", Formals("a", "b"), builtinSymbolEq},
 	{">=", Formals("a", "b"), builtinGEq},
 	{">", Formals("a", "b"), builtinGT},
 	{"<=", Formals("a", "b"), builtinLEq},
@@ -1161,7 +1164,17 @@ func builtinIsVector(env *LEnv, args *LVal) *LVal {
 	return Bool(v.Type == LArray && v.Cells[0].Len() == 1)
 }
 
+func builtinIsSymbol(env *LEnv, args *LVal) *LVal {
+	v := args.Cells[0]
+	return Bool(v.Type == LString)
+}
+
 func builtinIsString(env *LEnv, args *LVal) *LVal {
+	v := args.Cells[0]
+	return Bool(v.Type == LString)
+}
+
+func builtinIsBytes(env *LEnv, args *LVal) *LVal {
 	v := args.Cells[0]
 	return Bool(v.Type == LString)
 }
@@ -1287,6 +1300,19 @@ func builtinStringGT(env *LEnv, args *LVal) *LVal {
 		return env.Errorf("second argument is not a string: %s", b.Type)
 	}
 	return Bool(a.Str > b.Str)
+}
+
+// BUG:  Symbol equality is not well defined and so this function's
+// implemantion may need to change in an incompatible way.
+func builtinSymbolEq(env *LEnv, args *LVal) *LVal {
+	a, b := args.Cells[0], args.Cells[1]
+	if a.Type != LSymbol {
+		return env.Errorf("first argument is not a symbol: %s", a.Type)
+	}
+	if b.Type != LSymbol {
+		return env.Errorf("second argument is not a symbol: %s", b.Type)
+	}
+	return Bool(a.Str == b.Str)
 }
 
 func builtinStringEq(env *LEnv, args *LVal) *LVal {

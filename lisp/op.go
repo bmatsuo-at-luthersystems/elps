@@ -399,7 +399,7 @@ func opHandlerBind(env *LEnv, args *LVal) *LVal {
 					return env.Errorf("handler not a function for condition type %s: %v", sym.Str, hval.Type)
 				}
 				// Is this a Terminal expression? Probably not...
-				expr := []*LVal{hval}
+				expr := []*LVal{hval, Quote(Symbol(val.Str))}
 				expr = append(expr, val.Copy().Cells...)
 				return env.Eval(SExpr(expr))
 			}
