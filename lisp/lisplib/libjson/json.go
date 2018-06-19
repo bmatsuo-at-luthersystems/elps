@@ -79,7 +79,14 @@ type Serializer struct {
 func (s *Serializer) Load(b []byte) *lisp.LVal {
 	var x interface{}
 	err := json.Unmarshal(b, &x)
-	if err != nil {
+	switch err.(type) {
+	case nil:
+		break
+	case *json.SyntaxError:
+		lerr := lisp.Error(err)
+		lerr.Str = "json:syntax-error"
+		return lerr
+	default:
 		return lisp.Error(err)
 	}
 	return s.loadInterface(x)

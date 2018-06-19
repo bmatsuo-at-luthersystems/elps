@@ -4,6 +4,12 @@ import "testing"
 
 func TestMacros(t *testing.T) {
 	tests := TestSuite{
+		{"test-trace", TestSequence{
+			{"(set 'x 0)", "0"},
+			{"(defun fun () (set 'x (+ x 1)))", "()"},
+			{"(trace (fun))", "1"},
+			{"(trace (fun))", "2"},
+		}},
 		{"quasiquote", TestSequence{
 			{"(quasiquote (reverse 'list '(1 2 3)))", "'(reverse 'list '(1 2 3))"},
 			{"(quasiquote (unquote (reverse 'list '(1 2 3))))", "'(3 2 1)"},
