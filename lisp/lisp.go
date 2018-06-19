@@ -308,11 +308,6 @@ func Lambda(formals *LVal, body []*LVal) *LVal {
 	if formals.Type != LSExpr {
 		return Errorf("formals is not a list of symbols: %v", formals.Type)
 	}
-	/*
-		if formals.Type != LSExpr {
-			return Errorf("body is not a list: %v", body.Type)
-		}
-	*/
 	cells := make([]*LVal, 0, len(body)+1)
 	cells = append(cells, formals)
 	cells = append(cells, body...)

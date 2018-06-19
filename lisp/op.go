@@ -19,6 +19,7 @@ var langSpecialOps = []*langBuiltin{
 	{"let*", Formals("bindings", VarArgSymbol, "expr"), opLetSeq},
 	{"let", Formals("bindings", VarArgSymbol, "expr"), opLet},
 	{"progn", Formals(VarArgSymbol, "expr"), opProgn},
+	{"handler-bind", Formals("bindings", VarArgSymbol, "forms"), opHandlerBind},
 	{"ignore-errors", Formals(VarArgSymbol, "exprs"), opIgnoreErrors},
 	{"cond", Formals(VarArgSymbol, "branch"), opCond},
 	{"if", Formals("condition", "then", "else"), opIf},
@@ -112,39 +113,20 @@ func opQuasiquote(env *LEnv, args *LVal) *LVal {
 	return result
 }
 
-func opLambda(env *LEnv, v *LVal) *LVal {
-	if len(v.Cells) < 2 {
-		return env.Errorf("too few arguments provided: %d", len(v.Cells))
-	}
-	/*
-		if len(v.Cells) > 2 {
-			return env.Errorf("too many arguments provided: %d", len(v.Cells))
-		}
-		for _, q := range v.Cells {
-			if q.Type != LSExpr {
-				return env.Errorf("argument is not a list: %v", q.Type)
-			}
-		}
-	*/
-
-	formals := v.Cells[0]
-	body := v.Cells[1:]
-	body[len(body)-1].Terminal = true
-
+func opLambda(env *LEnv, args *LVal) *LVal {
+	formals, body := args.Cells[0], args.Cells[1:]
 	for _, sym := range formals.Cells {
 		if sym.Type != LSymbol {
 			return env.Errorf("first argument contains a non-symbol: %v", sym.Type)
 		}
 	}
-
 	// Construct the LVal and add env to the LEnv chain to get lexical scoping
 	// (I think... -bmatsuo)
-	fun := Lambda(formals, body)
-	fun.Env.Parent = env
-	fun.Env.Stack = env.Stack
-	fun.Package = env.root().Package.Name
-
-	return fun
+	lval := env.Lambda(formals, body)
+	if lval.Type == LError {
+		lval.Stack = env.Stack.Copy()
+	}
+	return lval
 }
 
 func opExpr(env *LEnv, args *LVal) *LVal {
@@ -265,6 +247,11 @@ func opThreadLast(env *LEnv, args *LVal) *LVal {
 			return env.Errorf("expression argument is nil")
 		}
 	}
+	if len(exprs) == 0 {
+		val.Terminal = true
+		return env.Eval(val)
+	}
+	exprs[len(exprs)-1].Terminal = true
 	for _, expr := range exprs {
 		expr.Cells = append(expr.Cells, val)
 		val = env.Eval(expr)
@@ -285,6 +272,11 @@ func opThreadFirst(env *LEnv, args *LVal) *LVal {
 			return env.Errorf("expression argument is nil")
 		}
 	}
+	if len(exprs) == 0 {
+		val.Terminal = true
+		return env.Eval(val)
+	}
+	exprs[len(exprs)-1].Terminal = true
 	for _, expr := range exprs {
 		cells := make([]*LVal, len(expr.Cells)+1)
 		cells[0] = expr.Cells[0]
@@ -362,12 +354,70 @@ func opProgn(env *LEnv, args *LVal) *LVal {
 	return val
 }
 
+func opHandlerBind(env *LEnv, args *LVal) *LVal {
+	lbinds, forms := args.Cells[0], args.Cells[1:]
+	if lbinds.Type != LSExpr {
+		return env.Errorf("first argument is not a list: %v", lbinds.Type)
+	}
+	for _, bind := range lbinds.Cells {
+		if bind.Type != LSExpr {
+			return env.Errorf("first argument is not a list of bindings: %v", bind.Type)
+		}
+		if len(bind.Cells) != 2 {
+			return env.Errorf("first argument is not a list of bindings")
+		}
+		sym := bind.Cells[0]
+		if sym.Type != LSymbol {
+			return env.Errorf("binding type is not a symbol: %v", sym.Type)
+		}
+	}
+	if len(args.Cells) == 0 {
+		return Nil()
+	}
+	args.Cells[len(args.Cells)-1].Terminal = true
+	var val *LVal
+	// We can't call opProgn because we can't mark any expressions as
+	// terminal.  If an expression were marked as terminal env might try to
+	// invoke tail recursion optimizations.
+	for _, c := range forms {
+		val = env.Eval(c)
+		if val.Type == LError {
+			for _, bind := range lbinds.Cells {
+				sym, handler := bind.Cells[0], bind.Cells[1]
+				// Compare the error condition to the handler type specifier.
+				if sym.Str != val.Str && sym.Str != "condition" {
+					continue
+				}
+				// The condition matches so we evaluate the handler and then
+				// call it, passing the error.
+				hval := env.Eval(handler)
+				if hval.Type == LError {
+					// Well, we're boned
+					return hval
+				}
+				if hval.Type != LFun {
+					return env.Errorf("handler not a function for condition type %s: %v", sym.Str, hval.Type)
+				}
+				// Is this a Terminal expression? Probably not...
+				expr := []*LVal{hval}
+				expr = append(expr, val.Copy().Cells...)
+				return env.Eval(SExpr(expr))
+			}
+			return val
+		}
+	}
+	return val
+}
+
 func opIgnoreErrors(env *LEnv, args *LVal) *LVal {
 	if len(args.Cells) == 0 {
 		return Nil()
 	}
 	args.Cells[len(args.Cells)-1].Terminal = true
 	var val *LVal
+	// We can't call opProgn because we can't mark any expressions as
+	// terminal.  If an expression were marked as terminal env might try to
+	// invoke tail recursion optimizations.
 	for _, c := range args.Cells {
 		val = env.Eval(c)
 		if val.Type == LError {

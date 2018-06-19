@@ -1,10 +1,5 @@
 package lisp
 
-import (
-	"fmt"
-	"os"
-)
-
 var userMacros []*langBuiltin
 var langMacros = []*langBuiltin{
 	{"defmacro", Formals("name", "formals", "expr"), macroDefmacro},
@@ -12,7 +7,7 @@ var langMacros = []*langBuiltin{
 	// get-default is a macro because we only want to evaluate the expression
 	// bound to default if the key doesn't exist in the map.
 	{"get-default", Formals("map", "key", "default"), macroGetDefault},
-	{"trace", Formals("expr"), macroTrace},
+	{"trace", Formals("expr", OptArgSymbol, "message"), macroTrace},
 }
 
 // RegisterDefaultMacro adds the given function to the list returned by
@@ -36,23 +31,16 @@ func DefaultMacros() []LBuiltinDef {
 }
 
 func macroDefmacro(env *LEnv, args *LVal) *LVal {
-	sym := args.Cells[0]
+	sym, formals, bodyForms := args.Cells[0], args.Cells[1], args.Cells[2]
 	if sym.Type != LSymbol {
 		return env.Errorf("first argument is not a symbol: %s", sym.Type)
 	}
-	//v := env.GetGlobal(sym)
-	//if v.Type != LError {
-	//	return env.Errorf("symbol ``%v'' is already defined: %v", sym, v)
-	//}
-	fun := Lambda(args.Cells[1], []*LVal{args.Cells[2]})
+	fun := env.Lambda(formals, []*LVal{bodyForms})
 	if fun.Type == LError {
 		fun.Stack = env.Stack.Copy()
 		return fun
 	}
 	fun.FunType = LFunMacro // evaluate as a macro
-	fun.Package = env.root().Package.Name
-	fun.Env.Parent = env // function definitions get a lexical scope
-	fun.Env.Stack = env.Stack
 	return SExpr([]*LVal{
 		Symbol("lisp:progn"),
 		SExpr([]*LVal{
@@ -62,28 +50,18 @@ func macroDefmacro(env *LEnv, args *LVal) *LVal {
 		}),
 		Nil(),
 	})
-
-	//env.PutGlobal(sym, fun)
-	//return Nil()
 }
 
 func macroDefun(env *LEnv, args *LVal) *LVal {
-	sym := args.Cells[0]
+	sym, formals, body := args.Cells[0], args.Cells[1], args.Cells[2:]
 	if sym.Type != LSymbol {
 		return env.Errorf("first argument is not a symbol: %s", sym.Type)
 	}
-	//v := env.GetGlobal(sym)
-	//if v.Type != LError {
-	//	return env.Errorf("symbol ``%v'' is already defined: %v", sym, v)
-	//}
-	fun := Lambda(args.Cells[1], args.Cells[2:])
+	fun := env.Lambda(formals, body)
 	if fun.Type == LError {
 		fun.Stack = env.Stack.Copy()
 		return fun
 	}
-	fun.Env.Parent = env // function definitions get a lexical scope
-	fun.Package = env.root().Package.Name
-	fun.Env.Stack = env.Stack
 	return SExpr([]*LVal{
 		Symbol("lisp:progn"),
 		SExpr([]*LVal{
@@ -93,8 +71,6 @@ func macroDefun(env *LEnv, args *LVal) *LVal {
 		}),
 		Nil(),
 	})
-	//env.PutGlobal(sym, fun)
-	//return Nil()
 }
 
 func macroGetDefault(env *LEnv, args *LVal) *LVal {
@@ -201,9 +177,17 @@ func findAndUnquote(env *LEnv, v *LVal) *LVal {
 }
 
 func macroTrace(env *LEnv, args *LVal) *LVal {
-	if len(args.Cells) != 1 {
-		return env.Errorf("one argument expected (got %d)", len(args.Cells))
+	expr, msg := args.Cells[0], args.Cells[1]
+	sym := env.GenSym()
+	if msg.IsNil() {
+		msg = String("TRACE")
 	}
-	fmt.Fprintln(os.Stderr, args.Cells[0])
-	return args.Cells[0]
+	return SExpr([]*LVal{
+		Symbol("lisp:let"),
+		SExpr([]*LVal{
+			SExpr([]*LVal{sym, expr})},
+		),
+		SExpr([]*LVal{Symbol("lisp:debug-print"), msg, sym}),
+		sym,
+	})
 }

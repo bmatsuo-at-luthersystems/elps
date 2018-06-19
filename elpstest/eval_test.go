@@ -35,6 +35,8 @@ string"""`, `"\"\"a raw\nstring"`},
 			{"'(1 2 3)", "'(1 2 3)"},
 		}},
 		{"function basics", TestSequence{
+			{"(lambda ())", "(lambda ())"},
+			{"((lambda ()))", "()"},
 			{"(lambda (x) x)", "(lambda (x) x)"},
 			{"((lambda (x) x) 1)", "1"},
 			{"(lambda (x) (+ x 1))", "(lambda (x) (+ x 1))"},
