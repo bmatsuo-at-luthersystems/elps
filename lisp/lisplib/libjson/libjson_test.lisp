@@ -39,3 +39,11 @@
     (assert (nil? (get js-val "b")))
     (assert (sorted-map? (get js-val "c")))
     (assert (= 0 (length (keys (get js-val "c"))))))
+
+(test "unmarshal-syntax-error"
+    (assert (string= "syntax-error"
+                     (handler-bind ([json:syntax-error (lambda (_) "syntax-error")])
+                       (json:load-string "{false:true}"))))
+    (assert (string= "ok-json"
+                     (handler-bind ([json:syntax-error (lambda (_) "syntax-error")])
+                       (json:load-string "\"ok-json\"")))))
