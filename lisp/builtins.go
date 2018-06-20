@@ -93,6 +93,7 @@ var langBuiltins = []*langBuiltin{
 	{"sorted-map?", Formals("expr"), builtinIsSortedMap},
 	{"array?", Formals("expr"), builtinIsArray},
 	{"vector?", Formals("expr"), builtinIsVector},
+	{"number?", Formals("expr"), builtinIsNumber},
 	{"symbol?", Formals("expr"), builtinIsSymbol},
 	{"string?", Formals("expr"), builtinIsString},
 	{"bytes?", Formals("expr"), builtinIsBytes},
@@ -1162,6 +1163,11 @@ func builtinIsArray(env *LEnv, args *LVal) *LVal {
 func builtinIsVector(env *LEnv, args *LVal) *LVal {
 	v := args.Cells[0]
 	return Bool(v.Type == LArray && v.Cells[0].Len() == 1)
+}
+
+func builtinIsNumber(env *LEnv, args *LVal) *LVal {
+	v := args.Cells[0]
+	return Bool(v.IsNumeric())
 }
 
 func builtinIsSymbol(env *LEnv, args *LVal) *LVal {
