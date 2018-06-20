@@ -68,7 +68,7 @@ func (s *CallStack) Top() *CallFrame {
 // terminal frames can be found then 0 is returned.
 //
 // If a stack frame with TROBlock is found then the search for a terminal chain
-// is terminated as a failure.
+// is prematurely terminated as a failure.
 //
 // NOTE:  If tail-recursion optimization is working then the chain of calls
 // found by TerminalFID is unique.

@@ -48,6 +48,7 @@ var langBuiltins = []*langBuiltin{
 	{"set", Formals("sym", "val"), builtinSet},
 	{"gensym", Formals(), builtinGensym},
 	{"identity", Formals("value"), builtinIdentity},
+	{"funcall", Formals("fun", VarArgSymbol, "args"), builtinFunCall},
 	{"to-string", Formals("value"), builtinToString},
 	{"to-int", Formals("value"), builtinToInt},
 	{"to-float", Formals("value"), builtinToFloat},
@@ -227,6 +228,17 @@ func builtinGensym(env *LEnv, args *LVal) *LVal {
 
 func builtinIdentity(env *LEnv, args *LVal) *LVal {
 	return args.Cells[0]
+}
+
+func builtinFunCall(env *LEnv, args *LVal) *LVal {
+	fun, fargs := args.Cells[0], args.Cells[1:]
+	if fun.Type != LFun {
+		return env.Errorf("first argument is not a function: %v", fun.Type)
+	}
+	if fun.IsSpecialFun() {
+		return env.Errorf("first argument is not a regular function: %v", fun.FunType)
+	}
+	return env.FunCall(fun, SExpr(fargs))
 }
 
 func builtinToString(env *LEnv, args *LVal) *LVal {
@@ -410,7 +422,7 @@ func builtinMap(env *LEnv, args *LVal) *LVal {
 	}
 	for i, c := range seqCells(lis) {
 		fargs := QExpr([]*LVal{c})
-		fret := env.Call(f, fargs)
+		fret := env.FunCall(f, fargs)
 		if fret.Type == LError {
 			return fret
 		}
@@ -437,7 +449,7 @@ func builtinFoldLeft(env *LEnv, args *LVal) *LVal {
 			acc,
 			c,
 		})
-		fret := env.Call(f, fargs)
+		fret := env.FunCall(f, fargs)
 		if fret.Type == LError {
 			return fret
 		}
@@ -464,7 +476,7 @@ func builtinFoldRight(env *LEnv, args *LVal) *LVal {
 			c,
 			acc,
 		})
-		fret := env.Call(f, fargs)
+		fret := env.FunCall(f, fargs)
 		if fret.Type == LError {
 			return fret
 		}
