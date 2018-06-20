@@ -478,6 +478,8 @@ eval:
 	case LSExpr:
 		res := env.EvalSExpr(v)
 		if res.Type == LMarkMacExpand {
+			// A macro was just expanded and returned an unevaluated
+			// expression.  We have to evaluate the result before we return.
 			v = res.Cells[0]
 			goto eval
 		}
@@ -502,23 +504,21 @@ func (env *LEnv) EvalSExpr(s *LVal) *LVal {
 	if len(s.Cells) == 0 {
 		return Nil()
 	}
-
-	f := env.Eval(s.Cells[0])
-	s.Cells = s.Cells[1:]
-	if f.Type == LError {
-		return f
+	call := env.evalSExprCells(s)
+	if call.Type == LError {
+		if call.Stack == nil {
+			call.Stack = env.Stack.Copy()
+		}
+		return call
 	}
-	if f.Type != LFun {
-		return env.Errorf("first element of expression is not a function: %v", f)
-	}
+	fun := call.Cells[0] // call is not an empty expression
+	args := call
+	args.Cells = args.Cells[1:]
 
 	// Check for possible tail recursion before pushing to avoid hitting s when
 	// checking.  But push FID onto the stack before popping to simplify
 	// book-keeping.
-	npop := env.Stack.TerminalFID(f.FID)
-	// Push onto the stack here so that we don't trigger tail recursion while
-	// evaluating the arguments to f -- f has to be the recursive call, if
-	// there is to be recursion optimization at all.
+	npop := env.Stack.TerminalFID(fun.FID)
 	//
 	// BUG:  Because the function stack frame is pushed here any errors
 	// encountered during argument expression evalutation will appear to happen
@@ -528,32 +528,9 @@ func (env *LEnv) EvalSExpr(s *LVal) *LVal {
 	// frame marker that prevents tail recursion optimization beyond this point
 	// on the stack.  When the stack is dumped markers can be filtered out to
 	// produce a clean stack.
-	env.Stack.PushFID(f.FID, f.Package, env.GetFunName(f))
+	env.Stack.PushFID(fun.FID, fun.Package, env.GetFunName(fun))
 	defer env.Stack.Pop()
 
-	if f.IsSpecialFun() {
-		// Arguments to a macro are not evaluated but they aren't quoted
-		// either.  This behavior is what allows ``unquote'' to properly
-		// resolve macro argument symbols during and still produce valid code
-		// during macro expansion.  That is, if x is a macro argument then what
-		// do the following expressions return?
-		//		(quasiquote (unquote x))             	  => {expression bound to x}
-		//		(quasiquote (unquote '(if 1 '(1) '(2))))  => '(1)
-		// If the value given to x was quoted by eval then ``unquote'' would
-		// have to undo that quoting.  But unquote is not supposed to unquote
-		// the value returned by (if 1 '(1) '(2)), it merely evaluates the
-		// expression and produces '(1).
-	} else {
-		// Evaluate arguments before invoking f.
-		for i := range s.Cells {
-			s.Cells[i] = env.Eval(s.Cells[i])
-		}
-		for i := range s.Cells {
-			if s.Cells[i].Type == LError {
-				return s.Cells[i]
-			}
-		}
-	}
 	// The call stack allows for tail recursion optimization.  However certain
 	// functions like ``let'' can't utilize optimization because the scope
 	// defined by the outer ``let'' would be lost.  (let ([x 1]) (let ([y x])
@@ -562,14 +539,24 @@ func (env *LEnv) EvalSExpr(s *LVal) *LVal {
 	// The simple solution is to avoid unwinding for functions like let (e.g.
 	// all builtin functions).  Alternatively builtin functions that don't
 	// allow tail recursion might mark the stack to indicate frames which
-	// cannot be unwound to for tail recursion optimization.  It's unclear if
-	// builtin functions benefit from tail recursion so it is much simpler to
-	// just avoid unwinding for tail recursion in any buitlin function..
-	if npop > 0 && f.Builtin == nil {
-		return markTailRec(npop, f, s)
+	// cannot be the unwinding target for tail recursion optimization.  It's
+	// unclear if builtin functions benefit from tail recursion so it is much
+	// simpler to just avoid unwinding for tail recursion in any buitlin
+	// special op (all special ops are currently builtin).
+	if npop > 0 && fun.FunType != LFunSpecialOp {
+		return markTailRec(npop, fun, call)
 	}
+
+	if fun.FunType == LFunMacro {
+		if env.Stack.Top() != nil {
+			// We can't let tail-recursion optimization seek past the macro
+			// expansion callsite.
+			env.Stack.Top().TROBlock = true
+		}
+	}
+
 callf:
-	r := env.Call(f, s)
+	r := env.Call(fun, args)
 	if r == nil {
 		env.Stack.DebugPrint(os.Stderr)
 		panic("nil LVal returned from function call")
@@ -583,13 +570,13 @@ callf:
 		}
 		r.Cells[0].Int--
 		if r.Cells[0].Int <= 0 {
-			f = r.Cells[1]
+			fun = r.Cells[1]
 			s = r.Cells[2]
 			goto callf
 		}
 		return r
 	}
-	if !f.IsMacro() {
+	if !fun.IsMacro() {
 		if r.Type == LSExpr && !r.IsNil() {
 			// This has a really bad smell to it.  But I can't get quasiquote
 			// to work as expected without checking for unquoted s-expressions
@@ -606,6 +593,54 @@ callf:
 	// implementing a proper system for special operators at that point.
 	r.Quoted = false
 	return markMacExpand(r)
+}
+
+func (env *LEnv) evalSExprCells(s *LVal) *LVal {
+	cells := s.Cells
+	newCells := make([]*LVal, 1, len(s.Cells))
+	if env.Stack.Top() != nil {
+		// Set a TRO block to avoid tail recursion during argument evaluation.
+		// We don't want to push anything on the stack here because that would
+		// causes improper error messages/stack-dumps if an error is
+		// encountered while evaluating the arguments to a function.
+		env.Stack.Top().TROBlock = true
+		defer func() { env.Stack.Top().TROBlock = false }()
+	}
+	f := env.Eval(cells[0])
+	cells = cells[1:]
+	if f.Type == LError {
+		return f
+	}
+	if f.Type != LFun {
+		return env.Errorf("first element of expression is not a function: %v", f)
+	}
+
+	newCells[0] = f
+	if f.IsSpecialFun() {
+		// Arguments to a macro are not evaluated but they aren't quoted
+		// either.  This behavior is what allows ``unquote'' to properly
+		// resolve macro argument symbols during and still produce valid code
+		// during macro expansion.  That is, if x is a macro argument then what
+		// do the following expressions return?
+		//		(quasiquote (unquote x))             	  => {expression bound to x}
+		//		(quasiquote (unquote '(if 1 '(1) '(2))))  => '(1)
+		// If the value given to x was quoted by eval then ``unquote'' would
+		// have to undo that quoting.  But unquote is not supposed to unquote
+		// the value returned by (if 1 '(1) '(2)), it merely evaluates the
+		// expression and produces '(1).
+		newCells = append(newCells, cells...)
+		return SExpr(newCells)
+	}
+	// Evaluate arguments before invoking f.
+	for _, expr := range cells {
+		newCells = append(newCells, env.Eval(expr))
+	}
+	for _, v := range newCells {
+		if v.Type == LError {
+			return v
+		}
+	}
+	return SExpr(newCells)
 }
 
 // Call invokes LFun fun with the list args.
@@ -626,13 +661,10 @@ func (env *LEnv) Call(fun *LVal, args *LVal) *LVal {
 
 	// NOTE:  The book's suggestion of chaining env here seems like dynamic
 	// scoping.
-	// NOTE:  This is indeed where you would chain environments to create
-	// dynamic scope.
-	//		fun.Env.Parent = env
 
 	if fun.Builtin != nil {
-		// We are definitely working with a non-empty stack here so there is no
-		// nil check.
+		// We definitely should be working with a non-empty stack here so there
+		// is no nil check.
 		env.Stack.Top().Terminal = true
 
 		// FIXME:  I think fun.Env is probably correct here.  But it wouldn't

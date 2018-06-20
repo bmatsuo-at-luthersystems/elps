@@ -26,8 +26,13 @@ const (
 	LSortMap
 	LArray
 	LNative
-	LMarkTailRec
-	LMarkMacExpand
+	// Mark LVals are used to trasmit information down the stack through return
+	// values.  Because the LEnv does not evaluate expressions using a stack
+	// based virtual machine these Mark values, which often wrap other LVal
+	// data in their Cells, are passed back from functions.  Typically the
+	// environment is sole responsible for managing mark values.
+	LMarkTailRec   // LEnv resumes a call a set number of frames down the stack.
+	LMarkMacExpand // LEnv will evaluate the returned LVal a subsequent time.
 )
 
 var lvalTypeStrings = []string{
@@ -61,10 +66,16 @@ type LFunType uint8
 
 // LFunType constants.  LFunNone indicates a normal function.
 const (
-	LFunNone = iota
+	LFunNone LFunType = iota
 	LFunMacro
 	LFunSpecialOp
 )
+
+var lfunTypeStrings = []string{
+	LFunNone:      "function",
+	LFunMacro:     "macro",
+	LFunSpecialOp: "operator",
+}
 
 // LVal is a lisp value
 type LVal struct {
