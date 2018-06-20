@@ -64,7 +64,7 @@ func builtinSplit(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
 	for i, s := range slice {
 		cells[i] = lisp.String(s)
 	}
-	return lisp.SExpr(cells)
+	return lisp.QExpr(cells)
 }
 
 func builtinJoin(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
