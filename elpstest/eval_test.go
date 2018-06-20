@@ -33,6 +33,12 @@ string"""`, `"\"\"a raw\nstring"`},
 		{"lists basics", TestSequence{
 			{"'()", "'()"},
 			{"'(1 2 3)", "'(1 2 3)"},
+			{"(nth '() 0)", "()"},
+			{"(nth '() 1)", "()"},
+			{"(nth '() 2)", "()"},
+			{"(nth '(1) 0)", "1"},
+			{"(nth '(1) 1)", "()"},
+			{"(nth '(1) 2)", "()"},
 		}},
 		{"function basics", TestSequence{
 			{"(lambda ())", "(lambda ())"},

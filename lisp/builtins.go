@@ -368,8 +368,11 @@ func builtinNth(env *LEnv, args *LVal) *LVal {
 	if n.Type != LInt {
 		return env.Errorf("second argument is not an integer: %v", n.Type)
 	}
+	if n.Int < 0 {
+		return env.Errorf("index cannot be negative: %d", n.Int)
+	}
 	cells := seqCells(list)
-	if len(cells) < n.Int {
+	if len(cells) <= n.Int {
 		return Nil()
 	}
 	return cells[n.Int]

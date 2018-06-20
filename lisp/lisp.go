@@ -472,9 +472,16 @@ func (v *LVal) ArrayIndex(index ...*LVal) *LVal {
 	if len(index) == 0 {
 		return v.Cells[1]
 	}
-	for _, n := range index {
-		if n.Type != LInt {
-			return Errorf("index is not an integer: %v", v.Type)
+	for i, j := range index {
+		n := dims.Cells[i]
+		if j.Type != LInt {
+			return Errorf("index is not an integer: %v", j.Type)
+		}
+		if j.Int < 0 {
+			return Errorf("index is negative: %v", j)
+		}
+		if j.Int >= n.Int {
+			return Errorf("index %d out of bounds for array dimenion %d of %v", j.Int, i, dims)
 		}
 	}
 	i := 0
@@ -484,6 +491,7 @@ func (v *LVal) ArrayIndex(index ...*LVal) *LVal {
 		stride *= dims.Cells[len(index)-1].Int
 		index = index[:len(index)-1]
 	}
+
 	return v.Cells[1+i]
 }
 
