@@ -10,6 +10,8 @@ import (
 var userSpecialOps []*langBuiltin
 var langSpecialOps = []*langBuiltin{
 	{"assert", Formals("expr", VarArgSymbol, "message-format-args"), opAssert},
+	{"macroexpand", Formals("fun", VarArgSymbol, "args"), opMacroExpand},
+	{"macroexpand-1", Formals("fun", VarArgSymbol, "args"), opMacroExpand1},
 	{"quote", Formals("expr"), opQuote},
 	{"quasiquote", Formals("expr"), opQuasiquote},
 	{"lambda", Formals("formals", VarArgSymbol, "expr"), opLambda},
@@ -79,6 +81,54 @@ func opAssert(env *LEnv, args *LVal) *LVal {
 		return msg
 	}
 	return env.Error(errors.New(msg.Str))
+}
+
+func opMacroExpand(env *LEnv, args *LVal) *LVal {
+	fun, fargs := args.Cells[0], args.Cells[1:]
+	if fun.Type != LFun {
+		return env.Errorf("first argument is not a function: %v", fun.Type)
+	}
+	if !fun.IsMacro() {
+		return env.Errorf("first argument is not a macro: %v", fun.FunType)
+	}
+expand:
+	v := env.MacroCall(fun, SExpr(fargs))
+	if v.Type == LError {
+		return v
+	}
+	if v.Type != LMarkMacExpand {
+		panic("invalid macro return value")
+	}
+	v = v.Cells[0]
+	if v.Type == LSExpr {
+		macsym := v.Cells[0]
+		if macsym.Type != LSymbol {
+			return v
+		}
+		mac := env.Get(macsym)
+		if mac.Type == LFun && mac.IsMacro() {
+			goto expand
+		}
+	}
+	return v
+}
+
+func opMacroExpand1(env *LEnv, args *LVal) *LVal {
+	fun, fargs := args.Cells[0], args.Cells[1:]
+	if fun.Type != LFun {
+		return env.Errorf("first argument is not a function: %v", fun.Type)
+	}
+	if !fun.IsMacro() {
+		return env.Errorf("first argument is not a macro: %v", fun.FunType)
+	}
+	v := env.MacroCall(fun, SExpr(fargs))
+	if v.Type == LError {
+		return v
+	}
+	if v.Type != LMarkMacExpand {
+		panic("invalid macro return value")
+	}
+	return v.Cells[0]
 }
 
 func opQuote(env *LEnv, args *LVal) *LVal {
