@@ -355,6 +355,7 @@ func opProgn(env *LEnv, args *LVal) *LVal {
 }
 
 func opHandlerBind(env *LEnv, args *LVal) *LVal {
+	env.Stack.Top().TROBlock = true
 	lbinds, forms := args.Cells[0], args.Cells[1:]
 	if lbinds.Type != LSExpr {
 		return env.Errorf("first argument is not a list: %v", lbinds.Type)
@@ -410,6 +411,7 @@ func opHandlerBind(env *LEnv, args *LVal) *LVal {
 }
 
 func opIgnoreErrors(env *LEnv, args *LVal) *LVal {
+	env.Stack.Top().TROBlock = true
 	if len(args.Cells) == 0 {
 		return Nil()
 	}
@@ -434,7 +436,7 @@ func opCond(env *LEnv, args *LVal) *LVal {
 		if branch.Type != LSExpr {
 			return env.Errorf("argument is not a list: %v", branch.Type)
 		}
-		if len(branch.Cells) != 2 {
+		if len(branch.Cells) == 0 {
 			return env.Errorf("argument is not a pair (length %d)", len(branch.Cells))
 		}
 		var test *LVal
@@ -452,8 +454,7 @@ func opCond(env *LEnv, args *LVal) *LVal {
 		if Not(test) {
 			continue
 		}
-		branch.Cells[1].Terminal = true
-		return env.Eval(branch.Cells[1])
+		return opProgn(env, SExpr(branch.Cells[1:]))
 	}
 	return Nil()
 }

@@ -48,6 +48,10 @@ var langBuiltins = []*langBuiltin{
 	{"set", Formals("sym", "val"), builtinSet},
 	{"gensym", Formals(), builtinGensym},
 	{"identity", Formals("value"), builtinIdentity},
+	{"macroexpand", Formals("quoted-form"), builtinMacroExpand},
+	{"macroexpand-1", Formals("quoted-form"), builtinMacroExpand1},
+	{"funcall", Formals("fun", VarArgSymbol, "args"), builtinFunCall},
+	{"apply", Formals("fun", VarArgSymbol, "args"), builtinApply},
 	{"to-string", Formals("value"), builtinToString},
 	{"to-int", Formals("value"), builtinToInt},
 	{"to-float", Formals("value"), builtinToFloat},
@@ -88,12 +92,17 @@ var langBuiltins = []*langBuiltin{
 	{"length", Formals("lis"), builtinLength},
 	{"cons", Formals("head", "tail"), builtinCons},
 	{"not", Formals("expr"), builtinNot},
+	// true? is potentially needed as a boolean conversion function (for json)
+	{"true?", Formals("expr"), builtinIsTrue},
 	{"nil?", Formals("expr"), builtinIsNil},
 	{"list?", Formals("expr"), builtinIsList},
 	{"sorted-map?", Formals("expr"), builtinIsSortedMap},
 	{"array?", Formals("expr"), builtinIsArray},
 	{"vector?", Formals("expr"), builtinIsVector},
+	{"bool?", Formals("expr"), builtinIsBool},
 	{"number?", Formals("expr"), builtinIsNumber},
+	{"int?", Formals("expr"), builtinIsInt},
+	{"float?", Formals("expr"), builtinIsFloat},
 	{"symbol?", Formals("expr"), builtinIsSymbol},
 	{"string?", Formals("expr"), builtinIsString},
 	{"bytes?", Formals("expr"), builtinIsBytes},
@@ -227,6 +236,121 @@ func builtinGensym(env *LEnv, args *LVal) *LVal {
 
 func builtinIdentity(env *LEnv, args *LVal) *LVal {
 	return args.Cells[0]
+}
+
+func builtinMacroExpand(env *LEnv, args *LVal) *LVal {
+	form := args.Cells[0]
+	if form.Type != LSExpr {
+		return env.Errorf("first argument is not a list: %v", form.Type)
+	}
+	for {
+		if form.IsNil() {
+			return form
+		}
+		macsym, macargs := form.Cells[0], form.Cells[1:]
+		if macsym.Type != LSymbol {
+			return form
+		}
+		mac := env.Get(macsym)
+		r, ok := macroExpand1(env, mac, SExpr(macargs))
+		if !ok {
+			return form
+		}
+		if r.Type != LSExpr {
+			return r
+		}
+		form = r
+	}
+}
+
+func builtinMacroExpand1(env *LEnv, args *LVal) *LVal {
+	form := args.Cells[0]
+	if form.Type != LSExpr {
+		return env.Errorf("first argument is not a list: %v", form.Type)
+	}
+	if form.IsNil() {
+		return form
+	}
+	macsym, macargs := form.Cells[0], form.Cells[1:]
+	if macsym.Type != LSymbol {
+		return form
+	}
+	mac := env.Get(macsym)
+	r, ok := macroExpand1(env, mac, SExpr(macargs))
+	if !ok {
+		return form
+	}
+	return r
+
+}
+
+func macroExpand1(env *LEnv, mac *LVal, args *LVal) (*LVal, bool) {
+	if mac.Type != LFun {
+		return nil, false
+	}
+	if !mac.IsMacro() {
+		return nil, false
+	}
+	mark := env.MacroCall(mac, args)
+	if mark.Type != LMarkMacExpand {
+		panic("macro did not return LMarkMacExpand")
+	}
+	// MacroCall unquotes its result so that it can work properly in normal
+	// evaluation cycle.  So we need to re-quote the value here.
+	return Quote(mark.Cells[0]), true
+}
+
+func builtinFunCall(env *LEnv, args *LVal) *LVal {
+	fun, fargs := args.Cells[0], args.Cells[1:]
+	fun = getCallFun(env, fun)
+	if fun.Type == LError {
+		return fun
+	}
+	if fun.IsSpecialFun() {
+		return env.Errorf("not a regular function: %v", fun.FunType)
+	}
+	return env.funCall(fun, SExpr(fargs), false)
+}
+
+func builtinApply(env *LEnv, args *LVal) *LVal {
+	fun, fargs := args.Cells[0], args.Cells[1:]
+	if len(fargs) == 0 {
+		return env.Errorf("last argument must be a list")
+	}
+	argtail := fargs[len(fargs)-1]
+	fargs = fargs[:len(fargs)-1]
+
+	fun = getCallFun(env, fun)
+	if fun.Type == LError {
+		return fun
+	}
+	if argtail.Type != LSExpr {
+		return env.Errorf("last argument is not a list: %v", argtail.Type)
+	}
+	if fun.Type != LFun {
+		return env.Errorf("first argument is not a function: %v", fun.Type)
+	}
+
+	argcells := make([]*LVal, 0, len(fargs)+argtail.Len())
+	argcells = append(argcells, fargs...)
+	argcells = append(argcells, argtail.Cells...)
+	return env.funCall(fun, SExpr(argcells), false)
+}
+
+func getCallFun(env *LEnv, fun *LVal) *LVal {
+	if fun.Type == LSymbol {
+		f := env.Get(fun)
+		if f.Type == LError {
+			return f
+		}
+		if f.Type != LFun {
+			return env.Errorf("symbol %s not bound to a function: %v", fun, f.Type)
+		}
+		return f
+	} else if fun.Type != LFun {
+		return env.Errorf("first argument is not a function: %v", fun.Type)
+	}
+	return fun
 }
 
 func builtinToString(env *LEnv, args *LVal) *LVal {
@@ -410,7 +534,7 @@ func builtinMap(env *LEnv, args *LVal) *LVal {
 	}
 	for i, c := range seqCells(lis) {
 		fargs := QExpr([]*LVal{c})
-		fret := env.Call(f, fargs)
+		fret := env.FunCall(f, fargs)
 		if fret.Type == LError {
 			return fret
 		}
@@ -437,7 +561,7 @@ func builtinFoldLeft(env *LEnv, args *LVal) *LVal {
 			acc,
 			c,
 		})
-		fret := env.Call(f, fargs)
+		fret := env.FunCall(f, fargs)
 		if fret.Type == LError {
 			return fret
 		}
@@ -464,7 +588,7 @@ func builtinFoldRight(env *LEnv, args *LVal) *LVal {
 			c,
 			acc,
 		})
-		fret := env.Call(f, fargs)
+		fret := env.FunCall(f, fargs)
 		if fret.Type == LError {
 			return fret
 		}
@@ -1140,6 +1264,10 @@ func builtinNot(env *LEnv, args *LVal) *LVal {
 	return Bool(Not(args.Cells[0]))
 }
 
+func builtinIsTrue(env *LEnv, args *LVal) *LVal {
+	return Bool(True(args.Cells[0]))
+}
+
 func builtinIsNil(env *LEnv, args *LVal) *LVal {
 	v := args.Cells[0]
 	if v.IsNil() {
@@ -1168,9 +1296,24 @@ func builtinIsVector(env *LEnv, args *LVal) *LVal {
 	return Bool(v.Type == LArray && v.Cells[0].Len() == 1)
 }
 
+func builtinIsBool(env *LEnv, args *LVal) *LVal {
+	v := args.Cells[0]
+	return Bool(v.Type == LSymbol && (v.Str == TrueSymbol || v.Str == FalseSymbol))
+}
+
 func builtinIsNumber(env *LEnv, args *LVal) *LVal {
 	v := args.Cells[0]
 	return Bool(v.IsNumeric())
+}
+
+func builtinIsInt(env *LEnv, args *LVal) *LVal {
+	v := args.Cells[0]
+	return Bool(v.Type == LInt)
+}
+
+func builtinIsFloat(env *LEnv, args *LVal) *LVal {
+	v := args.Cells[0]
+	return Bool(v.Type == LFloat)
 }
 
 func builtinIsSymbol(env *LEnv, args *LVal) *LVal {

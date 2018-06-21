@@ -1,5 +1,14 @@
 package lisp
 
+// TrueSymbol is the language's defacto true boolean value, though anything
+// other than nil and 'false are considered true by functions and operators
+// expecting a boolean.
+const TrueSymbol = "true"
+
+// FalseSymbol is the language's defacto false boolean value, though nil is
+// also considered false by functions and operators expecting a boolean.
+const FalseSymbol = "false"
+
 // MetadaArgPrefix is a disallowed prefix for formal argument symbols.  Any
 // symbol beginning with MetaArgPrefix in a formal argument list will be
 // treated with special meaning an unrecognized symbols will cause a runtime

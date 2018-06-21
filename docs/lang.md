@@ -98,6 +98,26 @@ The builtin macro `defun` is provided to bind names to functions.
 (neg 3)                 ; evaluates to -3
 ```
 
+If the complete list of arguments for a function cannot be known ahead of time
+there are functions which you can use to assist in calling other functions.
+
+```lisp
+(defun sum-list (xs)
+    (apply + xs))
+
+(defun negative-sum? (&rest xs)
+    (> 0
+       (funcall sum-list xs)))
+
+(negative-sum? 1 2 -2)  ; evaluates to false
+```
+
+Let's decompose the call to `negative-sum?`. The function negative sum has its
+argument bound to `'(1 2 -2)`.  When funcall calls sum-list, it passes this
+list verbatim.  When sum-list passes this list to `apply`, the list is unpacked
+as if the list contents had been passed to `+` as its arguments.  Other than
+this distinction the two functions, `apply` and `funcall` operate the same way.
+
 ###Optional function arguments
 
 If a function's formal argument list contains the special symbol `&optional`
@@ -235,6 +255,21 @@ muiltple arguments can be defined by using the anonymous argument symbols `%1`,
 A macro is a special function which receives unevaluated arguments (values are
 not quoted, they just arn't evaluated). A macro function returns a quoted
 expression which is subsequently evaluated in the scope of the original call.
+
+When writing macros the `macroexpand` and `macroexpand-1` functions help debug
+macro behavior.  The arguments to these functions is a quoted s-expression (a
+quoted macro invocation).  The result of these functions is the quoted
+expansion of the macro.
+
+```lisp
+(defmacro m (&rest xs) (quasiquote (+ (unquote-splicing xs))))
+
+(macroexpand '(m 1 2 3)) ; evaluates to '(+ 1 2 3)
+```
+
+The macroexpand-1 function is just like macroexpand except it will not
+recursively expand macros when the result of the argument macro form is itself
+a macro form.
 
 ##Special Operators
 
@@ -428,3 +463,80 @@ URL format for organizational clarity and to avoid package name collisions.
 (in-package 'example.com/faster-json)
 (use-package 'example.com/faster-json/utils)
 ```
+
+### Errors
+
+Sometimes an improper invocation of a function will cause an error at runtime.
+Programmers can also trigger errors from lisp code by using the `error`
+builtin.
+
+```lisp
+(error 'my-type-of-error "Things are messed up right now")
+```
+
+The above code will unwind the function call stack, permaturely terminating any
+functions executing or awaiting execution.  If there is no code to handle the
+error it will eventually be returned to the application embedding the lisp
+interpreter.  However lisp code has a few builtin ways to detect and deal with
+errors before the entire pending evaluation is terminated.
+
+When a function call is understood to trigger non-fatal error conditions of a
+certain kind it may use the `handler-bind` builtin to intercept and correct
+that type of error.  For an example, consider the above error in a broader
+context.
+
+```lisp
+(defun double (x)
+    (if (number? x)
+        (* x 2)
+        (error 'double-not-number "value to double is not a number")))
+
+(handler-bind ((double-not-number (lambda (&rest e) e)))
+    (double "abc"))
+; handler-bind evaluates to '('double-not-number "value to double is not a number")
+```
+
+The handler-bind function works quite a bit like the concepts of raising
+exceptions and handling/catching exceptions in other languages.  When the
+expression inside handler-bind calls double, it raises an error condition.  The
+error inside double terminates the function call as it unwinds the stack until
+it hits the handler-bind.  The list of condition handlers in handler-bind
+specifies a function to call when a 'double-not-number error is found.  That
+handler function receives the argument spassed to the `error` builtin and
+returns them in this scenario, producing the result `'('double-not-number
+"value to double is not a number")` which is returned by handler-bind.
+
+If a particular piece of lisp code should handle every kind of error with the
+same handler function, the handler-bind function allows callers to specify a
+handler for a special symbol `condition` which will match any error symbol.
+From an object oriented it is a reasonable analogy to think of all error types
+inheriting from the `condition` type.
+
+```lisp
+(handler-bind ( (double-not-number (lambda (&rest e) 0))
+                (condition (lambda (&rest e) "ERROR DETECTED")))
+    (double x))
+```
+
+In the above code double-not-number is handled by replacing the `(double x)`
+function call with the value 0, while any other error (like integer overflow)
+will be replaced with the string "ERROR DETECTED".
+
+There is one final form of error handling, though its use is highly
+discouraged.  If one finds themselves handling all errors and inserting a nil
+value with an expression that looks like the following:
+
+```lisp
+(handler-bind ((condition (lambda (&rest e) ())))
+    (call-function x y z))
+```
+
+The function `ignore-errors` will perform the same task.
+
+```lisp
+(ignore-errors (call-function x y z))  ; evaluates to () if any error occurs.
+```
+
+It is worth saying again, and louder, that **the use of ignore-errors is
+greatly discouraged in general**.  If you must attempt to handle errors in lisp
+code try to use handler-bind.

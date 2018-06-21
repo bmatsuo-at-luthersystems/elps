@@ -4,6 +4,7 @@ var userMacros []*langBuiltin
 var langMacros = []*langBuiltin{
 	{"defmacro", Formals("name", "formals", "expr"), macroDefmacro},
 	{"defun", Formals("name", "formals", VarArgSymbol, "expr"), macroDefun},
+	{"curry-function", Formals("fun", VarArgSymbol, "args"), macroCurryFun},
 	// get-default is a macro because we only want to evaluate the expression
 	// bound to default if the key doesn't exist in the map.
 	{"get-default", Formals("map", "key", "default"), macroGetDefault},
@@ -70,6 +71,25 @@ func macroDefun(env *LEnv, args *LVal) *LVal {
 			fun,
 		}),
 		Nil(),
+	})
+}
+
+func macroCurryFun(env *LEnv, args *LVal) *LVal {
+	funExpr, argExprs := args.Cells[0], args.Cells[1:]
+	argsym := env.GenSym()
+	callCells := []*LVal{
+		Symbol("lisp:apply"),
+		funExpr,
+	}
+	callCells = append(callCells, argExprs...)
+	callCells = append(callCells, argsym)
+	return SExpr([]*LVal{
+		Symbol("lambda"),
+		SExpr([]*LVal{
+			Symbol(VarArgSymbol),
+			argsym,
+		}),
+		SExpr(callCells),
 	})
 }
 

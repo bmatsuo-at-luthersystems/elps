@@ -17,6 +17,7 @@ type CallFrame struct {
 	Package  string
 	Name     string
 	Terminal bool
+	TROBlock bool // Stop tail-recursion optimization from collapsing this frame
 }
 
 // QualifiedFunName returns the qualified name for the function on the top of
@@ -61,10 +62,13 @@ func (s *CallStack) Top() *CallFrame {
 	return &s.Frames[len(s.Frames)-1]
 }
 
-// TerminalFID determines if a chain of terminal stack frames ends with fid
-// (i.e. fid is a candidate for tail-recursion optimization) and returns the
-// number of frames in the shortest such chain.  If no such chain of terminal
-// frames can be found then 0 is returned.
+// TerminalFID determines if a chain of terminal stack frames that ends with
+// fid (i.e. fid is a candidate for tail-recursion optimization) and returns
+// the number of frames in the shortest such chain.  If no such chain of
+// terminal frames can be found then 0 is returned.
+//
+// If a stack frame with TROBlock is found then the search for a terminal chain
+// is prematurely terminated as a failure.
 //
 // NOTE:  If tail-recursion optimization is working then the chain of calls
 // found by TerminalFID is unique.
@@ -74,6 +78,11 @@ func (s *CallStack) TerminalFID(fid string) int {
 		return 0
 	}
 	for i := len(s.Frames) - 1; i >= 0; i-- {
+		if s.Frames[i].TROBlock {
+			// This stack frame contains critical state which cannot be
+			// collapsed even if it is a terminal call.
+			return 0
+		}
 		if !s.Frames[i].Terminal {
 			// A non-terminal frame before finding a terminal fid frame.. no
 			return 0
@@ -116,6 +125,9 @@ func (s *CallStack) DebugPrint(w io.Writer) (int, error) {
 		var mod bytes.Buffer
 		if f.Terminal {
 			mod.WriteString(" [terminal]")
+		}
+		if f.TROBlock {
+			mod.WriteString(" [tro-blocked]")
 		}
 		name := f.FID
 		if f.Name != "" {

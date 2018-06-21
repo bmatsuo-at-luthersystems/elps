@@ -6,7 +6,7 @@ func TestFP(t *testing.T) {
 	tests := TestSuite{
 		{"curry", TestSequence{
 			{"(defun f (a b) (+ a b))", "()"},
-			{"((f 1) 2)", "3"},
+			{"((curry-function 'f 1) 2)", "3"},
 			// BUG:  This error message has to be tested with defun and can't
 			// be tested in an earlier test (say eval_test.go) because the
 			// function id used in the error messages of anonymous functions
