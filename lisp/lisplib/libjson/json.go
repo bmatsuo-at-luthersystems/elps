@@ -46,8 +46,11 @@ func LoadPackage(env *lisp.LEnv) *lisp.LVal {
 // set of package builtin functions that use it.
 func Builtins(s *Serializer) []*libutil.Builtin {
 	return []*libutil.Builtin{
+		libutil.Function("message-bytes", lisp.Formals("json-message"), s.MessageBytesBuiltin),
+		libutil.Function("dump-message", lisp.Formals("object", lisp.KeyArgSymbol, "string-numbers"), s.DumpMessageBuiltin),
+		libutil.Function("load-message", lisp.Formals("json-message", lisp.KeyArgSymbol, "string-numbers"), s.LoadMessageBuiltin),
 		libutil.Function("dump-bytes", lisp.Formals("object", lisp.KeyArgSymbol, "string-numbers"), s.DumpBytesBuiltin),
-		libutil.Function("load-bytes", lisp.Formals("object", lisp.KeyArgSymbol, "string-numbers"), s.LoadBytesBuiltin),
+		libutil.Function("load-bytes", lisp.Formals("json-bytes", lisp.KeyArgSymbol, "string-numbers"), s.LoadBytesBuiltin),
 		libutil.Function("dump-string", lisp.Formals("object", lisp.KeyArgSymbol, "string-numbers"), s.DumpStringBuiltin),
 		libutil.Function("load-string", lisp.Formals("json-string", lisp.KeyArgSymbol, "string-numbers"), s.LoadStringBuiltin),
 		libutil.Function("use-string-numbers", lisp.Formals("bool"), s.UseStringNumbersBuiltin),
@@ -172,6 +175,32 @@ func (s *Serializer) Dump(v *lisp.LVal, stringNums bool) ([]byte, error) {
 	return json.Marshal(m)
 }
 
+func (s *Serializer) MessageBytesBuiltin(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
+	lmsg := args.Cells[0]
+	if lmsg.Type != lisp.LNative {
+		return env.Errorf("argument is not a raw json-message: %v", lmsg.Type)
+	}
+	msg, ok := lmsg.Native.(*json.RawMessage)
+	if !ok {
+		return env.Errorf("argument is not a raw json-message: %v", msg)
+	}
+	return lisp.Bytes([]byte(*msg))
+}
+
+func (s *Serializer) DumpMessageBuiltin(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
+	val := s.DumpBytesBuiltin(env, args)
+	if val.Type == lisp.LError {
+		return val
+	}
+	if val.Type != lisp.LBytes {
+		panic("unexpected lval: " + val.Type.String())
+	}
+	b := val.Bytes
+	msg := (*json.RawMessage)(&b)
+	var _ json.Marshaler = msg
+	return lisp.Native(msg)
+}
+
 func (s *Serializer) DumpBytesBuiltin(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
 	obj, stringNums := args.Cells[0], args.Cells[1]
 	if stringNums.IsNil() {
@@ -185,6 +214,18 @@ func (s *Serializer) DumpBytesBuiltin(env *lisp.LEnv, args *lisp.LVal) *lisp.LVa
 		return env.Error(err)
 	}
 	return lisp.Bytes(b)
+}
+
+func (s *Serializer) LoadMessageBuiltin(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
+	lmsg, stringNums := args.Cells[0], args.Cells[1]
+	if lmsg.Type != lisp.LNative {
+		return env.Errorf("argument is not a raw json-message: %v", lmsg.Type)
+	}
+	msg, ok := lmsg.Native.(*json.RawMessage)
+	if !ok {
+		return env.Errorf("argument is not a raw json-message: %v", msg)
+	}
+	return s.LoadBytesBuiltin(env, lisp.SExpr([]*lisp.LVal{lisp.Bytes([]byte(*msg)), stringNums}))
 }
 
 func (s *Serializer) LoadBytesBuiltin(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
@@ -208,7 +249,6 @@ func (s *Serializer) DumpStringBuiltin(env *lisp.LEnv, args *lisp.LVal) *lisp.LV
 		if stringNums.Type == lisp.LError {
 			return stringNums
 		}
-		log.Printf("Defaulting string-numbers: %v", stringNums)
 	}
 	b, err := s.Dump(obj, lisp.True(stringNums))
 	if err != nil {
@@ -227,7 +267,6 @@ func (s *Serializer) LoadStringBuiltin(env *lisp.LEnv, args *lisp.LVal) *lisp.LV
 		if stringNums.Type == lisp.LError {
 			return stringNums
 		}
-		log.Printf("Defaulting string-numbers: %v", stringNums)
 	}
 	return s.attachStack(env, s.Load([]byte(js.Str), lisp.True(stringNums)))
 }

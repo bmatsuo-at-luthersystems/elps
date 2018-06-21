@@ -1,11 +1,10 @@
 (use-package 'testing)
 
 (test "use-string-numbers"
+  (assert-string= "\"1\"" (to-string (json:message-bytes (json:dump-message 1 :string-numbers true))))
   (assert-string= "\"1\"" (json:dump-string 1 :string-numbers true))
   (assert-string= "1" (json:load-string "1" :string-numbers true))
 
-  (assert-string= "1" (json:dump-string 1 :string-numbers false))
-  (assert= 1 (json:load-string "1" :string-numbers false))
   ; Assert that, when :string-numbers is not given (or nil) the setting
   ; defaults back to the last call of use-string-numbers (or false if never
   ; called)
@@ -17,7 +16,22 @@
   (assert-string= "\"1\"" (json:dump-string 1 :string-numbers ()))
   (assert-string= "1" (json:load-string "1" :string-numbers ()))
   (assert-string= "\"1\"" (json:dump-string 1))
-  (assert-string= "1" (json:load-string "1")))
+  (assert-string= "1" (json:load-string "1"))
+  ; the value false can be used to override a true setting of
+  ; use-string-numbers
+  (assert-string= "1" (json:dump-string 1 :string-numbers false))
+  (assert= 1 (json:load-string "1" :string-numbers false))
+  (assert-string= "1" (json:load-message (json:dump-message 1 :string-numbers false)
+                                         :string-numbers true))
+  (assert= 1 (json:load-message (json:dump-message 1 :string-numbers false)
+                                :string-numbers false))
+  (assert-string= "1" (json:load-message (json:dump-message 1 :string-numbers true)
+                                         :string-numbers false))
+  (assert-string= """{"data":"1","id":1}"""
+                  (json:dump-string (sorted-map "id"    1
+                                                "data"  (json:dump-message 1 :string-numbers true))
+                                    :string-numbers false))
+  )
 
 (test "mashal"
   (assert-string= """null"""
