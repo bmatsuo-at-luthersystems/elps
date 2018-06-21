@@ -544,7 +544,7 @@ func (env *LEnv) MacroCall(fun, args *LVal) *LVal {
 	// macro's callsite.
 	env.Stack.Top().TROBlock = true
 
-	r := env.call(fun, args)
+	r := env.call(fun, args, false)
 	if r == nil {
 		env.Stack.DebugPrint(os.Stderr)
 		panic("nil LVal returned from function call")
@@ -588,7 +588,7 @@ func (env *LEnv) SpecialOpCall(fun, args *LVal) *LVal {
 	// by tail-recursion-optimization.
 
 callf:
-	r := env.call(fun, args)
+	r := env.call(fun, args, false)
 	if r == nil {
 		env.Stack.DebugPrint(os.Stderr)
 		panic("nil LVal returned from function call")
@@ -616,8 +616,12 @@ callf:
 	return r
 }
 
-// FunCall invokes regular function fun with the argument list args.
 func (env *LEnv) FunCall(fun, args *LVal) *LVal {
+	return env.funCall(fun, args, true)
+}
+
+// FunCall invokes regular function fun with the argument list args.
+func (env *LEnv) funCall(fun, args *LVal, curry bool) *LVal {
 	if fun.Type != LFun {
 		return env.Errorf("not a function: %v", fun.Type)
 	}
@@ -640,7 +644,7 @@ func (env *LEnv) FunCall(fun, args *LVal) *LVal {
 	}
 
 callf:
-	r := env.call(fun, args)
+	r := env.call(fun, args, curry)
 	if r == nil {
 		env.Stack.DebugPrint(os.Stderr)
 		panic("nil LVal returned from function call")
@@ -731,11 +735,11 @@ func (env *LEnv) evalSExprCells(s *LVal) *LVal {
 
 // call invokes LFun fun with the list args.  In general it is not safe to call
 // env.call bacause the stack must be setup for tail recursion optimization.
-func (env *LEnv) call(fun *LVal, args *LVal) *LVal {
+func (env *LEnv) call(fun *LVal, args *LVal, curry bool) *LVal {
 	// FIXME:  A shallow copy is probably correct here.(?)  We don't want to
 	// copy the Env so that updates to the global scope are reflected.
 	fun = fun.Copy()
-	result := env.bindFormals(fun, args)
+	result := env.bindFormals(fun, args, curry)
 	if result.Type == LError {
 		return result
 	}
@@ -811,7 +815,7 @@ func (env *LEnv) call(fun *LVal, args *LVal) *LVal {
 // NOTE:  The process of binding formals is currently a destructive one which
 // modifies fun.  Typically, before calling bindFormals fun should be copied to
 // ensure that the function may be called again in the future.
-func (env *LEnv) bindFormals(fun, args *LVal) *LVal {
+func (env *LEnv) bindFormals(fun, args *LVal, curry bool) *LVal {
 	narg := len(args.Cells)
 	putArg := func(k, v *LVal) {
 		fun.Env.Put(k, v)
@@ -839,7 +843,10 @@ func (env *LEnv) bindFormals(fun, args *LVal) *LVal {
 			return ret
 		}
 		if ret.Type == LFun {
-			return ret
+			if curry {
+				return ret
+			}
+			return env.Errorf("invalid number of arguments: %v", narg)
 		}
 		if !ret.IsNil() {
 			panic("unexpected formal binding state")

@@ -49,6 +49,7 @@ var langBuiltins = []*langBuiltin{
 	{"gensym", Formals(), builtinGensym},
 	{"identity", Formals("value"), builtinIdentity},
 	{"funcall", Formals("fun", VarArgSymbol, "args"), builtinFunCall},
+	{"apply", Formals("fun", VarArgSymbol, "args"), builtinApply},
 	{"to-string", Formals("value"), builtinToString},
 	{"to-int", Formals("value"), builtinToInt},
 	{"to-float", Formals("value"), builtinToFloat},
@@ -238,7 +239,31 @@ func builtinFunCall(env *LEnv, args *LVal) *LVal {
 	if fun.IsSpecialFun() {
 		return env.Errorf("first argument is not a regular function: %v", fun.FunType)
 	}
-	return env.FunCall(fun, SExpr(fargs))
+	return env.funCall(fun, SExpr(fargs), false)
+}
+
+func builtinApply(env *LEnv, args *LVal) *LVal {
+	fun, fargs := args.Cells[0], args.Cells[1:]
+	if len(fargs) == 0 {
+		return env.Errorf("last argument must be a list")
+	}
+	argtail := fargs[len(fargs)-1]
+	fargs = fargs[:len(fargs)-1]
+
+	if fun.IsSpecialFun() {
+		return env.Errorf("first argument is not a regular function: %v", fun.FunType)
+	}
+	if argtail.Type != LSExpr {
+		return env.Errorf("last argument is not a list: %v", argtail.Type)
+	}
+	if fun.Type != LFun {
+		return env.Errorf("first argument is not a function: %v", fun.Type)
+	}
+
+	argcells := make([]*LVal, 0, len(fargs)+argtail.Len())
+	argcells = append(argcells, fargs...)
+	argcells = append(argcells, argtail.Cells...)
+	return env.funCall(fun, SExpr(argcells), false)
 }
 
 func builtinToString(env *LEnv, args *LVal) *LVal {
