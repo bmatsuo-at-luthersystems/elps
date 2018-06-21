@@ -52,6 +52,17 @@ string"""`, `"\"\"a raw\nstring"`},
 			{"((lambda (x &rest y) (cons x y)) 1 2 3)", "'(1 2 3)"},
 			{"((lambda (&rest x) (reverse 'list x)) 1 2 3)", "'(3 2 1)"},
 		}},
+		{"funcall", TestSequence{
+			{`(funcall (lambda () 1))`, `1`},
+			{`(funcall (lambda (x) (+ 1 x)) 1)`, `2`},
+			{`(funcall (lambda (&rest xs) (cdr xs)) 1 2 3)`, `'(2 3)`},
+		}},
+		{"apply", TestSequence{
+			{`(apply (lambda () 1) '())`, `1`},
+			{`(apply (lambda (x) (+ 1 x)) '(1))`, `2`},
+			{`(apply (lambda (x) (+ 1 x)) 1 '())`, `2`},
+			{`(apply (lambda (&rest xs) (cdr xs)) 1 2 '(3))`, `'(2 3)`},
+		}},
 		{"variadic arguments", TestSequence{
 			{"((lambda (&rest x) (reverse 'list x)) 1 2 3)", "'(3 2 1)"},
 			{"((lambda (x &rest y) (cons x y)) 1 2 3)", "'(1 2 3)"},
