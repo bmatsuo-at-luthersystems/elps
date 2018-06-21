@@ -60,8 +60,11 @@ func (pkg *Package) get(k *LVal) *LVal {
 	if k.Type != LSymbol && k.Type != LQSymbol {
 		return Nil()
 	}
-	if k.Str == "t" {
-		return Symbol("t")
+	if k.Str == TrueSymbol {
+		return Symbol(TrueSymbol)
+	}
+	if k.Str == FalseSymbol {
+		return Symbol(FalseSymbol)
 	}
 	v, ok := pkg.Symbols[k.Str]
 	if ok {
@@ -109,7 +112,10 @@ func (pkg *Package) Put(k, v *LVal) {
 	if k.Type != LSymbol && k.Type != LQSymbol {
 		return
 	}
-	if k.Str == "t" {
+	if k.Str == TrueSymbol {
+		panic("constant value")
+	}
+	if k.Str == FalseSymbol {
 		panic("constant value")
 	}
 	if v == nil {

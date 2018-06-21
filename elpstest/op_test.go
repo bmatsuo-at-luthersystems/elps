@@ -7,8 +7,8 @@ func TestSpecialOp(t *testing.T) {
 		{"if", TestSequence{
 			// if operator
 			{"(if () 1 2)", "2"},
-			{"(if t 1 2)", "1"},
-			{"(if t (set 'x 1) (set 'x 2))", "1"},
+			{"(if true 1 2)", "1"},
+			{"(if true (set 'x 1) (set 'x 2))", "1"},
 			{"x", "1"},
 			{"(if () (set 'x 1) (set 'x 2))", "2"},
 			{"x", "2"},

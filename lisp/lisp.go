@@ -148,9 +148,9 @@ func Value(v interface{}) *LVal {
 // Bool returns an LVal with truthiness identical to b.
 func Bool(b bool) *LVal {
 	if b {
-		return Symbol("true")
+		return Symbol(TrueSymbol)
 	}
-	return Symbol("false")
+	return Symbol(FalseSymbol)
 }
 
 // Int returns an LVal representing the number x.

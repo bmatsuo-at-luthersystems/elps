@@ -92,12 +92,17 @@ var langBuiltins = []*langBuiltin{
 	{"length", Formals("lis"), builtinLength},
 	{"cons", Formals("head", "tail"), builtinCons},
 	{"not", Formals("expr"), builtinNot},
+	// true? is potentially needed as a boolean conversion function (for json)
+	{"true?", Formals("expr"), builtinIsTrue},
 	{"nil?", Formals("expr"), builtinIsNil},
 	{"list?", Formals("expr"), builtinIsList},
 	{"sorted-map?", Formals("expr"), builtinIsSortedMap},
 	{"array?", Formals("expr"), builtinIsArray},
 	{"vector?", Formals("expr"), builtinIsVector},
+	{"bool?", Formals("expr"), builtinIsBool},
 	{"number?", Formals("expr"), builtinIsNumber},
+	{"int?", Formals("expr"), builtinIsInt},
+	{"float?", Formals("expr"), builtinIsFloat},
 	{"symbol?", Formals("expr"), builtinIsSymbol},
 	{"string?", Formals("expr"), builtinIsString},
 	{"bytes?", Formals("expr"), builtinIsBytes},
@@ -1259,6 +1264,10 @@ func builtinNot(env *LEnv, args *LVal) *LVal {
 	return Bool(Not(args.Cells[0]))
 }
 
+func builtinIsTrue(env *LEnv, args *LVal) *LVal {
+	return Bool(True(args.Cells[0]))
+}
+
 func builtinIsNil(env *LEnv, args *LVal) *LVal {
 	v := args.Cells[0]
 	if v.IsNil() {
@@ -1287,9 +1296,24 @@ func builtinIsVector(env *LEnv, args *LVal) *LVal {
 	return Bool(v.Type == LArray && v.Cells[0].Len() == 1)
 }
 
+func builtinIsBool(env *LEnv, args *LVal) *LVal {
+	v := args.Cells[0]
+	return Bool(v.Type == LSymbol && (v.Str == TrueSymbol || v.Str == FalseSymbol))
+}
+
 func builtinIsNumber(env *LEnv, args *LVal) *LVal {
 	v := args.Cells[0]
 	return Bool(v.IsNumeric())
+}
+
+func builtinIsInt(env *LEnv, args *LVal) *LVal {
+	v := args.Cells[0]
+	return Bool(v.Type == LInt)
+}
+
+func builtinIsFloat(env *LEnv, args *LVal) *LVal {
+	v := args.Cells[0]
+	return Bool(v.Type == LFloat)
 }
 
 func builtinIsSymbol(env *LEnv, args *LVal) *LVal {

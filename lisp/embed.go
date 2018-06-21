@@ -10,7 +10,7 @@ func True(v *LVal) bool {
 	if v.Type != LSymbol {
 		return true
 	}
-	return v.Str != "false"
+	return v.Str != FalseSymbol
 }
 
 // Not interprets v as a boolean value and returns its negation.

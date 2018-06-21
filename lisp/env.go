@@ -191,11 +191,11 @@ func (env *LEnv) get(k *LVal) *LVal {
 	if k.Type != LSymbol && k.Type != LQSymbol {
 		return Nil()
 	}
-	if k.Str == "true" {
-		return Symbol("true")
+	if k.Str == TrueSymbol {
+		return Symbol(TrueSymbol)
 	}
-	if k.Str == "false" {
-		return Symbol("false")
+	if k.Str == FalseSymbol {
+		return Symbol(FalseSymbol)
 	}
 	pieces := strings.Split(k.Str, ":")
 	switch len(pieces) {
@@ -263,10 +263,10 @@ func (env *LEnv) Put(k, v *LVal) {
 	if k.Type != LSymbol && k.Type != LQSymbol {
 		return
 	}
-	if k.Str == "true" {
+	if k.Str == TrueSymbol {
 		panic("constant value")
 	}
-	if k.Str == "false" {
+	if k.Str == FalseSymbol {
 		panic("constant value")
 	}
 	if v == nil {
