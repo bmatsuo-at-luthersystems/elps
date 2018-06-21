@@ -24,6 +24,18 @@ func TestMacros(t *testing.T) {
 			{"(m0)", "2"},
 			{"(m1 1)", "2"},
 			{"(m2 1 2)", "3"},
+			{`(macroexpand '(m0))`, `'(+ 1 1)`},
+			{`(macroexpand '(m1 (* 2 3)))`, `'(+ (* 2 3) 1)`},
+			{`(macroexpand '(m2 (* 2 3) (m0)))`, `'(+ (* 2 3) (m0))`},
+			{`(macroexpand-1 '(m0))`, `'(+ 1 1)`},
+			{`(macroexpand-1 '(m1 (* 2 3)))`, `'(+ (* 2 3) 1)`},
+			{`(macroexpand-1 '(m2 (* 2 3) (m0)))`, `'(+ (* 2 3) (m0))`},
+		}},
+		{"macroexpand", TestSequence{
+			{`(defmacro // (&rest x) (quasiquote (or (unquote-splicing x))))`, `()`},
+			{`(defmacro m (&rest x) (quasiquote (// (unquote (car x)) (m (unquote-splicing (cdr x))))))`, `()`},
+			{`(macroexpand '(m 1 2 3))`, `'(or 1 (m 2 3))`},
+			{`(macroexpand-1 '(m 1 2 3))`, `'(// 1 (m 2 3))`},
 		}},
 		{"defmacro advanced 1", TestSequence{
 			{"(defmacro m1 (x) (quasiquote (let ((y (+ (unquote x) 1))) (+ y y))))", "()"},

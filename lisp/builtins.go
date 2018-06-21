@@ -48,6 +48,8 @@ var langBuiltins = []*langBuiltin{
 	{"set", Formals("sym", "val"), builtinSet},
 	{"gensym", Formals(), builtinGensym},
 	{"identity", Formals("value"), builtinIdentity},
+	{"macroexpand", Formals("quoted-form"), builtinMacroExpand},
+	{"macroexpand-1", Formals("quoted-form"), builtinMacroExpand1},
 	{"funcall", Formals("fun", VarArgSymbol, "args"), builtinFunCall},
 	{"apply", Formals("fun", VarArgSymbol, "args"), builtinApply},
 	{"to-string", Formals("value"), builtinToString},
@@ -229,6 +231,68 @@ func builtinGensym(env *LEnv, args *LVal) *LVal {
 
 func builtinIdentity(env *LEnv, args *LVal) *LVal {
 	return args.Cells[0]
+}
+
+func builtinMacroExpand(env *LEnv, args *LVal) *LVal {
+	form := args.Cells[0]
+	if form.Type != LSExpr {
+		return env.Errorf("first argument is not a list: %v", form.Type)
+	}
+	for {
+		if form.IsNil() {
+			return form
+		}
+		macsym, macargs := form.Cells[0], form.Cells[1:]
+		if macsym.Type != LSymbol {
+			return form
+		}
+		mac := env.Get(macsym)
+		r, ok := macroExpand1(env, mac, SExpr(macargs))
+		if !ok {
+			return form
+		}
+		if r.Type != LSExpr {
+			return r
+		}
+		form = r
+	}
+}
+
+func builtinMacroExpand1(env *LEnv, args *LVal) *LVal {
+	form := args.Cells[0]
+	if form.Type != LSExpr {
+		return env.Errorf("first argument is not a list: %v", form.Type)
+	}
+	if form.IsNil() {
+		return form
+	}
+	macsym, macargs := form.Cells[0], form.Cells[1:]
+	if macsym.Type != LSymbol {
+		return form
+	}
+	mac := env.Get(macsym)
+	r, ok := macroExpand1(env, mac, SExpr(macargs))
+	if !ok {
+		return form
+	}
+	return r
+
+}
+
+func macroExpand1(env *LEnv, mac *LVal, args *LVal) (*LVal, bool) {
+	if mac.Type != LFun {
+		return nil, false
+	}
+	if !mac.IsMacro() {
+		return nil, false
+	}
+	mark := env.MacroCall(mac, args)
+	if mark.Type != LMarkMacExpand {
+		panic("macro did not return LMarkMacExpand")
+	}
+	// MacroCall unquotes its result so that it can work properly in normal
+	// evaluation cycle.  So we need to re-quote the value here.
+	return Quote(mark.Cells[0]), true
 }
 
 func builtinFunCall(env *LEnv, args *LVal) *LVal {
