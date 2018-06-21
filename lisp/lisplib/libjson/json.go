@@ -4,16 +4,18 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"reflect"
 	"sort"
+	"strconv"
 
 	"bitbucket.org/luthersystems/elps/lisp"
 	"bitbucket.org/luthersystems/elps/lisp/lisplib/internal/libutil"
 )
 
-func init() {
-	DefaultSerializer = &Serializer{
+func DefaultSerializer() *Serializer {
+	return &Serializer{
 		Null: lisp.Symbol("json:null"),
 	}
 }
@@ -33,7 +35,8 @@ func LoadPackage(env *lisp.LEnv) *lisp.LVal {
 		return e
 	}
 	env.PutGlobal(lisp.Symbol("null"), lisp.Symbol("json:null"))
-	for _, fn := range Builtins(DefaultSerializer) {
+	s := DefaultSerializer()
+	for _, fn := range Builtins(s) {
 		env.AddBuiltins(true, fn)
 	}
 	return lisp.Nil()
@@ -43,38 +46,36 @@ func LoadPackage(env *lisp.LEnv) *lisp.LVal {
 // set of package builtin functions that use it.
 func Builtins(s *Serializer) []*libutil.Builtin {
 	return []*libutil.Builtin{
-		libutil.Function("dump-bytes", lisp.Formals("object"), s.DumpBytesBuiltin),
-		libutil.Function("load-bytes", lisp.Formals("object"), s.LoadBytesBuiltin),
-		libutil.Function("dump-string", lisp.Formals("object"), s.DumpStringBuiltin),
-		libutil.Function("load-string", lisp.Formals("json-string"), s.LoadStringBuiltin),
+		libutil.Function("dump-bytes", lisp.Formals("object", lisp.KeyArgSymbol, "string-numbers"), s.DumpBytesBuiltin),
+		libutil.Function("load-bytes", lisp.Formals("object", lisp.KeyArgSymbol, "string-numbers"), s.LoadBytesBuiltin),
+		libutil.Function("dump-string", lisp.Formals("object", lisp.KeyArgSymbol, "string-numbers"), s.DumpStringBuiltin),
+		libutil.Function("load-string", lisp.Formals("json-string", lisp.KeyArgSymbol, "string-numbers"), s.LoadStringBuiltin),
+		libutil.Function("use-string-numbers", lisp.Formals("bool"), s.UseStringNumbersBuiltin),
 	}
 }
 
-// DefaultSerializer is the Serializer used by exported functions Load and
-// Dump.
-var DefaultSerializer *Serializer
-
 // Dump serializes the structure of v as a JSON formatted byte slice.
-func Dump(v *lisp.LVal) ([]byte, error) {
-	return DefaultSerializer.Dump(v)
+func Dump(v *lisp.LVal, stringNums bool) ([]byte, error) {
+	return DefaultSerializer().Dump(v, stringNums)
 }
 
 // Load parses b as JSON and returns an equivalent LVal.
-func Load(b []byte) *lisp.LVal {
-	return DefaultSerializer.Load(b)
+func Load(b []byte, stringNums bool) *lisp.LVal {
+	return DefaultSerializer().Load(b, stringNums)
 }
 
 // Serializer defines JSON serialization rules for lisp values.
 type Serializer struct {
-	True  *lisp.LVal
-	False *lisp.LVal
-	Null  *lisp.LVal
+	UseStringNumbers bool
+	True             *lisp.LVal
+	False            *lisp.LVal
+	Null             *lisp.LVal
 }
 
 // Load parses b and returns an LVal representing its structure.
-func (s *Serializer) Load(b []byte) *lisp.LVal {
+func (s *Serializer) Load(b []byte, stringNums bool) *lisp.LVal {
 	var x interface{}
-	err := json.Unmarshal(b, &x)
+	err := s.jsonDecode(b, &x, stringNums)
 	switch err.(type) {
 	case nil:
 		break
@@ -88,6 +89,23 @@ func (s *Serializer) Load(b []byte) *lisp.LVal {
 	return s.loadInterface(x)
 }
 
+func (s *Serializer) jsonDecode(b []byte, dst interface{}, stringNums bool) error {
+	if !stringNums {
+		return json.Unmarshal(b, dst)
+	}
+	d := json.NewDecoder(bytes.NewReader(b))
+	d.UseNumber()
+	err := d.Decode(dst)
+	// Check for trailing bytes in b.  RawMessage is not ideal because it
+	// performs allocation when there is another object in b, but its OK for
+	// now.
+	var rest json.RawMessage
+	if d.Decode(&rest) != io.EOF {
+		return fmt.Errorf("not a valid json object")
+	}
+	return err
+}
+
 func (s *Serializer) loadInterface(x interface{}) *lisp.LVal {
 	if x == nil {
 		return lisp.Nil()
@@ -99,6 +117,9 @@ func (s *Serializer) loadInterface(x interface{}) *lisp.LVal {
 		return lisp.String(x)
 	case float64:
 		return lisp.Float(x)
+	case json.Number:
+		// This can only show up if stringNums was true.
+		return lisp.String(string(x))
 	case map[string]interface{}:
 		m := lisp.SortedMap()
 		for k, v := range x {
@@ -131,9 +152,19 @@ func (s *Serializer) attachStack(env *lisp.LEnv, lerr *lisp.LVal) *lisp.LVal {
 	return lerr
 }
 
+func (s *Serializer) UseStringNumbersBuiltin(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
+	confirm := args.Cells[0]
+	s.UseStringNumbers = lisp.True(confirm)
+	return lisp.Nil()
+}
+
+func (s *Serializer) useStringNumbers(env *lisp.LEnv) *lisp.LVal {
+	return lisp.Bool(s.UseStringNumbers)
+}
+
 // Dump serializes v as JSON and returns any error.
-func (s *Serializer) Dump(v *lisp.LVal) ([]byte, error) {
-	m := s.GoValue(v)
+func (s *Serializer) Dump(v *lisp.LVal, stringNums bool) ([]byte, error) {
+	m := s.GoValue(v, stringNums)
 	_, badnews := m.(*lisp.LVal)
 	if badnews {
 		return nil, fmt.Errorf("type cannot be converted to json: %v", v.Type)
@@ -142,8 +173,14 @@ func (s *Serializer) Dump(v *lisp.LVal) ([]byte, error) {
 }
 
 func (s *Serializer) DumpBytesBuiltin(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
-	obj := args.Cells[0]
-	b, err := s.Dump(obj)
+	obj, stringNums := args.Cells[0], args.Cells[1]
+	if stringNums.IsNil() {
+		stringNums = s.useStringNumbers(env)
+		if stringNums.Type == lisp.LError {
+			return stringNums
+		}
+	}
+	b, err := s.Dump(obj, lisp.True(stringNums))
 	if err != nil {
 		return env.Error(err)
 	}
@@ -151,16 +188,29 @@ func (s *Serializer) DumpBytesBuiltin(env *lisp.LEnv, args *lisp.LVal) *lisp.LVa
 }
 
 func (s *Serializer) LoadBytesBuiltin(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
-	js := args.Cells[0]
+	js, stringNums := args.Cells[0], args.Cells[1]
 	if js.Type != lisp.LBytes {
 		return env.Errorf("argument is not bytes: %v", js.Type)
 	}
-	return s.attachStack(env, s.Load(js.Bytes))
+	if stringNums.IsNil() {
+		stringNums = s.useStringNumbers(env)
+		if stringNums.Type == lisp.LError {
+			return stringNums
+		}
+	}
+	return s.attachStack(env, s.Load(js.Bytes, lisp.True(stringNums)))
 }
 
 func (s *Serializer) DumpStringBuiltin(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
-	obj := args.Cells[0]
-	b, err := s.Dump(obj)
+	obj, stringNums := args.Cells[0], args.Cells[1]
+	if stringNums.IsNil() {
+		stringNums = s.useStringNumbers(env)
+		if stringNums.Type == lisp.LError {
+			return stringNums
+		}
+		log.Printf("Defaulting string-numbers: %v", stringNums)
+	}
+	b, err := s.Dump(obj, lisp.True(stringNums))
 	if err != nil {
 		return env.Error(err)
 	}
@@ -168,17 +218,24 @@ func (s *Serializer) DumpStringBuiltin(env *lisp.LEnv, args *lisp.LVal) *lisp.LV
 }
 
 func (s *Serializer) LoadStringBuiltin(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
-	js := args.Cells[0]
+	js, stringNums := args.Cells[0], args.Cells[1]
 	if js.Type != lisp.LString {
 		return env.Errorf("argument is not a string: %v", js.Type)
 	}
-	return s.attachStack(env, s.Load([]byte(js.Str)))
+	if stringNums.IsNil() {
+		stringNums = s.useStringNumbers(env)
+		if stringNums.Type == lisp.LError {
+			return stringNums
+		}
+		log.Printf("Defaulting string-numbers: %v", stringNums)
+	}
+	return s.attachStack(env, s.Load([]byte(js.Str), lisp.True(stringNums)))
 }
 
 // GoValue converts v to its natural representation in Go.  Quotes are ignored
 // and all lists are turned into slices.  Symbols are converted to strings.
 // The value Nil() is converted to nil.  Functions are returned as is.
-func (s *Serializer) GoValue(v *lisp.LVal) interface{} {
+func (s *Serializer) GoValue(v *lisp.LVal, stringNums bool) interface{} {
 	if v.IsNil() {
 		return nil
 	}
@@ -200,18 +257,24 @@ func (s *Serializer) GoValue(v *lisp.LVal) interface{} {
 	case lisp.LBytes:
 		return v.Bytes
 	case lisp.LInt:
+		if stringNums {
+			return strconv.Itoa(v.Int)
+		}
 		return v.Int
 	case lisp.LFloat:
+		if stringNums {
+			return strconv.FormatFloat(v.Float, 'g', -1, 64)
+		}
 		return v.Float
 	case lisp.LNative:
 		return v.Native
 	case lisp.LQuote:
-		return s.GoValue(v.Cells[0])
+		return s.GoValue(v.Cells[0], stringNums)
 	case lisp.LSExpr:
-		s, _ := s.GoSlice(v)
+		s, _ := s.GoSlice(v, stringNums)
 		return s
 	case lisp.LArray:
-		s, _ := s.GoSlice(lisp.QExpr(v.Cells[1:]))
+		s, _ := s.GoSlice(lisp.QExpr(v.Cells[1:]), stringNums)
 		switch v.Cells[0].Len() {
 		case 0:
 			return s[0]
@@ -221,7 +284,7 @@ func (s *Serializer) GoValue(v *lisp.LVal) interface{} {
 			return fmt.Errorf("cannot serialize array with dimensions: %v", v.Cells[0])
 		}
 	case lisp.LSortMap:
-		m, _ := s.GoMap(v)
+		m, _ := s.GoMap(v, stringNums)
 		return m
 	}
 	return v
@@ -283,13 +346,13 @@ func (s *Serializer) GoFloat64(v *lisp.LVal) (float64, bool) {
 
 // GoSlice returns the string that v represents and the value true.  If v does
 // not represent a string GoSlice returns a false second argument
-func (s *Serializer) GoSlice(v *lisp.LVal) ([]interface{}, bool) {
+func (s *Serializer) GoSlice(v *lisp.LVal, stringNums bool) ([]interface{}, bool) {
 	if v.Type != lisp.LSExpr {
 		return nil, false
 	}
 	vs := make([]interface{}, len(v.Cells))
 	for i := range vs {
-		vs[i] = s.GoValue(v.Cells[i])
+		vs[i] = s.GoValue(v.Cells[i], stringNums)
 	}
 	return vs, true
 }
@@ -297,13 +360,13 @@ func (s *Serializer) GoSlice(v *lisp.LVal) ([]interface{}, bool) {
 // GoMap converts an LSortMap to its Go equivalent and returns it with a true
 // second argument.  If v does not represent a map json serializable map GoMap
 // returns a false second argument
-func (s *Serializer) GoMap(v *lisp.LVal) (SortedMap, bool) {
+func (s *Serializer) GoMap(v *lisp.LVal, stringNums bool) (SortedMap, bool) {
 	if v.Type != lisp.LSortMap {
 		return nil, false
 	}
 	m := make(SortedMap, len(v.Map))
 	for k, vlisp := range v.Map {
-		vgo := s.GoValue(vlisp)
+		vgo := s.GoValue(vlisp, stringNums)
 		kreflect := reflect.ValueOf(k)
 		// This is really shitty
 		switch kreflect.Kind() {
