@@ -197,6 +197,27 @@ func (env *LEnv) get(k *LVal) *LVal {
 	if k.Str == "false" {
 		return Symbol("false")
 	}
+	pieces := strings.Split(k.Str, ":")
+	switch len(pieces) {
+	case 1:
+		break
+	case 2:
+		if pieces[0] == "" {
+			// keyword
+			return k.Copy()
+		}
+		pkg := env.root().Registry.Packages[pieces[0]]
+		if pkg == nil {
+			return env.Errorf("unknown package: %q", pieces[0])
+		}
+		lerr := pkg.Get(Symbol(pieces[1]))
+		if lerr.Type == LError {
+			lerr.Stack = env.Stack.Copy()
+		}
+		return lerr
+	default:
+		return env.Errorf("illegal symbol: %q", k.Str)
+	}
 	v, ok := env.Scope[k.Str]
 	if ok {
 		if v.Type == LFun {

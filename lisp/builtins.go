@@ -297,11 +297,12 @@ func macroExpand1(env *LEnv, mac *LVal, args *LVal) (*LVal, bool) {
 
 func builtinFunCall(env *LEnv, args *LVal) *LVal {
 	fun, fargs := args.Cells[0], args.Cells[1:]
-	if fun.Type != LFun {
-		return env.Errorf("first argument is not a function: %v", fun.Type)
+	fun = getCallFun(env, fun)
+	if fun.Type == LError {
+		return fun
 	}
 	if fun.IsSpecialFun() {
-		return env.Errorf("first argument is not a regular function: %v", fun.FunType)
+		return env.Errorf("not a regular function: %v", fun.FunType)
 	}
 	return env.funCall(fun, SExpr(fargs), false)
 }
@@ -314,8 +315,9 @@ func builtinApply(env *LEnv, args *LVal) *LVal {
 	argtail := fargs[len(fargs)-1]
 	fargs = fargs[:len(fargs)-1]
 
-	if fun.IsSpecialFun() {
-		return env.Errorf("first argument is not a regular function: %v", fun.FunType)
+	fun = getCallFun(env, fun)
+	if fun.Type == LError {
+		return fun
 	}
 	if argtail.Type != LSExpr {
 		return env.Errorf("last argument is not a list: %v", argtail.Type)
@@ -328,6 +330,22 @@ func builtinApply(env *LEnv, args *LVal) *LVal {
 	argcells = append(argcells, fargs...)
 	argcells = append(argcells, argtail.Cells...)
 	return env.funCall(fun, SExpr(argcells), false)
+}
+
+func getCallFun(env *LEnv, fun *LVal) *LVal {
+	if fun.Type == LSymbol {
+		f := env.Get(fun)
+		if f.Type == LError {
+			return f
+		}
+		if f.Type != LFun {
+			return env.Errorf("symbol %s not bound to a function: %v", fun, f.Type)
+		}
+		return f
+	} else if fun.Type != LFun {
+		return env.Errorf("first argument is not a function: %v", fun.Type)
+	}
+	return fun
 }
 
 func builtinToString(env *LEnv, args *LVal) *LVal {
