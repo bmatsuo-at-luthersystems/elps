@@ -32,7 +32,10 @@ func TestSpecialOp(t *testing.T) {
 		{"cond", TestSequence{
 			{`(cond)`, "()"},
 			{`(cond (else 1))`, "1"},
-			{`(cond (t 2) (else 1))`, "2"},
+			{`(cond (:else 1))`, "1"},
+			{`(cond (true 2) (else 1))`, "2"},
+			{`(cond (true) (else 1))`, "()"},
+			{`(cond (true 1 (+ 1 2)) (else 1))`, "3"},
 			{`(cond ((< 1 2) 3) (else 1))`, "3"},
 		}},
 		{"expr", TestSequence{

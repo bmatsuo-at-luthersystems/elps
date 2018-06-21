@@ -436,7 +436,7 @@ func opCond(env *LEnv, args *LVal) *LVal {
 		if branch.Type != LSExpr {
 			return env.Errorf("argument is not a list: %v", branch.Type)
 		}
-		if len(branch.Cells) != 2 {
+		if len(branch.Cells) == 0 {
 			return env.Errorf("argument is not a pair (length %d)", len(branch.Cells))
 		}
 		var test *LVal
@@ -454,8 +454,7 @@ func opCond(env *LEnv, args *LVal) *LVal {
 		if Not(test) {
 			continue
 		}
-		branch.Cells[1].Terminal = true
-		return env.Eval(branch.Cells[1])
+		return opProgn(env, SExpr(branch.Cells[1:]))
 	}
 	return Nil()
 }
