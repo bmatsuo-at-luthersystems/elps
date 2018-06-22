@@ -464,6 +464,15 @@ eval:
 	if v.Spliced {
 		return env.Errorf("spliced value used as expression")
 	}
+	// Builtins signal that they are executing their final expression (which
+	// will be returned verbatim) by evaluating an LVal marked as terminal.
+	// When this happens we want to mark the stack as terminal so tail
+	// recursion optimization may seek past the frame at top of the stack (and
+	// clear the LVal's terminal field for good measure).  We don't clear the
+	// frame's Terminal flag when v.Terminal is false because a terminal
+	// expression likely needs to have args evaluated (for which a TROBlock
+	// prevents recursion optimization).  And the arguments to the terminal
+	// expression will not themselves be terminal expressions.
 	if v.Terminal {
 		v.Terminal = false
 		top := env.Stack.Top()
@@ -725,6 +734,10 @@ func (env *LEnv) evalSExprCells(s *LVal) *LVal {
 	if f.Type != LFun {
 		return env.Errorf("first element of expression is not a function: %v", f)
 	}
+	if f.Type == LMarkTailRec {
+		env.Stack.DebugPrint(os.Stderr)
+		panic("tail-recursion optimization attempted during argument evaluation")
+	}
 
 	newCells[0] = f
 	if f.IsSpecialFun() {
@@ -749,6 +762,10 @@ func (env *LEnv) evalSExprCells(s *LVal) *LVal {
 	for _, v := range newCells {
 		if v.Type == LError {
 			return v
+		}
+		if v.Type == LMarkTailRec {
+			env.Stack.DebugPrint(os.Stderr)
+			panic("tail-recursion optimization attempted during argument evaluation")
 		}
 	}
 	return SExpr(newCells)
@@ -775,17 +792,11 @@ func (env *LEnv) call(fun *LVal, args *LVal, curry bool) *LVal {
 	// scoping.
 
 	if fun.Builtin != nil {
-		// TODO:  Don't mark builtin functions as terminal.  This can trigger
-		// tail rucursion at an unintended time if someone writing builtin
-		// functions doesn't know what they are doing.  It might be better to
-		// implement a special value (like LTerminal) which a builtin could
-		// return.  If the LEnv encounters LTerminal values returned from
-		// functions then they immediately mark the top terminal and evaluate
-		// before popping the stack.
-
-		// We definitely should be working with a non-empty stack here so there
-		// is no nil check.
-		env.Stack.Top().Terminal = true
+		// TODO:  It might be cool to implement a special value (like
+		// LTerminal) which a builtin could return.  If the LEnv encounters
+		// LTerminal values returned from functions then they immediately mark
+		// the top terminal and evaluate before popping the stack (but saving a
+		// Go stack frame).
 
 		// FIXME:  I think fun.Env is probably correct here.  But it wouldn't
 		// surprise me if at least one builtin breaks when it switches.
