@@ -157,6 +157,11 @@ func builtinLoadString(env *LEnv, args *LVal) *LVal {
 	if source.Type != LString {
 		return env.Errorf("first argument is not a string: %v", source.Type)
 	}
+
+	// Don't let tail-recursion optimization seek beyond the source text
+	// entrypoint.
+	env.Stack.Top().TROBlock = true
+
 	v := env.root().LoadString("load-string", source.Str)
 	if v.Type == LError && v.Stack == nil {
 		v.Stack = env.Stack.Copy()
@@ -169,6 +174,11 @@ func builtinLoadBytes(env *LEnv, args *LVal) *LVal {
 	if source.Type != LBytes {
 		return env.Errorf("first argument is not bytes: %v", source.Type)
 	}
+
+	// Don't let tail-recursion optimization seek beyond the source text
+	// entrypoint.
+	env.Stack.Top().TROBlock = true
+
 	v := env.root().Load("load-bytes", bytes.NewReader(source.Bytes))
 	if v.Type == LError && v.Stack == nil {
 		v.Stack = env.Stack.Copy()
@@ -1732,7 +1742,10 @@ func builtinDebugPrint(env *LEnv, args *LVal) *LVal {
 }
 
 func builtinDebugStack(env *LEnv, args *LVal) *LVal {
-	env.Stack.DebugPrint(os.Stdout)
+	_, err := env.Stack.DebugPrint(os.Stdout)
+	if err != nil {
+		return env.Error(err)
+	}
 	return Nil()
 }
 
