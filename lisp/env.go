@@ -150,7 +150,6 @@ func (env *LEnv) Load(name string, r io.Reader) *LVal {
 	}
 	ret := Nil()
 	for _, expr := range exprs {
-		//log.Println("LOAD ", expr)
 		ret = env.Eval(expr)
 		if ret.Type == LError {
 			return ret
@@ -297,6 +296,7 @@ func (env *LEnv) Lambda(formals *LVal, body []*LVal) *LVal {
 		return fun
 	}
 	fun.Env.Parent = env
+	fun.Env.Stack = env.Stack
 	fun.Package = env.root().Package.Name
 	return fun
 }
