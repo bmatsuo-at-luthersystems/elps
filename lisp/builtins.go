@@ -612,20 +612,31 @@ func builtinCompose(env *LEnv, args *LVal) *LVal {
 	if f.Type != LFun {
 		return env.Errorf("first argument is not a function: %s", f.Type)
 	}
+	if f.IsSpecialFun() {
+		return env.Errorf("first argument is not a regular function: %s", f.FunType)
+	}
 	if g.Type != LFun {
 		return env.Errorf("second argument is not a function: %s", g.Type)
 	}
+	if g.IsSpecialFun() {
+		return env.Errorf("first argument is not a regular function: %s", g.FunType)
+	}
 	formals := g.Cells[0].Copy()
-	body := args // body.Cells[0] is already set to f
-	body.Quoted = false
 	gcall := SExpr(make([]*LVal, 0, len(formals.Cells)+1))
-	gcall.Cells = append(gcall.Cells, g)
+	body := SExpr([]*LVal{Symbol("lisp:funcall"), f, gcall})
+	gcall.Cells = append(gcall.Cells, Symbol("lisp:apply"), g)
 	var restSym *LVal
 	for i, argSym := range formals.Cells {
 		if argSym.Type != LSymbol {
 			// This should not happen.  The list of formals should be checked
 			// when the g function was created.
 			return env.Errorf("invalid list of formals: %s", formals)
+		}
+		if argSym.Str == OptArgSymbol {
+			continue
+		}
+		if argSym.Str == KeyArgSymbol {
+			continue
 		}
 		if argSym.Str == VarArgSymbol {
 			if len(formals.Cells) != i+2 {
@@ -639,21 +650,11 @@ func builtinCompose(env *LEnv, args *LVal) *LVal {
 		gcall.Cells = append(gcall.Cells, argSym)
 	}
 	if restSym != nil {
-		concatPrefix := QExpr(gcall.Cells[1:])
-		concatCall := SExpr(nil)
-		concatCall.Cells = append(concatCall.Cells, Symbol("lisp:concat"))
-		concatCall.Cells = append(concatCall.Cells, Quote(Symbol("list")))
-		concatCall.Cells = append(concatCall.Cells, concatPrefix)
-		concatCall.Cells = append(concatCall.Cells, restSym.Copy())
-		unpackCall := SExpr(nil)
-		unpackCall.Cells = append(unpackCall.Cells, Symbol("lisp:unpack"))
-		unpackCall.Cells = append(unpackCall.Cells, g)
-		unpackCall.Cells = append(unpackCall.Cells, concatCall)
-		gcall = unpackCall
+		gcall.Cells = append(gcall.Cells, restSym)
+	} else {
+		gcall.Cells = append(gcall.Cells, Nil())
 	}
-	body.Cells[1] = gcall
 	newfun := env.Lambda(formals, []*LVal{body})
-	newfun.Env.Parent = env
 	newfun.Package = env.Runtime.Package.Name
 	return newfun
 }

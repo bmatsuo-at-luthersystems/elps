@@ -292,10 +292,11 @@ func (env *LEnv) Lambda(formals *LVal, body []*LVal) *LVal {
 	cells := make([]*LVal, 0, len(body)+1)
 	cells = append(cells, formals)
 	cells = append(cells, body...)
+	fenv := NewEnv(env)
 	fun := &LVal{
 		Type:  LFun,
-		Env:   NewEnv(env),
-		FID:   env.getFID(),
+		Env:   fenv,
+		FID:   fenv.getFID(),
 		Cells: cells,
 	}
 	fun.Package = env.Runtime.Package.Name
@@ -737,7 +738,7 @@ func (env *LEnv) evalSExprCells(s *LVal) *LVal {
 	}
 	if f.Type == LMarkTailRec {
 		env.Runtime.Stack.DebugPrint(os.Stderr)
-		panic("tail-recursion optimization attempted during argument evaluation")
+		log.Panicf("tail-recursion optimization attempted during argument evaluation: %v", f.Cells)
 	}
 
 	newCells[0] = f
@@ -766,7 +767,7 @@ func (env *LEnv) evalSExprCells(s *LVal) *LVal {
 		}
 		if v.Type == LMarkTailRec {
 			env.Runtime.Stack.DebugPrint(os.Stderr)
-			panic("tail-recursion optimization attempted during argument evaluation")
+			log.Panicf("tail-recursion optimization attempted during argument evaluation: %v", v.Cells)
 		}
 	}
 	return SExpr(newCells)

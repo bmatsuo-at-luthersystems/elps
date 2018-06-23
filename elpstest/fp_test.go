@@ -41,14 +41,14 @@ func TestFP(t *testing.T) {
 			{"(unpack (zip 'vector) (map 'list identity (zip 'vector '(1 2 3) '('a 'b 'c))))", "(vector (vector 1 2 3) (vector 'a 'b 'c))"},
 		}},
 		{"simple composition", TestSequence{
-			{"(defun f (x) (+ x 1))", "()"},
+			{"(defun f (y) (+ y 1))", "()"},
 			{"(defun g (x) (* x 2))", "()"},
-			{"(compose f g)", "(lambda (x) ((lambda (x) (+ x 1)) ((lambda (x) (* x 2)) x)))"},
+			{"(compose f g)", "(lambda (x) (lisp:funcall (lambda (y) (+ y 1)) (lisp:apply (lambda (x) (* x 2)) x ())))"},
 			{"((compose f g) 2)", "5"},
 		}},
 		{"complex composition", TestSequence{
 			{"(defun g (x &rest xs) (cons x xs))", "()"},
-			{"(compose (reverse 'list) g)", "(lambda (x &rest xs) (<builtin> (lisp:unpack (lambda (x &rest xs) (cons x xs)) (lisp:concat 'list '(x) xs))))"},
+			{"(compose (reverse 'list) g)", "(lambda (x &rest xs) (lisp:funcall <builtin> (lisp:apply (lambda (x &rest xs) (cons x xs)) x xs)))"},
 			{"((compose (reverse 'list) list) 1 2 3)", "'(3 2 1)"},
 			{"((compose (reverse 'list) g) 1 2 3)", "'(3 2 1)"},
 		}},

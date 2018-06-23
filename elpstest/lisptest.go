@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"path/filepath"
 	"testing"
 
@@ -162,12 +163,12 @@ type TestSuite []struct {
 // RunTestSuite runs each TestSequence in tests on isolated lisp.LEnvs.
 func RunTestSuite(t *testing.T, tests TestSuite) {
 	for i, test := range tests {
+		log.Printf("test %d -- %s", i, test.Name)
 		env := lisp.NewEnv(nil)
 		lisp.InitializeUserEnv(env)
 		env.InPackage(lisp.String(lisp.DefaultUserPackage))
 		env.Reader = parser.NewReader()
 		for j, expr := range test.TestSequence {
-			//log.Printf("test %d %q: expr %d evaluating", i, test.Name, j)
 			v, _, err := parser.ParseLVal([]byte(expr.Expr))
 			if err != nil {
 				t.Errorf("test %d %q: expr %d: parse error: %v", i, test.Name, j, err)
