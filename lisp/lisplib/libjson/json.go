@@ -151,7 +151,7 @@ func (s *Serializer) attachStack(env *lisp.LEnv, lerr *lisp.LVal) *lisp.LVal {
 	if lerr.Type != lisp.LError {
 		return lerr
 	}
-	lerr.Stack = env.Stack.Copy()
+	lerr.Stack = env.Runtime.Stack.Copy()
 	return lerr
 }
 

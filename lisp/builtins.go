@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"math"
-	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -160,11 +159,11 @@ func builtinLoadString(env *LEnv, args *LVal) *LVal {
 
 	// Don't let tail-recursion optimization seek beyond the source text
 	// entrypoint.
-	env.Stack.Top().TROBlock = true
+	env.Runtime.Stack.Top().TROBlock = true
 
 	v := env.root().LoadString("load-string", source.Str)
 	if v.Type == LError && v.Stack == nil {
-		v.Stack = env.Stack.Copy()
+		v.Stack = env.Runtime.Stack.Copy()
 	}
 	return v
 }
@@ -177,11 +176,11 @@ func builtinLoadBytes(env *LEnv, args *LVal) *LVal {
 
 	// Don't let tail-recursion optimization seek beyond the source text
 	// entrypoint.
-	env.Stack.Top().TROBlock = true
+	env.Runtime.Stack.Top().TROBlock = true
 
 	v := env.root().Load("load-bytes", bytes.NewReader(source.Bytes))
 	if v.Type == LError && v.Stack == nil {
-		v.Stack = env.Stack.Copy()
+		v.Stack = env.Runtime.Stack.Copy()
 	}
 	return v
 }
@@ -191,21 +190,20 @@ func builtinInPackage(env *LEnv, args *LVal) *LVal {
 		return env.Errorf("first argument is not a symbol or a string: %v", args.Cells[0].Type)
 	}
 	name := args.Cells[0].Str
-	root := env.root()
-	pkg := root.Registry.Packages[name]
+	pkg := env.Runtime.Registry.Packages[name]
 	newpkg := false
 	if pkg == nil {
 		newpkg = true
-		root.Registry.DefinePackage(name)
-		pkg = root.Registry.Packages[name]
+		env.Runtime.Registry.DefinePackage(name)
+		pkg = env.Runtime.Registry.Packages[name]
 	}
-	root.Package = pkg
-	if newpkg && root.Registry.Lang != "" {
+	env.Runtime.Package = pkg
+	if newpkg && env.Runtime.Registry.Lang != "" {
 		// For now, all packages use the lisp package.  The ``in-package''
 		// builtin doesn't provide syntax to simply use lisp (calling
 		// ``lisp:use-package'' from a package that doesn't use lisp hard to
 		// remember).
-		root.UsePackage(Symbol(root.Registry.Lang))
+		env.UsePackage(Symbol(env.Runtime.Registry.Lang))
 	}
 	return Nil()
 }
@@ -221,7 +219,7 @@ func builtinExport(env *LEnv, args *LVal) *LVal {
 	for _, arg := range args.Cells {
 		switch {
 		case arg.Type == LSymbol || arg.Type != LString:
-			env.root().Package.Exports(arg.Str)
+			env.Runtime.Package.Exports(arg.Str)
 		case arg.Type == LSExpr:
 			builtinExport(env, arg)
 		default:
@@ -654,9 +652,9 @@ func builtinCompose(env *LEnv, args *LVal) *LVal {
 		gcall = unpackCall
 	}
 	body.Cells[1] = gcall
-	newfun := Lambda(formals, []*LVal{body})
+	newfun := env.Lambda(formals, []*LVal{body})
 	newfun.Env.Parent = env
-	newfun.Package = env.root().Package.Name
+	newfun.Package = env.Runtime.Package.Name
 	return newfun
 }
 
@@ -744,7 +742,7 @@ func builtinIsKey(env *LEnv, args *LVal) *LVal {
 	}
 	ok := mapHasKey(m, k)
 	if ok.Type == LError {
-		ok.Stack = env.Stack.Copy()
+		ok.Stack = env.Runtime.Stack.Copy()
 	}
 	return ok
 }
@@ -1742,7 +1740,7 @@ func builtinDebugPrint(env *LEnv, args *LVal) *LVal {
 }
 
 func builtinDebugStack(env *LEnv, args *LVal) *LVal {
-	_, err := env.Stack.DebugPrint(os.Stdout)
+	_, err := env.Runtime.Stack.DebugPrint(env.Runtime.Stderr)
 	if err != nil {
 		return env.Error(err)
 	}

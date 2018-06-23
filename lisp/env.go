@@ -30,63 +30,61 @@ func gensym() uint {
 
 // InitializeUserEnv creates the default user environment.
 func InitializeUserEnv(env *LEnv) *LVal {
-	env.Registry.DefinePackage(DefaultLangPackage)
-	env.Registry.Lang = DefaultLangPackage
-	env.Package = env.Registry.Packages[env.Registry.Lang]
+	env.Runtime.Registry.DefinePackage(DefaultLangPackage)
+	env.Runtime.Registry.Lang = DefaultLangPackage
+	env.Runtime.Package = env.Runtime.Registry.Packages[env.Runtime.Registry.Lang]
 	env.AddMacros(true)
 	env.AddSpecialOps(true)
 	env.AddBuiltins(true)
-	env.Registry.DefinePackage(DefaultUserPackage)
+	env.Runtime.Registry.DefinePackage(DefaultUserPackage)
 	rc := env.InPackage(Symbol(DefaultUserPackage))
 	if GoError(rc) != nil {
 		return rc
 	}
-	return env.UsePackage(Symbol(env.Registry.Lang))
+	return env.UsePackage(Symbol(env.Runtime.Registry.Lang))
 }
 
 // LEnv is a lisp environment.
 type LEnv struct {
-	ID       uint
-	Scope    map[string]*LVal
-	FunName  map[string]string
-	Parent   *LEnv
-	Stack    *CallStack
-	Package  *Package
-	Registry *PackageRegistry
-	Reader   Reader
+	ID      uint
+	Scope   map[string]*LVal
+	FunName map[string]string
+	Parent  *LEnv
+	Reader  Reader
+	Runtime *Runtime
 }
 
 // NewEnv returns initializes and returns a new LEnv.
 func NewEnv(parent *LEnv) *LEnv {
+	var runtime *Runtime
+	if parent != nil {
+		runtime = parent.Runtime
+	} else {
+		runtime = StandardRuntime()
+	}
 	env := &LEnv{
-		ID:      getEnvID(),
+		ID:      runtime.GenEnvID(),
 		Scope:   make(map[string]*LVal),
 		FunName: make(map[string]string),
 		Parent:  parent,
-	}
-	if parent != nil {
-		env.Stack = parent.Stack
-	} else {
-		env.Registry = NewRepository()
-		env.Stack = &CallStack{}
+		Runtime: runtime,
 	}
 	return env
 }
 
 func (env *LEnv) getFID() string {
-	return fmt.Sprintf("anon%d", env.ID)
+	return fmt.Sprintf("_fun%d", env.ID)
 }
 
 func (env *LEnv) GenSym() *LVal {
-	return Symbol(fmt.Sprintf("gensym%d", gensym()))
+	return Symbol(env.Runtime.GenSym())
 }
 
 func (env *LEnv) DefinePackage(name *LVal) *LVal {
 	if name.Type != LSymbol && name.Type != LString {
 		return env.Errorf("argument cannot be converted to string: %v", name.Type)
 	}
-	env = env.root()
-	env.Registry.DefinePackage(name.Str)
+	env.Runtime.Registry.DefinePackage(name.Str)
 	return Nil()
 }
 
@@ -94,12 +92,11 @@ func (env *LEnv) InPackage(name *LVal) *LVal {
 	if name.Type != LSymbol && name.Type != LString {
 		return env.Errorf("argument cannot be converted to string: %v", name.Type)
 	}
-	root := env.root()
-	pkg := root.Registry.Packages[name.Str]
+	pkg := env.Runtime.Registry.Packages[name.Str]
 	if pkg == nil {
 		return env.Errorf("unknown package: %v", name.Str)
 	}
-	root.Package = pkg
+	env.Runtime.Package = pkg
 	return Nil()
 }
 
@@ -107,8 +104,7 @@ func (env *LEnv) UsePackage(name *LVal) *LVal {
 	if name.Type != LSymbol && name.Type != LString {
 		return env.Errorf("argument cannot be converted to string: %v", name.Type)
 	}
-	root := env.root()
-	pkg := root.Registry.Packages[name.Str]
+	pkg := env.Runtime.Registry.Packages[name.Str]
 	if pkg == nil {
 		return env.Errorf("unknown package: %v", name.Str)
 	}
@@ -117,7 +113,7 @@ func (env *LEnv) UsePackage(name *LVal) *LVal {
 		if v.Type == LError {
 			return env.Errorf("package %s: %v", name.Str, v)
 		}
-		root.Package.Put(Symbol(sym), v)
+		env.Runtime.Package.Put(Symbol(sym), v)
 	}
 	return Nil()
 }
@@ -205,13 +201,13 @@ func (env *LEnv) get(k *LVal) *LVal {
 			// keyword
 			return k.Copy()
 		}
-		pkg := env.root().Registry.Packages[pieces[0]]
+		pkg := env.Runtime.Registry.Packages[pieces[0]]
 		if pkg == nil {
 			return env.Errorf("unknown package: %q", pieces[0])
 		}
 		lerr := pkg.Get(Symbol(pieces[1]))
 		if lerr.Type == LError {
-			lerr.Stack = env.Stack.Copy()
+			lerr.Stack = env.Runtime.Stack.Copy()
 		}
 		return lerr
 	default:
@@ -234,9 +230,9 @@ func (env *LEnv) get(k *LVal) *LVal {
 }
 
 func (env *LEnv) packageGet(k *LVal) *LVal {
-	lerr := env.Package.Get(k)
+	lerr := env.Runtime.Package.Get(k)
 	if lerr.Type == LError {
-		lerr.Stack = env.Stack.Copy()
+		lerr.Stack = env.Runtime.Stack.Copy()
 	}
 	return lerr
 }
@@ -249,7 +245,7 @@ func (env *LEnv) GetFunName(f *LVal) string {
 		log.Printf("unknown package for function %s", f.FID)
 		return ""
 	}
-	pkg := env.root().Registry.Packages[pkgname]
+	pkg := env.Runtime.Registry.Packages[pkgname]
 	if pkg == nil {
 		log.Printf("failed to find package %q", pkgname)
 		return ""
@@ -280,24 +276,29 @@ func (env *LEnv) Put(k, v *LVal) {
 // GetGlobal takes LSymbol k and returns the value it is bound to in the
 // current package.
 func (env *LEnv) GetGlobal(k *LVal) *LVal {
-	return env.root().Package.Get(k)
+	return env.Runtime.Package.Get(k)
 }
 
 // PutGlobal takes an LSymbol k and binds it to v in current package.
 func (env *LEnv) PutGlobal(k, v *LVal) {
-	root := env.root()
-	root.Package.Put(k, v)
+	env.Runtime.Package.Put(k, v)
 }
 
 // Lambda returns a new Lambda with fun.Env and fun.Package set automatically.
 func (env *LEnv) Lambda(formals *LVal, body []*LVal) *LVal {
-	fun := Lambda(formals, body)
-	if fun.Type == LError {
-		return fun
+	if formals.Type != LSExpr {
+		return env.Errorf("formals is not a list of symbols: %v", formals.Type)
 	}
-	fun.Env.Parent = env
-	fun.Env.Stack = env.Stack
-	fun.Package = env.root().Package.Name
+	cells := make([]*LVal, 0, len(body)+1)
+	cells = append(cells, formals)
+	cells = append(cells, body...)
+	fun := &LVal{
+		Type:  LFun,
+		Env:   NewEnv(env),
+		FID:   env.getFID(),
+		Cells: cells,
+	}
+	fun.Package = env.Runtime.Package.Name
 	return fun
 }
 
@@ -314,7 +315,7 @@ func (env *LEnv) AddMacros(external bool, macs ...LBuiltinDef) {
 	if len(macs) == 0 {
 		macs = DefaultMacros()
 	}
-	pkg := env.root().Package
+	pkg := env.Runtime.Package
 	for _, mac := range macs {
 		k := Symbol(mac.Name())
 		exist := pkg.Get(k)
@@ -337,7 +338,7 @@ func (env *LEnv) AddSpecialOps(external bool, ops ...LBuiltinDef) {
 	if len(ops) == 0 {
 		ops = DefaultSpecialOps()
 	}
-	pkg := env.root().Package
+	pkg := env.Runtime.Package
 	for _, op := range ops {
 		k := Symbol(op.Name())
 		exist := pkg.Get(k)
@@ -360,7 +361,7 @@ func (env *LEnv) AddBuiltins(external bool, funs ...LBuiltinDef) {
 	if len(funs) == 0 {
 		funs = DefaultBuiltins()
 	}
-	pkg := env.root().Package
+	pkg := env.Runtime.Package
 	for _, f := range funs {
 		k := Symbol(f.Name())
 		exist := pkg.Get(k)
@@ -384,7 +385,7 @@ func (env *LEnv) AddBuiltins(external bool, funs ...LBuiltinDef) {
 // will result in a runtime panic.
 //
 // Unlike the exported function, the Error method returns LVal with a copy
-// env.Stack.
+// env.Runtime.Stack.
 func (env *LEnv) Error(msg ...interface{}) *LVal {
 	return env.ErrorCondition("error", msg...)
 }
@@ -397,9 +398,9 @@ func (env *LEnv) Error(msg ...interface{}) *LVal {
 // any other values and doing so will result in a runtime panic.
 //
 // Unlike the exported function, the ErrorCondition method returns an LVal with
-// a copy env.Stack.
+// a copy env.Runtime.Stack.
 func (env *LEnv) ErrorCondition(condition string, v ...interface{}) *LVal {
-	//log.Printf("stack %v", env.Stack.Copy())
+	//log.Printf("stack %v", env.Runtime.Stack.Copy())
 
 	narg := len(v)
 	cells := make([]*LVal, 0, len(v))
@@ -414,7 +415,7 @@ func (env *LEnv) ErrorCondition(condition string, v ...interface{}) *LVal {
 			return &LVal{
 				Type:  LError,
 				Str:   condition,
-				Stack: env.Stack.Copy(),
+				Stack: env.Runtime.Stack.Copy(),
 				Cells: []*LVal{Native(v)},
 			}
 		case string:
@@ -426,7 +427,7 @@ func (env *LEnv) ErrorCondition(condition string, v ...interface{}) *LVal {
 	return &LVal{
 		Type:  LError,
 		Str:   condition,
-		Stack: env.Stack.Copy(),
+		Stack: env.Runtime.Stack.Copy(),
 		Cells: cells,
 	}
 }
@@ -434,7 +435,7 @@ func (env *LEnv) ErrorCondition(condition string, v ...interface{}) *LVal {
 // Errorf returns an LError value with a formatted error message.
 //
 // Unlike the exported function, the Errorf method returns an LVal with a copy
-// env.Stack.
+// env.Runtime.Stack.
 func (env *LEnv) Errorf(format string, v ...interface{}) *LVal {
 	return env.ErrorConditionf("error", format, v...)
 }
@@ -443,12 +444,12 @@ func (env *LEnv) Errorf(format string, v ...interface{}) *LVal {
 // a formatted error message rendered using fmt.Sprintf.
 //
 // Unlike the exported function, the ErrorConditionf method returns an LVal
-// with a copy env.Stack.
+// with a copy env.Runtime.Stack.
 func (env *LEnv) ErrorConditionf(condition string, format string, v ...interface{}) *LVal {
 	return &LVal{
 		Type:  LError,
 		Str:   condition,
-		Stack: env.Stack.Copy(),
+		Stack: env.Runtime.Stack.Copy(),
 		Cells: []*LVal{String(fmt.Sprintf(format, v...))},
 	}
 }
@@ -475,7 +476,7 @@ eval:
 	// expression will not themselves be terminal expressions.
 	if v.Terminal {
 		v.Terminal = false
-		top := env.Stack.Top()
+		top := env.Runtime.Stack.Top()
 		if top != nil {
 			top.Terminal = true
 		}
@@ -493,13 +494,13 @@ eval:
 			if pieces[0] == "" {
 				return v
 			}
-			pkg := env.root().Registry.Packages[pieces[0]]
+			pkg := env.root().Runtime.Registry.Packages[pieces[0]]
 			if pkg == nil {
 				return env.Errorf("unknown package: %q", pieces[0])
 			}
 			lerr := pkg.Get(Symbol(pieces[1]))
 			if lerr.Type == LError {
-				lerr.Stack = env.Stack.Copy()
+				lerr.Stack = env.Runtime.Stack.Copy()
 			}
 			return lerr
 		default:
@@ -514,7 +515,7 @@ eval:
 			goto eval
 		}
 		if res.Type == LError && res.Stack == nil {
-			res.Stack = env.Stack.Copy()
+			res.Stack = env.Runtime.Stack.Copy()
 		}
 		return res
 	case LQuote:
@@ -537,7 +538,7 @@ func (env *LEnv) EvalSExpr(s *LVal) *LVal {
 	call := env.evalSExprCells(s)
 	if call.Type == LError {
 		if call.Stack == nil {
-			call.Stack = env.Stack.Copy()
+			call.Stack = env.Runtime.Stack.Copy()
 		}
 		return call
 	}
@@ -567,16 +568,16 @@ func (env *LEnv) MacroCall(fun, args *LVal) *LVal {
 	}
 
 	// Push a frame onto the stack to represent the function's execution.
-	env.Stack.PushFID(fun.FID, fun.Package, env.GetFunName(fun))
-	defer env.Stack.Pop()
+	env.Runtime.Stack.PushFID(fun.FID, fun.Package, env.GetFunName(fun))
+	defer env.Runtime.Stack.Pop()
 	// Macros can't participate in tail-recursion optimization at all.  Enable
 	// the TROBlock on the stack fram so TerminalFID never seeks past the
 	// macro's callsite.
-	env.Stack.Top().TROBlock = true
+	env.Runtime.Stack.Top().TROBlock = true
 
 	r := env.call(fun, args, false)
 	if r == nil {
-		env.Stack.DebugPrint(os.Stderr)
+		env.Runtime.Stack.DebugPrint(os.Stderr)
 		panic("nil LVal returned from function call")
 	}
 	if r.Type == LError {
@@ -606,8 +607,8 @@ func (env *LEnv) SpecialOpCall(fun, args *LVal) *LVal {
 	}
 
 	// Push a frame onto the stack to represent the function's execution.
-	env.Stack.PushFID(fun.FID, fun.Package, env.GetFunName(fun))
-	defer env.Stack.Pop()
+	env.Runtime.Stack.PushFID(fun.FID, fun.Package, env.GetFunName(fun))
+	defer env.Runtime.Stack.Pop()
 
 	// Special functions in general cannot be candidates for tail-recursion
 	// optimization because they receive unevaluated arguments.  As such,
@@ -620,7 +621,7 @@ func (env *LEnv) SpecialOpCall(fun, args *LVal) *LVal {
 callf:
 	r := env.call(fun, args, false)
 	if r == nil {
-		env.Stack.DebugPrint(os.Stderr)
+		env.Runtime.Stack.DebugPrint(os.Stderr)
 		panic("nil LVal returned from function call")
 	}
 	if r.Type == LError {
@@ -663,11 +664,11 @@ func (env *LEnv) funCall(fun, args *LVal, curry bool) *LVal {
 	// checking.  But push FID onto the stack before popping to simplify
 	// book-keeping.
 	var npop int
-	npop = env.Stack.TerminalFID(fun.FID)
+	npop = env.Runtime.Stack.TerminalFID(fun.FID)
 
 	// Push a frame onto the stack to represent the function's execution.
-	env.Stack.PushFID(fun.FID, fun.Package, env.GetFunName(fun))
-	defer env.Stack.Pop()
+	env.Runtime.Stack.PushFID(fun.FID, fun.Package, env.GetFunName(fun))
+	defer env.Runtime.Stack.Pop()
 
 	if npop > 0 {
 		return markTailRec(npop, fun, args)
@@ -676,7 +677,7 @@ func (env *LEnv) funCall(fun, args *LVal, curry bool) *LVal {
 callf:
 	r := env.call(fun, args, curry)
 	if r == nil {
-		env.Stack.DebugPrint(os.Stderr)
+		env.Runtime.Stack.DebugPrint(os.Stderr)
 		panic("nil LVal returned from function call")
 	}
 	if r.Type == LError {
@@ -718,13 +719,13 @@ func decrementMarkTailRec(mark *LVal) (done bool) {
 func (env *LEnv) evalSExprCells(s *LVal) *LVal {
 	cells := s.Cells
 	newCells := make([]*LVal, 1, len(s.Cells))
-	if env.Stack.Top() != nil {
+	if env.Runtime.Stack.Top() != nil {
 		// Set a TRO block to avoid tail recursion during argument evaluation.
 		// We don't want to push anything on the stack here because that would
 		// causes improper error messages/stack-dumps if an error is
 		// encountered while evaluating the arguments to a function.
-		env.Stack.Top().TROBlock = true
-		defer func() { env.Stack.Top().TROBlock = false }()
+		env.Runtime.Stack.Top().TROBlock = true
+		defer func() { env.Runtime.Stack.Top().TROBlock = false }()
 	}
 	f := env.Eval(cells[0])
 	cells = cells[1:]
@@ -735,7 +736,7 @@ func (env *LEnv) evalSExprCells(s *LVal) *LVal {
 		return env.Errorf("first element of expression is not a function: %v", f)
 	}
 	if f.Type == LMarkTailRec {
-		env.Stack.DebugPrint(os.Stderr)
+		env.Runtime.Stack.DebugPrint(os.Stderr)
 		panic("tail-recursion optimization attempted during argument evaluation")
 	}
 
@@ -764,7 +765,7 @@ func (env *LEnv) evalSExprCells(s *LVal) *LVal {
 			return v
 		}
 		if v.Type == LMarkTailRec {
-			env.Stack.DebugPrint(os.Stderr)
+			env.Runtime.Stack.DebugPrint(os.Stderr)
 			panic("tail-recursion optimization attempted during argument evaluation")
 		}
 	}
@@ -810,14 +811,13 @@ func (env *LEnv) call(fun *LVal, args *LVal, curry bool) *LVal {
 	// bootstrapping problem, where ``set'' (as well as defun/defmacro) needs
 	// to modify the *package* namespace and not the "lisp" namespace.  Dynamic
 	// variables may be required in order to work through this completely.
-	root := env.root()
-	outer := root.Package
+	outer := env.Runtime.Package
 	if outer.Name != fun.Package {
-		inner := root.Registry.Packages[fun.Package]
+		inner := env.Runtime.Registry.Packages[fun.Package]
 		if inner != nil {
-			root.Package = inner
+			env.Runtime.Package = inner
 			defer func() {
-				root.Package = outer
+				env.Runtime.Package = outer
 			}()
 		}
 	}

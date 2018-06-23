@@ -254,7 +254,7 @@ func (s *TestSuite) macroTestLet(env *lisp.LEnv, args *lisp.LVal, let string) *l
 		}
 	}
 	letCells := make([]*lisp.LVal, 0, 2+len(exprs))
-	letCells = append(letCells, lisp.Symbol(env.Registry.Lang+":"+let), binds)
+	letCells = append(letCells, lisp.Symbol(env.Runtime.Registry.Lang+":"+let), binds)
 	letCells = append(letCells, exprs...)
 	letExpr := lisp.SExpr(letCells)
 	return lisp.SExpr([]*lisp.LVal{
@@ -287,7 +287,7 @@ type Test struct {
 }
 
 func EnvTestSuite(env *lisp.LEnv) *TestSuite {
-	lsuite := env.Registry.Packages[DefaultPackageName].Get(lisp.Symbol(DefaultSuiteSymbol))
+	lsuite := env.Runtime.Registry.Packages[DefaultPackageName].Get(lisp.Symbol(DefaultSuiteSymbol))
 	if lsuite.Type != lisp.LNative {
 		return nil
 	}

@@ -315,21 +315,21 @@ func SpecialOp(fid string, formals *LVal, fn LBuiltin) *LVal {
 
 // Lambda returns anonymous function that has formals as arguments and the
 // given body, which may reference symbols specified in the list of formals.
-func Lambda(formals *LVal, body []*LVal) *LVal {
-	if formals.Type != LSExpr {
-		return Errorf("formals is not a list of symbols: %v", formals.Type)
-	}
-	cells := make([]*LVal, 0, len(body)+1)
-	cells = append(cells, formals)
-	cells = append(cells, body...)
-	env := NewEnv(nil)
-	return &LVal{
-		Type:  LFun,
-		Env:   env,
-		FID:   env.getFID(),
-		Cells: cells,
-	}
-}
+//func Lambda(formals *LVal, body []*LVal) *LVal {
+//	if formals.Type != LSExpr {
+//		return Errorf("formals is not a list of symbols: %v", formals.Type)
+//	}
+//	cells := make([]*LVal, 0, len(body)+1)
+//	cells = append(cells, formals)
+//	cells = append(cells, body...)
+//	env := NewEnv(nil)
+//	return &LVal{
+//		Type:  LFun,
+//		Env:   env,
+//		FID:   env.getFID(),
+//		Cells: cells,
+//	}
+//}
 
 // Error returns an LError representing err.  Errors store their message in
 // Cells and their condition type in Str.  The error condition type must be a

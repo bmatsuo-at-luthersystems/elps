@@ -8,8 +8,8 @@ type PackageRegistry struct {
 	Lang     string // A default package used by all other packages
 }
 
-// NewRepository initializes and returns a new Repository.
-func NewRepository() *PackageRegistry {
+// NewRegistry initializes and returns a new PackageRegistry.
+func NewRegistry() *PackageRegistry {
 	return &PackageRegistry{
 		Packages: make(map[string]*Package),
 	}
