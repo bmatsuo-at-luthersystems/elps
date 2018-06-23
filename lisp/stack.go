@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"log"
+	"os"
 )
 
 // CallStack is a function call stack.
@@ -78,13 +80,23 @@ func (s *CallStack) TerminalFID(fid string) int {
 		return 0
 	}
 	for i := len(s.Frames) - 1; i >= 0; i-- {
-		if s.Frames[i].TROBlock {
-			// This stack frame contains critical state which cannot be
-			// collapsed even if it is a terminal call.
-			return 0
-		}
 		if !s.Frames[i].Terminal {
 			// A non-terminal frame before finding a terminal fid frame.. no
+			return 0
+		}
+		if s.Frames[i].TROBlock {
+			// This stack frame contains critical state which cannot be
+			// collapsed even if it is a terminal call.  This is not an
+			// expected state and signals a problem with the implementation of
+			// a builtin or the primary evaluation routine.
+			s.DebugPrint(os.Stderr)
+			// It's unclear if a panic is the correct action here.  While the
+			// existence of the TROBlock should prevent severe harm using the
+			// standard language builtins if someone wrote
+			// alternative/replacement builtins incorrectly their improper use
+			// of teminal expressions may lead to incorrect evaluation, runtime
+			// errors, or later panics.
+			log.Panicf("tail-recursion-optimization is blocked -- inconsistent stack")
 			return 0
 		}
 		if s.Frames[i].FID == fid {
