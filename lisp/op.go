@@ -124,7 +124,7 @@ func opLambda(env *LEnv, args *LVal) *LVal {
 	// (I think... -bmatsuo)
 	lval := env.Lambda(formals, body)
 	if lval.Type == LError {
-		lval.Stack = env.Stack.Copy()
+		lval.Stack = env.Runtime.Stack.Copy()
 	}
 	return lval
 }
@@ -157,12 +157,7 @@ func opExpr(env *LEnv, args *LVal) *LVal {
 	if vargs {
 		formals.Cells = append(formals.Cells, Symbol(VarArgSymbol), Symbol("%"+VarArgSymbol))
 	}
-	fun := Lambda(formals, []*LVal{body})
-	fun.Env.Parent = env
-	fun.Env.Stack = env.Stack
-	fun.Package = env.root().Package.Name
-
-	return fun
+	return env.Lambda(formals, []*LVal{body})
 }
 
 func countExprArgs(expr *LVal) (nargs int, short bool, nopt int, vargs bool, err error) {
@@ -355,7 +350,6 @@ func opProgn(env *LEnv, args *LVal) *LVal {
 }
 
 func opHandlerBind(env *LEnv, args *LVal) *LVal {
-	env.Stack.Top().TROBlock = true
 	lbinds, forms := args.Cells[0], args.Cells[1:]
 	if lbinds.Type != LSExpr {
 		return env.Errorf("first argument is not a list: %v", lbinds.Type)
@@ -375,11 +369,11 @@ func opHandlerBind(env *LEnv, args *LVal) *LVal {
 	if len(args.Cells) == 0 {
 		return Nil()
 	}
-	args.Cells[len(args.Cells)-1].Terminal = true
 	var val *LVal
 	// We can't call opProgn because we can't mark any expressions as
 	// terminal.  If an expression were marked as terminal env might try to
 	// invoke tail recursion optimizations.
+	env.Runtime.Stack.Top().TROBlock = true
 	for _, c := range forms {
 		val = env.Eval(c)
 		if val.Type == LError {
@@ -411,15 +405,14 @@ func opHandlerBind(env *LEnv, args *LVal) *LVal {
 }
 
 func opIgnoreErrors(env *LEnv, args *LVal) *LVal {
-	env.Stack.Top().TROBlock = true
 	if len(args.Cells) == 0 {
 		return Nil()
 	}
-	args.Cells[len(args.Cells)-1].Terminal = true
 	var val *LVal
 	// We can't call opProgn because we can't mark any expressions as
 	// terminal.  If an expression were marked as terminal env might try to
 	// invoke tail recursion optimizations.
+	env.Runtime.Stack.Top().TROBlock = true
 	for _, c := range args.Cells {
 		val = env.Eval(c)
 		if val.Type == LError {

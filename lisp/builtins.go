@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"math"
-	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -158,13 +157,14 @@ func builtinLoadString(env *LEnv, args *LVal) *LVal {
 		return env.Errorf("first argument is not a string: %v", source.Type)
 	}
 
-	// Don't let tail-recursion optimization seek beyond the source text
-	// entrypoint.
-	env.Stack.Top().TROBlock = true
-
+	// Load the source in the root environment so the loaded code does not
+	// share the current lexical environment.  The loaded source will share a
+	// stack but the stack frame TROBlock will prevent tail recursion
+	// optimization from unwinding the stack to/beyond this point.
+	env.Runtime.Stack.Top().TROBlock = true
 	v := env.root().LoadString("load-string", source.Str)
 	if v.Type == LError && v.Stack == nil {
-		v.Stack = env.Stack.Copy()
+		v.Stack = env.Runtime.Stack.Copy()
 	}
 	return v
 }
@@ -175,13 +175,14 @@ func builtinLoadBytes(env *LEnv, args *LVal) *LVal {
 		return env.Errorf("first argument is not bytes: %v", source.Type)
 	}
 
-	// Don't let tail-recursion optimization seek beyond the source text
-	// entrypoint.
-	env.Stack.Top().TROBlock = true
-
+	// Load the source in the root environment so the loaded code does not
+	// share the current lexical environment.  The loaded source will share a
+	// stack but the stack frame TROBlock will prevent tail recursion
+	// optimization from unwinding the stack to/beyond this point.
+	env.Runtime.Stack.Top().TROBlock = true
 	v := env.root().Load("load-bytes", bytes.NewReader(source.Bytes))
 	if v.Type == LError && v.Stack == nil {
-		v.Stack = env.Stack.Copy()
+		v.Stack = env.Runtime.Stack.Copy()
 	}
 	return v
 }
@@ -191,21 +192,20 @@ func builtinInPackage(env *LEnv, args *LVal) *LVal {
 		return env.Errorf("first argument is not a symbol or a string: %v", args.Cells[0].Type)
 	}
 	name := args.Cells[0].Str
-	root := env.root()
-	pkg := root.Registry.Packages[name]
+	pkg := env.Runtime.Registry.Packages[name]
 	newpkg := false
 	if pkg == nil {
 		newpkg = true
-		root.Registry.DefinePackage(name)
-		pkg = root.Registry.Packages[name]
+		env.Runtime.Registry.DefinePackage(name)
+		pkg = env.Runtime.Registry.Packages[name]
 	}
-	root.Package = pkg
-	if newpkg && root.Registry.Lang != "" {
+	env.Runtime.Package = pkg
+	if newpkg && env.Runtime.Registry.Lang != "" {
 		// For now, all packages use the lisp package.  The ``in-package''
 		// builtin doesn't provide syntax to simply use lisp (calling
 		// ``lisp:use-package'' from a package that doesn't use lisp hard to
 		// remember).
-		root.UsePackage(Symbol(root.Registry.Lang))
+		env.UsePackage(Symbol(env.Runtime.Registry.Lang))
 	}
 	return Nil()
 }
@@ -221,7 +221,7 @@ func builtinExport(env *LEnv, args *LVal) *LVal {
 	for _, arg := range args.Cells {
 		switch {
 		case arg.Type == LSymbol || arg.Type != LString:
-			env.root().Package.Exports(arg.Str)
+			env.Runtime.Package.Exports(arg.Str)
 		case arg.Type == LSExpr:
 			builtinExport(env, arg)
 		default:
@@ -319,6 +319,10 @@ func builtinFunCall(env *LEnv, args *LVal) *LVal {
 	if fun.IsSpecialFun() {
 		return env.Errorf("not a regular function: %v", fun.FunType)
 	}
+	// Because funcall and apply do not actually call env.Eval they cannot use
+	// the standard method of signaling a terminal expression to the LEnv.  We
+	// need to set the flag explicitly before env.funCall is invoked
+	env.Runtime.Stack.Top().Terminal = true
 	return env.funCall(fun, SExpr(fargs), false)
 }
 
@@ -340,6 +344,11 @@ func builtinApply(env *LEnv, args *LVal) *LVal {
 	if fun.Type != LFun {
 		return env.Errorf("first argument is not a function: %v", fun.Type)
 	}
+
+	// Because funcall and apply do not actually call env.Eval they cannot use
+	// the standard method of signaling a terminal expression to the LEnv.  We
+	// need to set the flag explicitly before env.funCall is invoked
+	env.Runtime.Stack.Top().Terminal = true
 
 	argcells := make([]*LVal, 0, len(fargs)+argtail.Len())
 	argcells = append(argcells, fargs...)
@@ -614,20 +623,31 @@ func builtinCompose(env *LEnv, args *LVal) *LVal {
 	if f.Type != LFun {
 		return env.Errorf("first argument is not a function: %s", f.Type)
 	}
+	if f.IsSpecialFun() {
+		return env.Errorf("first argument is not a regular function: %s", f.FunType)
+	}
 	if g.Type != LFun {
 		return env.Errorf("second argument is not a function: %s", g.Type)
 	}
+	if g.IsSpecialFun() {
+		return env.Errorf("first argument is not a regular function: %s", g.FunType)
+	}
 	formals := g.Cells[0].Copy()
-	body := args // body.Cells[0] is already set to f
-	body.Quoted = false
 	gcall := SExpr(make([]*LVal, 0, len(formals.Cells)+1))
-	gcall.Cells = append(gcall.Cells, g)
+	body := SExpr([]*LVal{Symbol("lisp:funcall"), f, gcall})
+	gcall.Cells = append(gcall.Cells, Symbol("lisp:apply"), g)
 	var restSym *LVal
 	for i, argSym := range formals.Cells {
 		if argSym.Type != LSymbol {
 			// This should not happen.  The list of formals should be checked
 			// when the g function was created.
 			return env.Errorf("invalid list of formals: %s", formals)
+		}
+		if argSym.Str == OptArgSymbol {
+			continue
+		}
+		if argSym.Str == KeyArgSymbol {
+			continue
 		}
 		if argSym.Str == VarArgSymbol {
 			if len(formals.Cells) != i+2 {
@@ -641,22 +661,12 @@ func builtinCompose(env *LEnv, args *LVal) *LVal {
 		gcall.Cells = append(gcall.Cells, argSym)
 	}
 	if restSym != nil {
-		concatPrefix := QExpr(gcall.Cells[1:])
-		concatCall := SExpr(nil)
-		concatCall.Cells = append(concatCall.Cells, Symbol("lisp:concat"))
-		concatCall.Cells = append(concatCall.Cells, Quote(Symbol("list")))
-		concatCall.Cells = append(concatCall.Cells, concatPrefix)
-		concatCall.Cells = append(concatCall.Cells, restSym.Copy())
-		unpackCall := SExpr(nil)
-		unpackCall.Cells = append(unpackCall.Cells, Symbol("lisp:unpack"))
-		unpackCall.Cells = append(unpackCall.Cells, g)
-		unpackCall.Cells = append(unpackCall.Cells, concatCall)
-		gcall = unpackCall
+		gcall.Cells = append(gcall.Cells, restSym)
+	} else {
+		gcall.Cells = append(gcall.Cells, Nil())
 	}
-	body.Cells[1] = gcall
-	newfun := Lambda(formals, []*LVal{body})
-	newfun.Env.Parent = env
-	newfun.Package = env.root().Package.Name
+	newfun := env.Lambda(formals, []*LVal{body})
+	newfun.Package = env.Runtime.Package.Name
 	return newfun
 }
 
@@ -744,7 +754,7 @@ func builtinIsKey(env *LEnv, args *LVal) *LVal {
 	}
 	ok := mapHasKey(m, k)
 	if ok.Type == LError {
-		ok.Stack = env.Stack.Copy()
+		ok.Stack = env.Runtime.Stack.Copy()
 	}
 	return ok
 }
@@ -1737,12 +1747,12 @@ func builtinDebugPrint(env *LEnv, args *LVal) *LVal {
 	for i := range args.Cells {
 		fmtargs[i] = args.Cells[i]
 	}
-	fmt.Println(fmtargs...)
+	fmt.Fprintln(env.Runtime.Stderr, fmtargs...)
 	return Nil()
 }
 
 func builtinDebugStack(env *LEnv, args *LVal) *LVal {
-	_, err := env.Stack.DebugPrint(os.Stdout)
+	_, err := env.Runtime.Stack.DebugPrint(env.Runtime.Stderr)
 	if err != nil {
 		return env.Error(err)
 	}

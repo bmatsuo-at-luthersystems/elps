@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -33,7 +35,7 @@ func (r *Runner) NewEnv() (*lisp.LEnv, error) {
 		return nil, fmt.Errorf("Failed to initialize lisp environment: %v", err)
 	}
 	env.InPackage(lisp.String(lisp.DefaultUserPackage))
-	env.Reader = parser.NewReader()
+	env.Runtime.Reader = parser.NewReader()
 	loader := r.Loader
 	if loader == nil {
 		loader = lisplib.LoadLibrary
@@ -151,6 +153,7 @@ func (r *Runner) LispError(t *testing.T, err error) {
 type TestSequence []struct {
 	Expr   string // a lisp expression
 	Result string // the evaluated result
+	Output string // debug output written to Runtime.Stderr
 }
 
 // TestSuite is a set of named TestSequences
@@ -162,12 +165,15 @@ type TestSuite []struct {
 // RunTestSuite runs each TestSequence in tests on isolated lisp.LEnvs.
 func RunTestSuite(t *testing.T, tests TestSuite) {
 	for i, test := range tests {
+		log.Printf("test %d -- %s", i, test.Name)
 		env := lisp.NewEnv(nil)
 		lisp.InitializeUserEnv(env)
+		var exprBuf bytes.Buffer
+		env.Runtime.Stderr = io.MultiWriter(os.Stderr, &exprBuf)
 		env.InPackage(lisp.String(lisp.DefaultUserPackage))
-		env.Reader = parser.NewReader()
+		env.Runtime.Reader = parser.NewReader()
 		for j, expr := range test.TestSequence {
-			//log.Printf("test %d %q: expr %d evaluating", i, test.Name, j)
+			exprBuf.Reset()
 			v, _, err := parser.ParseLVal([]byte(expr.Expr))
 			if err != nil {
 				t.Errorf("test %d %q: expr %d: parse error: %v", i, test.Name, j, err)
@@ -184,6 +190,9 @@ func RunTestSuite(t *testing.T, tests TestSuite) {
 			result := env.Eval(v[0]).String()
 			if result != expr.Result {
 				t.Errorf("test %d %q: expr %d: expected result %s (got %s)", i, test.Name, j, expr.Result, result)
+			}
+			if exprBuf.String() != expr.Output {
+				t.Errorf("test %d %q: expr %d: expected debug output %q (got %q)", i, test.Name, j, expr.Output, exprBuf.String())
 			}
 		}
 	}

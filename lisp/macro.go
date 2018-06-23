@@ -38,7 +38,7 @@ func macroDefmacro(env *LEnv, args *LVal) *LVal {
 	}
 	fun := env.Lambda(formals, []*LVal{bodyForms})
 	if fun.Type == LError {
-		fun.Stack = env.Stack.Copy()
+		fun.Stack = env.Runtime.Stack.Copy()
 		return fun
 	}
 	fun.FunType = LFunMacro // evaluate as a macro
@@ -60,7 +60,7 @@ func macroDefun(env *LEnv, args *LVal) *LVal {
 	}
 	fun := env.Lambda(formals, body)
 	if fun.Type == LError {
-		fun.Stack = env.Stack.Copy()
+		fun.Stack = env.Runtime.Stack.Copy()
 		return fun
 	}
 	return SExpr([]*LVal{
