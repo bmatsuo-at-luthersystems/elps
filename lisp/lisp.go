@@ -96,18 +96,24 @@ type LVal struct {
 	Package string
 
 	// Cells used by many values as a storage space for lisp objects.
+	//
+	// TODO: Consider making Cells' type []LVal instead of []*LVal to reduce
+	// the burden on the allocator/gc.
 	Cells []*LVal
 
 	// Native value for language embedding and writing custom DSLs.
 	Native interface{}
 
 	// Map used for LSortMap values.
+	//
+	// TODO:  Use a tree-based map (that is potentially stored in Cells).  A
+	// tree based map would be capable of supporting integer keys.
 	Map map[interface{}]*LVal
 
 	// Stack set for LError values.
 	//
 	// TODO:  Make the stack a first class type (or some composite type) so
-	// that it could be inspected during a ``catch'' (which doesn't exist yet).
+	// that it could be inspected during a condition handler.
 	Stack *CallStack
 
 	// Variables needed for LFun values
@@ -312,24 +318,6 @@ func SpecialOp(fid string, formals *LVal, fn LBuiltin) *LVal {
 		Cells:   []*LVal{formals},
 	}
 }
-
-// Lambda returns anonymous function that has formals as arguments and the
-// given body, which may reference symbols specified in the list of formals.
-//func Lambda(formals *LVal, body []*LVal) *LVal {
-//	if formals.Type != LSExpr {
-//		return Errorf("formals is not a list of symbols: %v", formals.Type)
-//	}
-//	cells := make([]*LVal, 0, len(body)+1)
-//	cells = append(cells, formals)
-//	cells = append(cells, body...)
-//	env := NewEnv(nil)
-//	return &LVal{
-//		Type:  LFun,
-//		Env:   env,
-//		FID:   env.getFID(),
-//		Cells: cells,
-//	}
-//}
 
 // Error returns an LError representing err.  Errors store their message in
 // Cells and their condition type in Str.  The error condition type must be a
@@ -652,7 +640,7 @@ func (v *LVal) Copy() *LVal {
 		return nil
 	}
 	cp := &LVal{}
-	*cp = *v              // shallow copy of all fields including Map
+	*cp = *v              // shallow copy of all fields including Map and Bytes
 	cp.Env = v.Env.Copy() // deepish copy of v.Env
 	if v.Type != LArray {
 		// Arrays are memory references but use Cells as backing storage.  So
