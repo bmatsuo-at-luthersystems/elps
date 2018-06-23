@@ -319,6 +319,10 @@ func builtinFunCall(env *LEnv, args *LVal) *LVal {
 	if fun.IsSpecialFun() {
 		return env.Errorf("not a regular function: %v", fun.FunType)
 	}
+	// Because funcall and apply do not actually call env.Eval they cannot use
+	// the standard method of signaling a terminal expression to the LEnv.  We
+	// need to set the flag explicitly before env.funCall is invoked
+	env.Runtime.Stack.Top().Terminal = true
 	return env.funCall(fun, SExpr(fargs), false)
 }
 
@@ -340,6 +344,11 @@ func builtinApply(env *LEnv, args *LVal) *LVal {
 	if fun.Type != LFun {
 		return env.Errorf("first argument is not a function: %v", fun.Type)
 	}
+
+	// Because funcall and apply do not actually call env.Eval they cannot use
+	// the standard method of signaling a terminal expression to the LEnv.  We
+	// need to set the flag explicitly before env.funCall is invoked
+	env.Runtime.Stack.Top().Terminal = true
 
 	argcells := make([]*LVal, 0, len(fargs)+argtail.Len())
 	argcells = append(argcells, fargs...)

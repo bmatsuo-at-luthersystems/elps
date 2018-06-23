@@ -350,7 +350,6 @@ func opProgn(env *LEnv, args *LVal) *LVal {
 }
 
 func opHandlerBind(env *LEnv, args *LVal) *LVal {
-	env.Runtime.Stack.Top().TROBlock = true
 	lbinds, forms := args.Cells[0], args.Cells[1:]
 	if lbinds.Type != LSExpr {
 		return env.Errorf("first argument is not a list: %v", lbinds.Type)
@@ -370,11 +369,11 @@ func opHandlerBind(env *LEnv, args *LVal) *LVal {
 	if len(args.Cells) == 0 {
 		return Nil()
 	}
-	args.Cells[len(args.Cells)-1].Terminal = true
 	var val *LVal
 	// We can't call opProgn because we can't mark any expressions as
 	// terminal.  If an expression were marked as terminal env might try to
 	// invoke tail recursion optimizations.
+	env.Runtime.Stack.Top().TROBlock = true
 	for _, c := range forms {
 		val = env.Eval(c)
 		if val.Type == LError {
@@ -406,15 +405,14 @@ func opHandlerBind(env *LEnv, args *LVal) *LVal {
 }
 
 func opIgnoreErrors(env *LEnv, args *LVal) *LVal {
-	env.Runtime.Stack.Top().TROBlock = true
 	if len(args.Cells) == 0 {
 		return Nil()
 	}
-	args.Cells[len(args.Cells)-1].Terminal = true
 	var val *LVal
 	// We can't call opProgn because we can't mark any expressions as
 	// terminal.  If an expression were marked as terminal env might try to
 	// invoke tail recursion optimizations.
+	env.Runtime.Stack.Top().TROBlock = true
 	for _, c := range args.Cells {
 		val = env.Eval(c)
 		if val.Type == LError {

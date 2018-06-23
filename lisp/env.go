@@ -712,12 +712,15 @@ func (env *LEnv) evalSExprCells(s *LVal) *LVal {
 	cells := s.Cells
 	newCells := make([]*LVal, 1, len(s.Cells))
 	if env.Runtime.Stack.Top() != nil {
-		// Set a TRO block to avoid tail recursion during argument evaluation.
-		// We don't want to push anything on the stack here because that would
-		// causes improper error messages/stack-dumps if an error is
-		// encountered while evaluating the arguments to a function.
-		env.Runtime.Stack.Top().TROBlock = true
-		defer func() { env.Runtime.Stack.Top().TROBlock = false }()
+		// Avoid tail recursion during argument evaluation by temporarily
+		// resetting Terminal.  We don't want to push anything on the stack
+		// here because that would causes improper error messages/stack-dumps
+		// if an error is encountered while evaluating the arguments to a
+		// function.
+		if env.Runtime.Stack.Top().Terminal {
+			env.Runtime.Stack.Top().Terminal = false
+			defer func() { env.Runtime.Stack.Top().Terminal = true }()
+		}
 	}
 	f := env.Eval(cells[0])
 	cells = cells[1:]
