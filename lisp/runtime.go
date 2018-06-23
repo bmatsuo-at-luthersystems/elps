@@ -15,6 +15,7 @@ type Runtime struct {
 	Package  *Package
 	Stderr   io.Writer
 	Stack    *CallStack
+	Reader   Reader
 	numenv   atomicCounter
 	numsym   atomicCounter
 }

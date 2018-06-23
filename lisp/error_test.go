@@ -41,7 +41,7 @@ func TestRuntimeErrors(t *testing.T) {
 
 func TestLoadErrors(t *testing.T) {
 	env := lisp.NewEnv(nil)
-	env.Reader = parser.NewReader()
+	env.Runtime.Reader = parser.NewReader()
 	lerr := lisp.InitializeUserEnv(env)
 	if lisp.GoError(lerr) != nil {
 		t.Fatal(lisp.GoError(lerr))

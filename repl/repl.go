@@ -15,7 +15,7 @@ import (
 // RunRepl runs a simple repl
 func RunRepl(prompt string) {
 	env := lisp.NewEnv(nil)
-	env.Reader = parser.NewReader()
+	env.Runtime.Reader = parser.NewReader()
 	rc := lisp.InitializeUserEnv(env)
 	if !rc.IsNil() {
 		errlnf("Language initialization failure: %v", rc)

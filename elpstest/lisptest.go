@@ -34,7 +34,7 @@ func (r *Runner) NewEnv() (*lisp.LEnv, error) {
 		return nil, fmt.Errorf("Failed to initialize lisp environment: %v", err)
 	}
 	env.InPackage(lisp.String(lisp.DefaultUserPackage))
-	env.Reader = parser.NewReader()
+	env.Runtime.Reader = parser.NewReader()
 	loader := r.Loader
 	if loader == nil {
 		loader = lisplib.LoadLibrary
@@ -167,7 +167,7 @@ func RunTestSuite(t *testing.T, tests TestSuite) {
 		env := lisp.NewEnv(nil)
 		lisp.InitializeUserEnv(env)
 		env.InPackage(lisp.String(lisp.DefaultUserPackage))
-		env.Reader = parser.NewReader()
+		env.Runtime.Reader = parser.NewReader()
 		for j, expr := range test.TestSequence {
 			v, _, err := parser.ParseLVal([]byte(expr.Expr))
 			if err != nil {
