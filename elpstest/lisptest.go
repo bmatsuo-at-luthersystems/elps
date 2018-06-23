@@ -6,6 +6,7 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -152,6 +153,7 @@ func (r *Runner) LispError(t *testing.T, err error) {
 type TestSequence []struct {
 	Expr   string // a lisp expression
 	Result string // the evaluated result
+	Output string // debug output written to Runtime.Stderr
 }
 
 // TestSuite is a set of named TestSequences
@@ -166,9 +168,12 @@ func RunTestSuite(t *testing.T, tests TestSuite) {
 		log.Printf("test %d -- %s", i, test.Name)
 		env := lisp.NewEnv(nil)
 		lisp.InitializeUserEnv(env)
+		var exprBuf bytes.Buffer
+		env.Runtime.Stderr = io.MultiWriter(os.Stderr, &exprBuf)
 		env.InPackage(lisp.String(lisp.DefaultUserPackage))
 		env.Runtime.Reader = parser.NewReader()
 		for j, expr := range test.TestSequence {
+			exprBuf.Reset()
 			v, _, err := parser.ParseLVal([]byte(expr.Expr))
 			if err != nil {
 				t.Errorf("test %d %q: expr %d: parse error: %v", i, test.Name, j, err)
@@ -185,6 +190,9 @@ func RunTestSuite(t *testing.T, tests TestSuite) {
 			result := env.Eval(v[0]).String()
 			if result != expr.Result {
 				t.Errorf("test %d %q: expr %d: expected result %s (got %s)", i, test.Name, j, expr.Result, result)
+			}
+			if exprBuf.String() != expr.Output {
+				t.Errorf("test %d %q: expr %d: expected debug output %q (got %q)", i, test.Name, j, expr.Output, exprBuf.String())
 			}
 		}
 	}

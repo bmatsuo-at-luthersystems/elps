@@ -1738,7 +1738,7 @@ func builtinDebugPrint(env *LEnv, args *LVal) *LVal {
 	for i := range args.Cells {
 		fmtargs[i] = args.Cells[i]
 	}
-	fmt.Println(fmtargs...)
+	fmt.Fprintln(env.Runtime.Stderr, fmtargs...)
 	return Nil()
 }
 
