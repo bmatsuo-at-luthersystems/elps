@@ -54,6 +54,7 @@ const (
 	nodeSExpr
 	nodeVector
 	nodeQExpr
+	nodeUBExpr
 )
 
 var nodeTypeStrings = []string{
@@ -65,6 +66,7 @@ var nodeTypeStrings = []string{
 	nodeSExpr:   "SEXPR",
 	nodeVector:  "VECTOR",
 	nodeQExpr:   "QEXPR",
+	nodeUBExpr:  "UNBOUNDEXPR",
 }
 
 // Parse parses a lisp expression.
@@ -109,6 +111,7 @@ func newParsecParser() parsec.Parser {
 	openB := parsec.Atom("[", "OPENB")
 	closeB := parsec.Atom("]", "CLOSEB")
 	q := parsec.Atom("'", "QUOTE")
+	ubexprMark := parsec.Atom("#^", "UBEXPRMARK") // Mark preceding lambda shorthand syntax (unbound expression)
 	rawstring := parsec.Token(`"""(?:[^"]|"[^"]|""[^"])*"""`, "RAWSTRING")
 	comment := parsec.Token(`;([^\n]*[^\s])?`, "COMMENT")
 	decimal := parsec.Token(`[+-]?[0-9]+([.][0-9]+)?([eE][+-]?[0-9]+)?`, "DECIMAL")
@@ -127,7 +130,14 @@ func newParsecParser() parsec.Parser {
 	sexpr := parsec.And(astNode(nodeSExpr), openP, exprList, closeP)
 	vector := parsec.And(astNode(nodeVector), openB, exprList, closeB)
 	qexpr := parsec.And(astNode(nodeQExpr), q, &expr)
-	expr = parsec.OrdChoice(nil, comment, term, sexpr, vector, qexpr)
+	qterm := parsec.And(astNode(nodeQExpr), q, term)
+	termListElement := parsec.OrdChoice(nil, comment, term, qterm)
+	termList := parsec.Kleene(nil, termListElement)
+	simpleSExpr := parsec.And(astNode(nodeSExpr), openP, termList, closeP)
+	simpleQExpr := parsec.And(astNode(nodeQExpr), q, simpleSExpr)
+	simpleExpr := parsec.OrdChoice(nil, comment, term, qterm, simpleSExpr, simpleQExpr)
+	ubexpr := parsec.And(astNode(nodeUBExpr), ubexprMark, simpleExpr)
+	expr = parsec.OrdChoice(nil, comment, term, sexpr, vector, qexpr, ubexpr)
 	return expr
 }
 
@@ -212,6 +222,10 @@ func newAST(typ nodeType, nodes []parsec.ParsecNode) parsec.ParsecNode {
 		// We don't want terminal parsec nodes "'(" and ")"
 		c := nodes[1].(*lisp.LVal)
 		return lisp.Quote(c)
+	case nodeUBExpr:
+		// We don't want the leading mark #^"
+		c := nodes[1].(*lisp.LVal)
+		return lisp.SExpr([]*lisp.LVal{lisp.Symbol("expr"), c})
 	default:
 		panic(fmt.Sprintf("unknown nodeType: %s (%d)", typ, typ))
 	}
