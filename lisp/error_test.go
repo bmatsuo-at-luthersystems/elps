@@ -54,7 +54,23 @@ func TestLoadErrors(t *testing.T) {
 	})
 	lerr = env.Eval(testsrc)
 	msg := lisp.GoError(lerr).Error()
-	assert.Equal(t, "lisp:load-string: unexpected EOF", msg)
+	assert.Equal(t, "lisp:load-string: unmatched \"(\" starting: (", msg)
+
+	testsrc = lisp.SExpr([]*lisp.LVal{
+		lisp.Symbol("load-string"),
+		lisp.String("(((foo bar) ()"),
+	})
+	lerr = env.Eval(testsrc)
+	msg = lisp.GoError(lerr).Error()
+	assert.Equal(t, "lisp:load-string: unmatched \"(\" starting: ((foo bar)...", msg)
+
+	testsrc = lisp.SExpr([]*lisp.LVal{
+		lisp.Symbol("load-string"),
+		lisp.String("([(foo bar) ()"),
+	})
+	lerr = env.Eval(testsrc)
+	msg = lisp.GoError(lerr).Error()
+	assert.Equal(t, "lisp:load-string: unmatched \"[\" starting: [(foo bar)...", msg)
 
 	testsrc = lisp.SExpr([]*lisp.LVal{
 		lisp.Symbol("load-string"),

@@ -52,21 +52,23 @@ const (
 	nodeItems
 	nodeList
 	nodeSExpr
+	nodeSExprUnmatched
 	nodeVector
 	nodeQExpr
 	nodeUBExpr
 )
 
 var nodeTypeStrings = []string{
-	nodeInvalid: "INVALID",
-	nodeTerm:    "TERM",
-	nodeItem:    "ITEM",
-	nodeItems:   "ITEMS",
-	nodeList:    "LIST",
-	nodeSExpr:   "SEXPR",
-	nodeVector:  "VECTOR",
-	nodeQExpr:   "QEXPR",
-	nodeUBExpr:  "UNBOUNDEXPR",
+	nodeInvalid:        "INVALID",
+	nodeTerm:           "TERM",
+	nodeItem:           "ITEM",
+	nodeItems:          "ITEMS",
+	nodeList:           "LIST",
+	nodeSExpr:          "SEXPR",
+	nodeSExprUnmatched: "SEXPRUNMATCHED",
+	nodeVector:         "VECTOR",
+	nodeQExpr:          "QEXPR",
+	nodeUBExpr:         "UNBOUNDEXPR",
 }
 
 // Parse parses a lisp expression.
@@ -129,8 +131,10 @@ func newParsecParser() parsec.Parser {
 	var expr parsec.Parser // forward declaration allows for recursive parsing
 	exprList := parsec.Kleene(nil, &expr)
 	sexpr := parsec.And(astNode(nodeSExpr), openP, exprList, closeP)
+	sexprUnmatched := parsec.And(astNode(nodeSExprUnmatched), openP, exprList, parsec.End())
 	vector := parsec.And(astNode(nodeVector), openB, exprList, closeB)
 	qexpr := parsec.And(astNode(nodeQExpr), q, &expr)
+	qexprUnmatched := parsec.And(astNode(nodeSExprUnmatched), openB, exprList, parsec.End())
 	qterm := parsec.And(astNode(nodeQExpr), q, term)
 	termListElement := parsec.OrdChoice(nil, comment, term, qterm)
 	termList := parsec.Kleene(nil, termListElement)
@@ -139,7 +143,18 @@ func newParsecParser() parsec.Parser {
 	simpleExpr := parsec.OrdChoice(nil, comment, term, qterm, simpleSExpr, simpleQExpr)
 	ubexpr := parsec.And(astNode(nodeUBExpr), ubexprMark, simpleExpr)
 	ubexprBad := parsec.And(astNode(nodeUBExpr), ubexprMark, any)
-	expr = parsec.OrdChoice(nil, comment, term, sexpr, vector, qexpr, ubexpr, ubexprBad)
+	expr = parsec.OrdChoice(nil,
+		comment,
+		term,
+		sexpr,
+		vector,
+		qexpr,
+		ubexpr,
+		// Error matching cases come last because they have the lowest
+		// precedence.
+		ubexprBad,
+		sexprUnmatched,
+		qexprUnmatched)
 	return expr
 }
 
@@ -203,6 +218,13 @@ func newAST(typ nodeType, nodes []parsec.ParsecNode) parsec.ParsecNode {
 			}
 		}
 		return lval
+	case nodeSExprUnmatched:
+		open := nodes[0].(*parsec.Terminal)
+		rest := open.GetValue() + stringifyNodes(nodes[1:len(nodes)-1]) // Trim off the End node
+		if len(rest) > 10 {
+			rest = rest[:10] + "..."
+		}
+		return fmt.Errorf("unmatched %q starting: %v", open.GetValue(), rest)
 	case nodeSExpr:
 		// We don't want terminal parsec nodes '(' and ')'
 		lval := lisp.SExpr(make([]*lisp.LVal, 0, len(nodes)-2))
@@ -247,6 +269,27 @@ func newAST(typ nodeType, nodes []parsec.ParsecNode) parsec.ParsecNode {
 	default:
 		panic(fmt.Sprintf("unknown nodeType: %s (%d)", typ, typ))
 	}
+}
+
+func stringifyNodes(nodes []parsec.ParsecNode) string {
+	var s []string
+	for _, node := range nodes {
+		switch node := node.(type) {
+		case *parsec.Terminal:
+			switch node.GetName() {
+			case "OPENP", "CLOSEP", "OPENB", "CLOSEB":
+				continue
+			}
+			s = append(s, node.GetValue())
+		case []parsec.ParsecNode:
+			s = append(s, "("+stringifyNodes(node)+")")
+		case *lisp.LVal:
+			s = append(s, node.String())
+		default:
+			s = append(s, fmt.Sprint(node))
+		}
+	}
+	return strings.Join(s, " ")
 }
 
 func cleanParsecNodeList(lis []parsec.ParsecNode) ([]parsec.ParsecNode, bool) {
