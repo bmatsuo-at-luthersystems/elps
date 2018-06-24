@@ -312,7 +312,7 @@ func macroExpand1(env *LEnv, mac *LVal, args *LVal) (*LVal, bool) {
 
 func builtinFunCall(env *LEnv, args *LVal) *LVal {
 	fun, fargs := args.Cells[0], args.Cells[1:]
-	fun = getCallFun(env, fun)
+	fun = env.GetFun(fun)
 	if fun.Type == LError {
 		return fun
 	}
@@ -334,7 +334,7 @@ func builtinApply(env *LEnv, args *LVal) *LVal {
 	argtail := fargs[len(fargs)-1]
 	fargs = fargs[:len(fargs)-1]
 
-	fun = getCallFun(env, fun)
+	fun = env.GetFun(fun)
 	if fun.Type == LError {
 		return fun
 	}
@@ -343,6 +343,9 @@ func builtinApply(env *LEnv, args *LVal) *LVal {
 	}
 	if fun.Type != LFun {
 		return env.Errorf("first argument is not a function: %v", fun.Type)
+	}
+	if fun.IsSpecialFun() {
+		return env.Errorf("first argument is not a regular function: %s", fun.FunType)
 	}
 
 	// Because funcall and apply do not actually call env.Eval they cannot use
@@ -354,22 +357,6 @@ func builtinApply(env *LEnv, args *LVal) *LVal {
 	argcells = append(argcells, fargs...)
 	argcells = append(argcells, argtail.Cells...)
 	return env.funCall(fun, SExpr(argcells), false)
-}
-
-func getCallFun(env *LEnv, fun *LVal) *LVal {
-	if fun.Type == LSymbol {
-		f := env.Get(fun)
-		if f.Type == LError {
-			return f
-		}
-		if f.Type != LFun {
-			return env.Errorf("symbol %s not bound to a function: %v", fun, f.Type)
-		}
-		return f
-	} else if fun.Type != LFun {
-		return env.Errorf("first argument is not a function: %v", fun.Type)
-	}
-	return fun
 }
 
 func builtinToString(env *LEnv, args *LVal) *LVal {
@@ -529,8 +516,15 @@ func builtinMap(env *LEnv, args *LVal) *LVal {
 	} else if typespec.Type != LSymbol {
 		return env.Errorf("first argument is not a valid type specification: %v", typespec.Type)
 	}
+	f = env.GetFun(f)
+	if f.Type == LError {
+		return f
+	}
 	if f.Type != LFun {
 		return env.Errorf("second argument is not a function: %s", f.Type)
+	}
+	if f.IsSpecialFun() {
+		return env.Errorf("first argument is not a regular function: %s", f.FunType)
 	}
 	if !isSeq(lis) {
 		return env.Errorf("third argument is not a proper sequence: %s", lis.Type)
@@ -566,8 +560,15 @@ func builtinMap(env *LEnv, args *LVal) *LVal {
 
 func builtinFoldLeft(env *LEnv, args *LVal) *LVal {
 	f := args.Cells[0]
+	f = env.GetFun(f)
+	if f.Type == LError {
+		return f
+	}
 	if f.Type != LFun {
 		return env.Errorf("first argument is not a function: %s", f.Type)
+	}
+	if f.IsSpecialFun() {
+		return env.Errorf("first argument is not a regular function: %s", f.FunType)
 	}
 	acc := args.Cells[1]
 	lis := args.Cells[2]
@@ -591,8 +592,15 @@ func builtinFoldLeft(env *LEnv, args *LVal) *LVal {
 
 func builtinFoldRight(env *LEnv, args *LVal) *LVal {
 	f := args.Cells[0]
+	f = env.GetFun(f)
+	if f.Type == LError {
+		return f
+	}
 	if f.Type != LFun {
 		return env.Errorf("first argument is not a function: %s", f.Type)
+	}
+	if f.IsSpecialFun() {
+		return env.Errorf("first argument is not a regular function: %s", f.FunType)
 	}
 	acc := args.Cells[1]
 	lis := args.Cells[2]
@@ -618,13 +626,20 @@ func builtinFoldRight(env *LEnv, args *LVal) *LVal {
 
 // NOTE: Compose requires concat and unpack in order to work with varargs.
 func builtinCompose(env *LEnv, args *LVal) *LVal {
-	f := args.Cells[0]
-	g := args.Cells[1]
+	f, g := args.Cells[0], args.Cells[1]
+	f = env.GetFun(f)
+	if f.Type == LError {
+		return f
+	}
 	if f.Type != LFun {
 		return env.Errorf("first argument is not a function: %s", f.Type)
 	}
 	if f.IsSpecialFun() {
 		return env.Errorf("first argument is not a regular function: %s", f.FunType)
+	}
+	g = env.GetFun(g)
+	if g.Type == LError {
+		return f
 	}
 	if g.Type != LFun {
 		return env.Errorf("second argument is not a function: %s", g.Type)
@@ -671,28 +686,26 @@ func builtinCompose(env *LEnv, args *LVal) *LVal {
 }
 
 func builtinUnpack(env *LEnv, args *LVal) *LVal {
-	if args.Cells[0].Type != LFun {
-		return env.Errorf("first argument is not a function: %s", args.Cells[0].Type)
-	}
-	if args.Cells[1].Type != LSExpr {
-		return env.Errorf("second argument is not a list: %s", args.Cells[1].Type)
-	}
-	args.Cells = append(args.Cells[:1], args.Cells[1].Cells...)
-	args.Quoted = false
-	return env.Eval(args)
+	return builtinApply(env, args)
 }
 
 func builtinFlip(env *LEnv, args *LVal) *LVal {
-	fn := args.Cells[0]
-	if fn.Type != LFun {
-		return env.Errorf("argument is not a function: %s", fn.Type)
+	fun := args.Cells[0]
+	fun = env.GetFun(fun)
+	if fun.Type == LError {
+		return fun
 	}
-	formals := fn.Cells[0]
-	if len(formals.Cells) < 2 && formals.Cells[0].Str != VarArgSymbol {
-		// TODO:  Check if varargs
+	if fun.Type != LFun {
+		return env.Errorf("argument is not a function: %s", fun.Type)
+	}
+	if fun.IsSpecialFun() {
+		return env.Errorf("first argument is not a regular function: %s", fun.FunType)
+	}
+	formals := fun.Cells[0]
+	if len(formals.Cells) < 2 {
 		return env.Errorf("argument is not a function of two arguments: %s", formals)
 	}
-	call := SExpr([]*LVal{fn, Symbol("y"), Symbol("x")})
+	call := SExpr([]*LVal{fun, Symbol("y"), Symbol("x")})
 	return env.Lambda(Formals("x", "y"), []*LVal{call})
 }
 
@@ -810,6 +823,10 @@ func builtinConcat(env *LEnv, args *LVal) *LVal {
 func builtinSortStable(env *LEnv, args *LVal) *LVal {
 	less, list, optArgs := args.Cells[0], args.Cells[1], args.Cells[2:]
 	var keyFun *LVal
+	less = env.GetFun(less)
+	if less.Type == LError {
+		return less
+	}
 	if less.Type != LFun {
 		return env.Errorf("first argument is not a function: %v", less.Type)
 	}
@@ -821,6 +838,10 @@ func builtinSortStable(env *LEnv, args *LVal) *LVal {
 	}
 	if len(optArgs) > 0 {
 		keyFun = optArgs[0]
+		keyFun = env.GetFun(keyFun)
+		if keyFun.Type == LError {
+			return less
+		}
 		if keyFun.Type != LFun {
 			return env.Errorf("third argument is not a function: %v", keyFun.Type)
 		}
@@ -930,6 +951,10 @@ func builtinInsertSorted(env *LEnv, args *LVal) *LVal {
 	}
 	if len(optArgs) > 0 {
 		keyFun = optArgs[0]
+		keyFun = env.GetFun(keyFun)
+		if keyFun.Type == LError {
+			return keyFun
+		}
 		if keyFun.Type != LFun {
 			return env.Errorf("last argument is not a function: %v", keyFun.Type)
 		}
@@ -986,6 +1011,10 @@ func builtinSearchSorted(env *LEnv, args *LVal) *LVal {
 	if n.Type != LInt {
 		return env.Errorf("first argument is not an integer: %v", n.Type)
 	}
+	p = env.GetFun(p)
+	if p.Type == LError {
+		return p
+	}
 	if p.Type != LFun {
 		return env.Errorf("second arument is not a function: %v", p.Type)
 	}
@@ -1009,6 +1038,10 @@ func builtinSelect(env *LEnv, args *LVal) *LVal {
 	typespec, pred, list := args.Cells[0], args.Cells[1], args.Cells[2]
 	if typespec.Type != LSymbol {
 		return env.Errorf("first argument is not a valid type specifier: %v", typespec.Type)
+	}
+	pred = env.GetFun(pred)
+	if pred.Type == LError {
+		return pred
 	}
 	if pred.Type != LFun {
 		return env.Errorf("second argument is not a function: %v", pred.Type)
@@ -1052,6 +1085,10 @@ func builtinReject(env *LEnv, args *LVal) *LVal {
 	typespec, pred, list := args.Cells[0], args.Cells[1], args.Cells[2]
 	if typespec.Type != LSymbol {
 		return env.Errorf("first argument is not a valid type specifier: %v", typespec.Type)
+	}
+	pred = env.GetFun(pred)
+	if pred.Type == LError {
+		return pred
 	}
 	if pred.Type != LFun {
 		return env.Errorf("second argument is not a function: %v", pred.Type)
@@ -1358,6 +1395,10 @@ func builtinEqual(env *LEnv, args *LVal) *LVal {
 
 func builtinAllP(env *LEnv, args *LVal) *LVal {
 	pred, list := args.Cells[0], args.Cells[1]
+	pred = env.GetFun(pred)
+	if pred.Type == LError {
+		return pred
+	}
 	if pred.Type != LFun {
 		return env.Errorf("first argument is not a function: %v", pred.Type)
 	}
@@ -1379,6 +1420,10 @@ func builtinAllP(env *LEnv, args *LVal) *LVal {
 
 func builtinAnyP(env *LEnv, args *LVal) *LVal {
 	pred, list := args.Cells[0], args.Cells[1]
+	pred = env.GetFun(pred)
+	if pred.Type == LError {
+		return pred
+	}
 	if pred.Type != LFun {
 		return env.Errorf("first argument is not a function: %v", pred.Type)
 	}

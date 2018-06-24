@@ -14,19 +14,19 @@ func TestFP(t *testing.T) {
 			{"(f 1 2 3)", "f: invalid number of arguments: 3", ""},
 		}},
 		{"map-reduce", TestSequence{
+			{"(map 'list 'list '(1 2 3))", "'('(1) '(2) '(3))", ""},
 			{"(map 'list (lambda (x) (+ x x)) '(1 2 3))", "'(2 4 6)", ""},
 			{"(map 'vector (lambda (x) (+ x x)) '(1 2 3))", "(vector 2 4 6)", ""},
 			{"(map 'list (lambda (x) (+ x x)) (vector 1 2 3))", "'(2 4 6)", ""},
 			{"(map 'vector (lambda (x) (+ x x)) (vector 1 2 3))", "(vector 2 4 6)", ""},
-			{"(defun flip (fn x y) (fn y x))", "()", ""},
 			{"(foldl (flip cons) () '(1 2 3))", "'(3 2 1)", ""},
-			{"(foldr cons () '(1 2 3))", "'(1 2 3)", ""},
+			{"(foldr 'cons () '(1 2 3))", "'(1 2 3)", ""},
 		}},
 		{"unpack", TestSequence{
 			{"(defun f (a b) (+ a b))", "()", ""},
 			{"(unpack f '(1 2))", "3", ""},
 			{"(unpack (f 1) '(2))", "3", ""},
-			{"(unpack cons '(1 '(2)))", "'(1 2)", ""},
+			{"(unpack 'cons '(1 '(2)))", "'(1 2)", ""},
 			{"(unpack (cons 1) '('(2)))", "'(1 2)", ""},
 		}},
 		{"flip", TestSequence{

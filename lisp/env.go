@@ -172,6 +172,29 @@ func (env *LEnv) Get(k *LVal) *LVal {
 	return v
 }
 
+// GetFun returns a function referenced by the given LVal.  If fun is already
+// an LFun, then fun is returned.  If fun is a symbol then GetFun looks for a
+// function bound to the symbol.  If fun does reference a symbol then an error
+// is returned.
+//
+// GetFun is a suitable for backing an implementation of functional programing
+// constructs, like funcall, map, reduce, etc.
+func (env *LEnv) GetFun(fun *LVal) *LVal {
+	if fun.Type == LSymbol {
+		f := env.Get(fun)
+		if f.Type == LError {
+			return f
+		}
+		if f.Type != LFun {
+			return env.Errorf("symbol %s not bound to a function: %v", fun, f.Type)
+		}
+		return f
+	} else if fun.Type != LFun {
+		return env.Errorf("first argument is not a function: %v", fun.Type)
+	}
+	return fun
+}
+
 func (env *LEnv) get(k *LVal) *LVal {
 	// LQSymbols are allowed...
 	if k.Type != LSymbol && k.Type != LQSymbol {
