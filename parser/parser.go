@@ -112,6 +112,7 @@ func newParsecParser() parsec.Parser {
 	closeB := parsec.Atom("]", "CLOSEB")
 	q := parsec.Atom("'", "QUOTE")
 	ubexprMark := parsec.Atom("#^", "UBEXPRMARK") // Mark preceding lambda shorthand syntax (unbound expression)
+	any := parsec.Token(`.*`, "ANY")
 	rawstring := parsec.Token(`"""(?:[^"]|"[^"]|""[^"])*"""`, "RAWSTRING")
 	comment := parsec.Token(`;([^\n]*[^\s])?`, "COMMENT")
 	decimal := parsec.Token(`[+-]?[0-9]+([.][0-9]+)?([eE][+-]?[0-9]+)?`, "DECIMAL")
@@ -137,7 +138,8 @@ func newParsecParser() parsec.Parser {
 	simpleQExpr := parsec.And(astNode(nodeQExpr), q, simpleSExpr)
 	simpleExpr := parsec.OrdChoice(nil, comment, term, qterm, simpleSExpr, simpleQExpr)
 	ubexpr := parsec.And(astNode(nodeUBExpr), ubexprMark, simpleExpr)
-	expr = parsec.OrdChoice(nil, comment, term, sexpr, vector, qexpr, ubexpr)
+	ubexprBad := parsec.And(astNode(nodeUBExpr), ubexprMark, any)
+	expr = parsec.OrdChoice(nil, comment, term, sexpr, vector, qexpr, ubexpr, ubexprBad)
 	return expr
 }
 
@@ -156,9 +158,13 @@ type ast struct {
 }
 
 func newAST(typ nodeType, nodes []parsec.ParsecNode) parsec.ParsecNode {
-	nodes = cleanParsecNodeList(nodes)
+	nodes, ok := cleanParsecNodeList(nodes)
 	if len(nodes) == 0 {
 		return lisp.Nil()
+	}
+	if !ok {
+		// There is an error in the first position.
+		return nodes[0]
 	}
 	switch typ {
 	case nodeTerm:
@@ -223,6 +229,18 @@ func newAST(typ nodeType, nodes []parsec.ParsecNode) parsec.ParsecNode {
 		c := nodes[1].(*lisp.LVal)
 		return lisp.Quote(c)
 	case nodeUBExpr:
+		if len(nodes) == 2 {
+			term, ok := nodes[1].(*parsec.Terminal)
+			if ok && term.GetName() == "ANY" {
+				rest := term.GetValue()
+				if len(rest) > 10 {
+					rest = rest[:10] + "..."
+				}
+				return fmt.Errorf("invalid syntax in unbound expression shorthand starting: %s%s",
+					nodes[0].(*parsec.Terminal).GetValue(),
+					rest)
+			}
+		}
 		// We don't want the leading mark #^"
 		c := nodes[1].(*lisp.LVal)
 		return lisp.SExpr([]*lisp.LVal{lisp.Symbol("expr"), c})
@@ -231,7 +249,7 @@ func newAST(typ nodeType, nodes []parsec.ParsecNode) parsec.ParsecNode {
 	}
 }
 
-func cleanParsecNodeList(lis []parsec.ParsecNode) []parsec.ParsecNode {
+func cleanParsecNodeList(lis []parsec.ParsecNode) ([]parsec.ParsecNode, bool) {
 	var nodes []parsec.ParsecNode
 	for _, n := range lis {
 		switch node := n.(type) {
@@ -240,13 +258,20 @@ func cleanParsecNodeList(lis []parsec.ParsecNode) []parsec.ParsecNode {
 				continue
 			}
 			nodes = append(nodes, node)
+		case error:
+			nodes = []parsec.ParsecNode{node}
+			return nodes, false
 		case []parsec.ParsecNode:
-			nodes = append(nodes, cleanParsecNodeList(node)...)
+			clean, ok := cleanParsecNodeList(node)
+			if !ok {
+				return clean, false
+			}
+			nodes = append(nodes, clean...)
 		default:
 			nodes = append(nodes, node)
 		}
 	}
-	return nodes
+	return nodes, true
 }
 
 func dumpAST(t *ast, indent string) {
@@ -281,10 +306,13 @@ func dumpParsecNode(node parsec.ParsecNode, indent string) {
 }
 
 func getLVal(root parsec.ParsecNode) *lisp.LVal {
-	nodes := cleanParsecNodeList([]parsec.ParsecNode{root})
+	nodes, ok := cleanParsecNodeList([]parsec.ParsecNode{root})
 	if len(nodes) == 0 {
 		// we can be here if there is only whitespace on a line
 		return lisp.Nil()
+	}
+	if !ok {
+		return lisp.Error(nodes[0].(error))
 	}
 	lval, ok := nodes[0].(*lisp.LVal)
 	if !ok {
