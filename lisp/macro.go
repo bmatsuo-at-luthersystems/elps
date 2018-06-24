@@ -143,7 +143,7 @@ func isUnquote(v *LVal) bool {
 // especially when dealing with complex macros using multiple levels of
 // quasiquotes/unquotes.  I need to find these examples, understand how they
 // are supposed to work, and then fix these test cases.
-func findAndUnquote(env *LEnv, v *LVal) *LVal {
+func findAndUnquote(env *LEnv, v *LVal, depth int) *LVal {
 	if v.Type != LSExpr {
 		return v
 	}
@@ -167,13 +167,19 @@ func findAndUnquote(env *LEnv, v *LVal) *LVal {
 			x = env.Eval(unquote)
 		}
 		if spliceType == "unquote-splicing" {
+			if depth == 0 {
+				return env.Errorf("unquote-splicing used in an invalid context")
+			}
 			x.Spliced = true
 		}
 		return x
 	}
 	// findAndUnquote all child expressions
 	for i := range v.Cells {
-		v.Cells[i] = findAndUnquote(env, v.Cells[i])
+		v.Cells[i] = findAndUnquote(env, v.Cells[i], depth+1)
+		if v.Cells[i].Type == LError {
+			return v.Cells[i]
+		}
 	}
 	// splice in grandchildren of children that were unquoted with
 	// ``unquote-splicing''

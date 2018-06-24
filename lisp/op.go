@@ -95,20 +95,26 @@ func opQuote(env *LEnv, args *LVal) *LVal {
 }
 
 func opQuasiquote(env *LEnv, args *LVal) *LVal {
-	if len(args.Cells) != 1 {
-		return env.Errorf("one argument expected (got %d)", len(args.Cells))
-	}
-	// We need to find and unquote values in args.Cells[0] (possibly
-	// args.Cells[0] itself).
+	// We need to find and unquote values in expr (possibly expr itself).
+	expr := args.Cells[0]
 
 	// NOTE:  This isUnquote check is really strange.  But expressions like
 	// (quasiquote (unquote ...)) do not seem to evaluate correctly without it.
-	// It goes with some checking in LVal.EvalSExpr that doesn't really seem
-	// right, all in all.
-	quote := !isUnquote(args.Cells[0])
-	result := findAndUnquote(env, args.Cells[0])
+	quote := !isUnquote(expr)
+	result := findAndUnquote(env, expr, 0)
+	if result.Type == LError {
+		return result
+	}
 	if quote {
 		return Quote(result)
+	}
+	// The below check used to be in CallSpecialOp but interfered with other.
+	// It doesn't feel right and probably points to unsound behavior in
+	// findAndUnquote, but it is less disruptive here than in CallSpecialOp.
+	// And I'm not sure that I'm going to fix findAndUnquote soon -- it may
+	// just be rewritten if another problem is found.
+	if result.Type == LSExpr && !result.IsNil() {
+		result.Quoted = true
 	}
 	return result
 }

@@ -629,13 +629,6 @@ callf:
 		return r
 	}
 
-	if r.Type == LSExpr && !r.IsNil() {
-		// This has a really bad smell to it.  But I can't get quasiquote
-		// to work as expected without checking for unquoted s-expressions
-		// here.
-		r.Quoted = true
-	}
-
 	return r
 }
 
