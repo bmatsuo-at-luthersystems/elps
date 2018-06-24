@@ -54,7 +54,48 @@ func TestLoadErrors(t *testing.T) {
 	})
 	lerr = env.Eval(testsrc)
 	msg := lisp.GoError(lerr).Error()
-	assert.Equal(t, "lisp:load-string: unexpected EOF", msg)
+	assert.Equal(t, "lisp:load-string: unmatched \"(\" starting: (", msg)
+
+	testsrc = lisp.SExpr([]*lisp.LVal{
+		lisp.Symbol("load-string"),
+		lisp.String("(((foo bar) ()"),
+	})
+	lerr = env.Eval(testsrc)
+	msg = lisp.GoError(lerr).Error()
+	assert.Equal(t, "lisp:load-string: unmatched \"(\" starting: ((foo bar)...", msg)
+
+	testsrc = lisp.SExpr([]*lisp.LVal{
+		lisp.Symbol("load-string"),
+		lisp.String("([(foo bar) ()"),
+	})
+	lerr = env.Eval(testsrc)
+	msg = lisp.GoError(lerr).Error()
+	assert.Equal(t, "lisp:load-string: unmatched \"[\" starting: [(foo bar)...", msg)
+
+	testsrc = lisp.SExpr([]*lisp.LVal{
+		lisp.Symbol("load-string"),
+		lisp.String("())"),
+	})
+	lerr = env.Eval(testsrc)
+	msg = lisp.GoError(lerr).Error()
+	assert.Equal(t, "lisp:load-string: 1: unexpected source text possibly starting: )", msg)
+
+	testsrc = lisp.SExpr([]*lisp.LVal{
+		lisp.Symbol("load-string"),
+		lisp.String("(foo)) (defun bar () (baz))"),
+	})
+	lerr = env.Eval(testsrc)
+	msg = lisp.GoError(lerr).Error()
+	assert.Equal(t, "lisp:load-string: 1: unexpected source text possibly starting: ) (defun bar ()...", msg)
+
+	testsrc = lisp.SExpr([]*lisp.LVal{
+		lisp.Symbol("load-string"),
+		lisp.String("((foo) ^(defun bar () (baz)))"),
+	})
+	lerr = env.Eval(testsrc)
+	msg = lisp.GoError(lerr).Error()
+	// This message is known to suck
+	assert.Contains(t, msg, "lisp:load-string: 1: unexpected source text possibly starting:")
 
 	testsrc = lisp.SExpr([]*lisp.LVal{
 		lisp.Symbol("load-string"),

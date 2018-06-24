@@ -52,19 +52,23 @@ const (
 	nodeItems
 	nodeList
 	nodeSExpr
+	nodeSExprOUnmatched
 	nodeVector
 	nodeQExpr
+	nodeUBExpr
 )
 
 var nodeTypeStrings = []string{
-	nodeInvalid: "INVALID",
-	nodeTerm:    "TERM",
-	nodeItem:    "ITEM",
-	nodeItems:   "ITEMS",
-	nodeList:    "LIST",
-	nodeSExpr:   "SEXPR",
-	nodeVector:  "VECTOR",
-	nodeQExpr:   "QEXPR",
+	nodeInvalid:         "INVALID",
+	nodeTerm:            "TERM",
+	nodeItem:            "ITEM",
+	nodeItems:           "ITEMS",
+	nodeList:            "LIST",
+	nodeSExpr:           "SEXPR",
+	nodeSExprOUnmatched: "SEXPROPENUNMATCHED",
+	nodeVector:          "VECTOR",
+	nodeQExpr:           "QEXPR",
+	nodeUBExpr:          "UNBOUNDEXPR",
 }
 
 // Parse parses a lisp expression.
@@ -88,8 +92,13 @@ func Parse(env *lisp.LEnv, print bool, text []byte) (bool, error) {
 // ParseLVal parses LVal values from text and returns them.  The number of
 // bytes read is returned along with any error that was encountered in parsing.
 func ParseLVal(text []byte) ([]*lisp.LVal, int, error) {
+	// TODO:  Handle unmatched closing parens and unexpected characters.  cases
+	// seem to warrant having fallback parsers that can handle incomplete
+	// expressions.  See the tests involving invalid input in lisp/error_test.go
+
 	var v []*lisp.LVal
 	s := parsec.NewScanner(text)
+	s = s.TrackLineno() // Docs say this is slow... I'm worried
 	parser := newParsecParser()
 	root, s := parser(s)
 	for root != nil {
@@ -98,7 +107,11 @@ func ParseLVal(text []byte) ([]*lisp.LVal, int, error) {
 	}
 	_, s = s.SkipWS()
 	if !s.Endof() {
-		return v, s.GetCursor(), io.ErrUnexpectedEOF
+		b, _ := s.Match(`.{1,16}`)
+		if len(b) > 15 {
+			b = append(b[:15:15], []byte("...")...)
+		}
+		return v, s.GetCursor(), fmt.Errorf("%d: unexpected source text possibly starting: %s", s.Lineno(), b)
 	}
 	return v, s.GetCursor(), nil
 }
@@ -109,6 +122,8 @@ func newParsecParser() parsec.Parser {
 	openB := parsec.Atom("[", "OPENB")
 	closeB := parsec.Atom("]", "CLOSEB")
 	q := parsec.Atom("'", "QUOTE")
+	ubexprMark := parsec.Atom("#^", "UBEXPRMARK") // Mark preceding lambda shorthand syntax (unbound expression)
+	any := parsec.Token(`.*`, "ANY")
 	rawstring := parsec.Token(`"""(?:[^"]|"[^"]|""[^"])*"""`, "RAWSTRING")
 	comment := parsec.Token(`;([^\n]*[^\s])?`, "COMMENT")
 	decimal := parsec.Token(`[+-]?[0-9]+([.][0-9]+)?([eE][+-]?[0-9]+)?`, "DECIMAL")
@@ -125,9 +140,31 @@ func newParsecParser() parsec.Parser {
 	var expr parsec.Parser // forward declaration allows for recursive parsing
 	exprList := parsec.Kleene(nil, &expr)
 	sexpr := parsec.And(astNode(nodeSExpr), openP, exprList, closeP)
+	sexprOUnmatched := parsec.And(astNode(nodeSExprOUnmatched), openP, exprList, parsec.End())
 	vector := parsec.And(astNode(nodeVector), openB, exprList, closeB)
 	qexpr := parsec.And(astNode(nodeQExpr), q, &expr)
-	expr = parsec.OrdChoice(nil, comment, term, sexpr, vector, qexpr)
+	qexprOUnmatched := parsec.And(astNode(nodeSExprOUnmatched), openB, exprList, parsec.End())
+	qterm := parsec.And(astNode(nodeQExpr), q, term)
+	termListElement := parsec.OrdChoice(nil, comment, term, qterm)
+	termList := parsec.Kleene(nil, termListElement)
+	simpleSExpr := parsec.And(astNode(nodeSExpr), openP, termList, closeP)
+	simpleQExpr := parsec.And(astNode(nodeQExpr), q, simpleSExpr)
+	simpleExpr := parsec.OrdChoice(nil, comment, term, qterm, simpleSExpr, simpleQExpr)
+	ubexpr := parsec.And(astNode(nodeUBExpr), ubexprMark, simpleExpr)
+	ubexprBad := parsec.And(astNode(nodeUBExpr), ubexprMark, any)
+	expr = parsec.OrdChoice(nil,
+		comment,
+		term,
+		sexpr,
+		vector,
+		qexpr,
+		ubexpr,
+		// Error matching cases come last because they have the lowest
+		// precedence.
+		ubexprBad,
+		sexprOUnmatched,
+		qexprOUnmatched,
+	)
 	return expr
 }
 
@@ -146,9 +183,18 @@ type ast struct {
 }
 
 func newAST(typ nodeType, nodes []parsec.ParsecNode) parsec.ParsecNode {
-	nodes = cleanParsecNodeList(nodes)
+	// TODO:  Figure out how to get the scanner line number in the function,
+	// when error nodes are encountered.  In general terminal atoms only have
+	// the integer position, it seems.  If we can pass the position up and get
+	// a line number later that's OK as well.
+
+	nodes, ok := cleanParsecNodeList(nodes)
 	if len(nodes) == 0 {
 		return lisp.Nil()
+	}
+	if !ok {
+		// There is an error in the first position.
+		return nodes[0]
 	}
 	switch typ {
 	case nodeTerm:
@@ -187,6 +233,13 @@ func newAST(typ nodeType, nodes []parsec.ParsecNode) parsec.ParsecNode {
 			}
 		}
 		return lval
+	case nodeSExprOUnmatched:
+		open := nodes[0].(*parsec.Terminal)
+		rest := open.GetValue() + stringifyNodes(nodes[1:len(nodes)-1]) // Trim off the End node
+		if len(rest) > 10 {
+			rest = rest[:10] + "..."
+		}
+		return fmt.Errorf("unmatched %q starting: %v", open.GetValue(), rest)
 	case nodeSExpr:
 		// We don't want terminal parsec nodes '(' and ')'
 		lval := lisp.SExpr(make([]*lisp.LVal, 0, len(nodes)-2))
@@ -212,12 +265,49 @@ func newAST(typ nodeType, nodes []parsec.ParsecNode) parsec.ParsecNode {
 		// We don't want terminal parsec nodes "'(" and ")"
 		c := nodes[1].(*lisp.LVal)
 		return lisp.Quote(c)
+	case nodeUBExpr:
+		if len(nodes) == 2 {
+			term, ok := nodes[1].(*parsec.Terminal)
+			if ok && term.GetName() == "ANY" {
+				rest := term.GetValue()
+				if len(rest) > 10 {
+					rest = rest[:10] + "..."
+				}
+				return fmt.Errorf("invalid syntax in unbound expression shorthand starting: %s%s",
+					nodes[0].(*parsec.Terminal).GetValue(),
+					rest)
+			}
+		}
+		// We don't want the leading mark #^"
+		c := nodes[1].(*lisp.LVal)
+		return lisp.SExpr([]*lisp.LVal{lisp.Symbol("expr"), c})
 	default:
 		panic(fmt.Sprintf("unknown nodeType: %s (%d)", typ, typ))
 	}
 }
 
-func cleanParsecNodeList(lis []parsec.ParsecNode) []parsec.ParsecNode {
+func stringifyNodes(nodes []parsec.ParsecNode) string {
+	var s []string
+	for _, node := range nodes {
+		switch node := node.(type) {
+		case *parsec.Terminal:
+			switch node.GetName() {
+			case "OPENP", "CLOSEP", "OPENB", "CLOSEB":
+				continue
+			}
+			s = append(s, node.GetValue())
+		case []parsec.ParsecNode:
+			s = append(s, "("+stringifyNodes(node)+")")
+		case *lisp.LVal:
+			s = append(s, node.String())
+		default:
+			s = append(s, fmt.Sprint(node))
+		}
+	}
+	return strings.Join(s, " ")
+}
+
+func cleanParsecNodeList(lis []parsec.ParsecNode) ([]parsec.ParsecNode, bool) {
 	var nodes []parsec.ParsecNode
 	for _, n := range lis {
 		switch node := n.(type) {
@@ -226,13 +316,20 @@ func cleanParsecNodeList(lis []parsec.ParsecNode) []parsec.ParsecNode {
 				continue
 			}
 			nodes = append(nodes, node)
+		case error:
+			nodes = []parsec.ParsecNode{node}
+			return nodes, false
 		case []parsec.ParsecNode:
-			nodes = append(nodes, cleanParsecNodeList(node)...)
+			clean, ok := cleanParsecNodeList(node)
+			if !ok {
+				return clean, false
+			}
+			nodes = append(nodes, clean...)
 		default:
 			nodes = append(nodes, node)
 		}
 	}
-	return nodes
+	return nodes, true
 }
 
 func dumpAST(t *ast, indent string) {
@@ -267,10 +364,13 @@ func dumpParsecNode(node parsec.ParsecNode, indent string) {
 }
 
 func getLVal(root parsec.ParsecNode) *lisp.LVal {
-	nodes := cleanParsecNodeList([]parsec.ParsecNode{root})
+	nodes, ok := cleanParsecNodeList([]parsec.ParsecNode{root})
 	if len(nodes) == 0 {
 		// we can be here if there is only whitespace on a line
 		return lisp.Nil()
+	}
+	if !ok {
+		return lisp.Error(nodes[0].(error))
 	}
 	lval, ok := nodes[0].(*lisp.LVal)
 	if !ok {

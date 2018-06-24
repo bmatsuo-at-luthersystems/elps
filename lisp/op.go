@@ -167,6 +167,9 @@ func opExpr(env *LEnv, args *LVal) *LVal {
 }
 
 func countExprArgs(expr *LVal) (nargs int, short bool, nopt int, vargs bool, err error) {
+	if expr.Quoted {
+		return 0, false, 0, false, nil
+	}
 	switch expr.Type {
 	case LSymbol:
 		if !strings.HasPrefix(expr.Str, "%") {
@@ -191,6 +194,9 @@ func countExprArgs(expr *LVal) (nargs int, short bool, nopt int, vargs bool, err
 	case LSExpr:
 		short := false
 		for _, cell := range expr.Cells {
+			if cell.Quoted {
+				continue
+			}
 			if !strings.HasPrefix(cell.Str, "%") {
 				continue
 			}
