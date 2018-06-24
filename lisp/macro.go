@@ -174,6 +174,9 @@ func findAndUnquote(env *LEnv, v *LVal) *LVal {
 	// findAndUnquote all child expressions
 	for i := range v.Cells {
 		v.Cells[i] = findAndUnquote(env, v.Cells[i])
+		if v.Cells[i].Type == LError {
+			return v.Cells[i]
+		}
 	}
 	// splice in grandchildren of children that were unquoted with
 	// ``unquote-splicing''
