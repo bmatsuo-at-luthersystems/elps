@@ -52,23 +52,23 @@ const (
 	nodeItems
 	nodeList
 	nodeSExpr
-	nodeSExprUnmatched
+	nodeSExprOUnmatched
 	nodeVector
 	nodeQExpr
 	nodeUBExpr
 )
 
 var nodeTypeStrings = []string{
-	nodeInvalid:        "INVALID",
-	nodeTerm:           "TERM",
-	nodeItem:           "ITEM",
-	nodeItems:          "ITEMS",
-	nodeList:           "LIST",
-	nodeSExpr:          "SEXPR",
-	nodeSExprUnmatched: "SEXPRUNMATCHED",
-	nodeVector:         "VECTOR",
-	nodeQExpr:          "QEXPR",
-	nodeUBExpr:         "UNBOUNDEXPR",
+	nodeInvalid:         "INVALID",
+	nodeTerm:            "TERM",
+	nodeItem:            "ITEM",
+	nodeItems:           "ITEMS",
+	nodeList:            "LIST",
+	nodeSExpr:           "SEXPR",
+	nodeSExprOUnmatched: "SEXPROPENUNMATCHED",
+	nodeVector:          "VECTOR",
+	nodeQExpr:           "QEXPR",
+	nodeUBExpr:          "UNBOUNDEXPR",
 }
 
 // Parse parses a lisp expression.
@@ -92,8 +92,13 @@ func Parse(env *lisp.LEnv, print bool, text []byte) (bool, error) {
 // ParseLVal parses LVal values from text and returns them.  The number of
 // bytes read is returned along with any error that was encountered in parsing.
 func ParseLVal(text []byte) ([]*lisp.LVal, int, error) {
+	// TODO:  Handle unmatched closing parens and unexpected characters.  cases
+	// seem to warrant having fallback parsers that can handle incomplete
+	// expressions.  See the tests involving invalid input in lisp/error_test.go
+
 	var v []*lisp.LVal
 	s := parsec.NewScanner(text)
+	s = s.TrackLineno() // Docs say this is slow... I'm worried
 	parser := newParsecParser()
 	root, s := parser(s)
 	for root != nil {
@@ -102,7 +107,11 @@ func ParseLVal(text []byte) ([]*lisp.LVal, int, error) {
 	}
 	_, s = s.SkipWS()
 	if !s.Endof() {
-		return v, s.GetCursor(), io.ErrUnexpectedEOF
+		b, _ := s.Match(`.{1,16}`)
+		if len(b) > 15 {
+			b = append(b[:15:15], []byte("...")...)
+		}
+		return v, s.GetCursor(), fmt.Errorf("%d: unexpected source text possibly starting: %s", s.Lineno(), b)
 	}
 	return v, s.GetCursor(), nil
 }
@@ -131,10 +140,10 @@ func newParsecParser() parsec.Parser {
 	var expr parsec.Parser // forward declaration allows for recursive parsing
 	exprList := parsec.Kleene(nil, &expr)
 	sexpr := parsec.And(astNode(nodeSExpr), openP, exprList, closeP)
-	sexprUnmatched := parsec.And(astNode(nodeSExprUnmatched), openP, exprList, parsec.End())
+	sexprOUnmatched := parsec.And(astNode(nodeSExprOUnmatched), openP, exprList, parsec.End())
 	vector := parsec.And(astNode(nodeVector), openB, exprList, closeB)
 	qexpr := parsec.And(astNode(nodeQExpr), q, &expr)
-	qexprUnmatched := parsec.And(astNode(nodeSExprUnmatched), openB, exprList, parsec.End())
+	qexprOUnmatched := parsec.And(astNode(nodeSExprOUnmatched), openB, exprList, parsec.End())
 	qterm := parsec.And(astNode(nodeQExpr), q, term)
 	termListElement := parsec.OrdChoice(nil, comment, term, qterm)
 	termList := parsec.Kleene(nil, termListElement)
@@ -153,8 +162,9 @@ func newParsecParser() parsec.Parser {
 		// Error matching cases come last because they have the lowest
 		// precedence.
 		ubexprBad,
-		sexprUnmatched,
-		qexprUnmatched)
+		sexprOUnmatched,
+		qexprOUnmatched,
+	)
 	return expr
 }
 
@@ -173,6 +183,11 @@ type ast struct {
 }
 
 func newAST(typ nodeType, nodes []parsec.ParsecNode) parsec.ParsecNode {
+	// TODO:  Figure out how to get the scanner line number in the function,
+	// when error nodes are encountered.  In general terminal atoms only have
+	// the integer position, it seems.  If we can pass the position up and get
+	// a line number later that's OK as well.
+
 	nodes, ok := cleanParsecNodeList(nodes)
 	if len(nodes) == 0 {
 		return lisp.Nil()
@@ -218,7 +233,7 @@ func newAST(typ nodeType, nodes []parsec.ParsecNode) parsec.ParsecNode {
 			}
 		}
 		return lval
-	case nodeSExprUnmatched:
+	case nodeSExprOUnmatched:
 		open := nodes[0].(*parsec.Terminal)
 		rest := open.GetValue() + stringifyNodes(nodes[1:len(nodes)-1]) // Trim off the End node
 		if len(rest) > 10 {
