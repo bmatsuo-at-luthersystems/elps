@@ -101,7 +101,7 @@ func opQuasiquote(env *LEnv, args *LVal) *LVal {
 	// NOTE:  This isUnquote check is really strange.  But expressions like
 	// (quasiquote (unquote ...)) do not seem to evaluate correctly without it.
 	quote := !isUnquote(expr)
-	result := findAndUnquote(env, expr)
+	result := findAndUnquote(env, expr, 0)
 	if result.Type == LError {
 		return result
 	}
