@@ -301,9 +301,15 @@ func macroExpand1(env *LEnv, mac *LVal, args *LVal) (*LVal, bool) {
 	if !mac.IsMacro() {
 		return nil, false
 	}
+	// NOTE:  Any return from this point on should return a true second value
+	// because mac is a macro.
+
 	mark := env.MacroCall(mac, args)
+	if mark.Type == LError {
+		return mark, true
+	}
 	if mark.Type != LMarkMacExpand {
-		panic("macro did not return LMarkMacExpand")
+		panic("macro did not return LMarkMacExpand: " + mark.Type.String())
 	}
 	// MacroCall unquotes its result so that it can work properly in normal
 	// evaluation cycle.  So we need to re-quote the value here.

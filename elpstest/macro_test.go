@@ -50,6 +50,15 @@ func TestMacros(t *testing.T) {
 			{"(set 'z 1)", "1", ""},
 			{"(m1 z)", "4", ""},
 		}},
+		{"defmacro repeated expansion", TestSequence{
+			{`(defmacro mlen (&rest xs) (if (nil? xs) 0 (quasiquote (+ 1 (mlen (unquote-splicing (cdr xs)))))))`, `()`, ``},
+			{`(macroexpand '(mlen))`, `0`, ``},
+			{`(mlen)`, `0`, ``},
+			{`(macroexpand '(mlen a))`, `'(+ 1 (mlen))`, ``},
+			{`(mlen a)`, `1`, ``},
+			{`(macroexpand '(mlen a b))`, `'(+ 1 (mlen b))`, ``},
+			{`(mlen a b)`, `2`, ``},
+		}},
 		{"defmacro optional args", TestSequence{
 			{"(defmacro mrest (&rest xs) (quasiquote (- (unquote-splicing xs))))", "()", ""},
 			{"(defmacro mopt (&optional x) (let ([sym (gensym)]) (quasiquote (let ([(unquote sym) (unquote x)]) (if (unquote sym) (mrest (unquote sym)) (mrest 0))))))", "()", ""},

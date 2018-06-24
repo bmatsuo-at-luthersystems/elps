@@ -837,7 +837,9 @@ func (env *LEnv) call(fun *LVal, args *LVal, curry bool) *LVal {
 	if len(body) == 0 {
 		return Nil()
 	}
-	body[len(body)-1].Terminal = true
+	if !fun.IsMacro() {
+		body[len(body)-1].Terminal = true
+	}
 	var ret *LVal
 	for i := range body {
 		ret = fun.Env.Eval(body[i])
