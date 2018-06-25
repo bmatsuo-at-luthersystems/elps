@@ -26,16 +26,24 @@ type Runner struct {
 	// in the testing package has been run.  Any error returned by the teardown
 	// function is reported as a test failure.
 	Teardown func(*lisp.LEnv) *lisp.LVal
+
+	logger *Logger
 }
 
-func (r *Runner) NewEnv() (*lisp.LEnv, error) {
-	env := lisp.NewEnv(nil)
+func (r *Runner) NewEnv(t *testing.T) (*lisp.LEnv, error) {
+	logger := NewLogger(t)
+	runtime := &lisp.Runtime{
+		Registry: lisp.NewRegistry(),
+		Stack:    &lisp.CallStack{},
+		Reader:   parser.NewReader(),
+		Stderr:   logger,
+	}
+	env := lisp.NewEnvRuntime(runtime)
 	err := lisp.GoError(lisp.InitializeUserEnv(env))
 	if err != nil {
 		return nil, fmt.Errorf("Failed to initialize lisp environment: %v", err)
 	}
 	env.InPackage(lisp.String(lisp.DefaultUserPackage))
-	env.Runtime.Reader = parser.NewReader()
 	loader := r.Loader
 	if loader == nil {
 		loader = lisplib.LoadLibrary
@@ -53,10 +61,11 @@ func (r *Runner) NewEnv() (*lisp.LEnv, error) {
 }
 
 func (r *Runner) LoadTests(t *testing.T, path string, source io.Reader) []string {
-	env, err := r.NewEnv()
+	env, err := r.NewEnv(t)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
+	defer env.Runtime.Stderr.(*Logger).Flush()
 
 	err = lisp.GoError(env.Load(filepath.Base(path), source))
 	if err != nil {
@@ -78,11 +87,12 @@ func (r *Runner) LoadTests(t *testing.T, path string, source io.Reader) []string
 // determine a file basename to use in LEnv.Load().  RunTest returns true if
 // the test, and any teardown function given, completed successfully.
 func (r *Runner) RunTest(t *testing.T, i int, path string, source io.Reader) {
-	env, err := r.NewEnv()
+	env, err := r.NewEnv(t)
 	if err != nil {
 		t.Error(err.Error())
 		return
 	}
+	defer env.Runtime.Stderr.(*Logger).Flush()
 
 	err = lisp.GoError(env.Load(filepath.Base(path), source))
 	if err != nil {

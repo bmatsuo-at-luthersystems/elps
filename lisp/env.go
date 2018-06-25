@@ -53,6 +53,27 @@ type LEnv struct {
 	Runtime *Runtime
 }
 
+// NewEnvRuntime initializes a new LEnv, like NewEnv, but it explicitly
+// specifies the runtime to use.  NewEnvRuntime is only suitable for creating
+// root LEnv object, so it does not take a parent argument.  When rt is nil
+// StandardRuntime() called to create a new Runtime for the returned LEnv.  It
+// is an error to use the same runtime object in multiple calls to
+// NewEnvRuntime if the two envs are not in the same tree and doing so will
+// have unspecified results.
+func NewEnvRuntime(rt *Runtime) *LEnv {
+	if rt == nil {
+		rt = StandardRuntime()
+	}
+	env := &LEnv{
+		ID:      rt.GenEnvID(),
+		Scope:   make(map[string]*LVal),
+		FunName: make(map[string]string),
+		Runtime: rt,
+	}
+	return env
+
+}
+
 // NewEnv returns initializes and returns a new LEnv.
 func NewEnv(parent *LEnv) *LEnv {
 	var runtime *Runtime
