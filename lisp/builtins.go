@@ -52,6 +52,7 @@ var langBuiltins = []*langBuiltin{
 	{"funcall", Formals("fun", VarArgSymbol, "args"), builtinFunCall},
 	{"apply", Formals("fun", VarArgSymbol, "args"), builtinApply},
 	{"to-string", Formals("value"), builtinToString},
+	{"to-bytes", Formals("value"), builtinToBytes},
 	{"to-int", Formals("value"), builtinToInt},
 	{"to-float", Formals("value"), builtinToFloat},
 	{"eval", Formals("expr"), builtinEval},
@@ -374,6 +375,18 @@ func builtinToString(env *LEnv, args *LVal) *LVal {
 		return env.Error(err)
 	}
 	return String(s)
+}
+
+func builtinToBytes(env *LEnv, args *LVal) *LVal {
+	val := args.Cells[0]
+	if val.Type == LBytes {
+		return val
+	}
+	if val.Type == LString {
+		return Bytes([]byte(val.Str))
+	}
+	// TODO:  Allow sequences of integers to be turned into bytes?
+	return env.Errorf("cannot convert type to string: %v", val.Type)
 }
 
 func toString(val *LVal) (string, error) {
