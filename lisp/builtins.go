@@ -58,7 +58,7 @@ var langBuiltins = []*langBuiltin{
 	{"error", Formals("condition", VarArgSymbol, "args"), builtinError},
 	{"car", Formals("lis"), builtinCAR},
 	{"cdr", Formals("lis"), builtinCDR},
-	{"rest", Formals("lis"), builtinCDR},
+	{"rest", Formals("lis"), builtinRest},
 	{"first", Formals("seq"), builtinFirst},
 	{"second", Formals("seq"), builtinSecond},
 	{"nth", Formals("seq", "n"), builtinNth},
@@ -473,7 +473,21 @@ func builtinCDR(env *LEnv, args *LVal) *LVal {
 	if len(v.Cells) < 2 {
 		return Nil()
 	}
+	// TODO:  Copy cells into a new list of cells?
 	return QExpr(v.Cells[1:])
+}
+
+func builtinRest(env *LEnv, args *LVal) *LVal {
+	v := args.Cells[0]
+	if !isSeq(v) {
+		return env.Errorf("argument is not a proper sequence %v", v.Type)
+	}
+	cells := seqCells(v)
+	if len(cells) < 2 {
+		return Nil()
+	}
+	// TODO:  Copy cells into a new list of cells?
+	return QExpr(cells[1:])
 }
 
 func builtinFirst(env *LEnv, args *LVal) *LVal {

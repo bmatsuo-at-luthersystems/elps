@@ -19,6 +19,15 @@ func TestArray(t *testing.T) {
 			{"(nth (vector 1) 0)", "1", ""},
 			{"(nth (vector 1) 1)", "()", ""},
 			{"(nth (vector 1) 2)", "()", ""},
+			{"(first (vector))", "()", ""},
+			{"(second (vector))", "()", ""},
+			{"(rest (vector))", "()", ""},
+			{"(first (vector 1))", "1", ""},
+			{"(second (vector 1))", "()", ""},
+			{"(rest (vector 1))", "()", ""},
+			{"(first (vector 1 2))", "1", ""},
+			{"(second (vector 1 2))", "2", ""},
+			{"(rest (vector 1 2))", "'(2)", ""},
 		}},
 	}
 	RunTestSuite(t, tests)
