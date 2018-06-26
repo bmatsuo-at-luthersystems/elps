@@ -52,12 +52,14 @@ var langBuiltins = []*langBuiltin{
 	{"funcall", Formals("fun", VarArgSymbol, "args"), builtinFunCall},
 	{"apply", Formals("fun", VarArgSymbol, "args"), builtinApply},
 	{"to-string", Formals("value"), builtinToString},
+	{"to-bytes", Formals("value"), builtinToBytes},
 	{"to-int", Formals("value"), builtinToInt},
 	{"to-float", Formals("value"), builtinToFloat},
 	{"eval", Formals("expr"), builtinEval},
 	{"error", Formals("condition", VarArgSymbol, "args"), builtinError},
 	{"car", Formals("lis"), builtinCAR},
 	{"cdr", Formals("lis"), builtinCDR},
+	{"rest", Formals("lis"), builtinRest},
 	{"first", Formals("seq"), builtinFirst},
 	{"second", Formals("seq"), builtinSecond},
 	{"nth", Formals("seq", "n"), builtinNth},
@@ -88,7 +90,8 @@ var langBuiltins = []*langBuiltin{
 	{"list", Formals(VarArgSymbol, "args"), builtinList},
 	{"vector", Formals(VarArgSymbol, "args"), builtinVector},
 	{"aref", Formals("a", VarArgSymbol, "indices"), builtinARef},
-	{"length", Formals("lis"), builtinLength},
+	{"length", Formals("seq"), builtinLength},
+	{"empty?", Formals("seq"), builtinIsEmpty},
 	{"cons", Formals("head", "tail"), builtinCons},
 	{"not", Formals("expr"), builtinNot},
 	// true? is potentially needed as a boolean conversion function (for json)
@@ -374,6 +377,18 @@ func builtinToString(env *LEnv, args *LVal) *LVal {
 	return String(s)
 }
 
+func builtinToBytes(env *LEnv, args *LVal) *LVal {
+	val := args.Cells[0]
+	if val.Type == LBytes {
+		return val
+	}
+	if val.Type == LString {
+		return Bytes([]byte(val.Str))
+	}
+	// TODO:  Allow sequences of integers to be turned into bytes?
+	return env.Errorf("cannot convert type to string: %v", val.Type)
+}
+
 func toString(val *LVal) (string, error) {
 	switch val.Type {
 	case LString:
@@ -451,25 +466,41 @@ func builtinError(env *LEnv, args *LVal) *LVal {
 	return env.ErrorCondition(condition.Str, iargs...)
 }
 
-func builtinCAR(env *LEnv, v *LVal) *LVal {
-	if v.Cells[0].Type != LSExpr {
-		return env.Errorf("argument is not a list: %v", v.Cells[0].Type)
+func builtinCAR(env *LEnv, args *LVal) *LVal {
+	v := args.Cells[0]
+	if v.Type != LSExpr {
+		return env.Errorf("argument is not a list %v", v.Type)
 	}
-	if len(v.Cells[0].Cells) == 0 {
+	if len(v.Cells) == 0 {
 		return Nil()
 	}
-	return v.Cells[0].Cells[0]
+
+	return v.Cells[0]
 }
 
-func builtinCDR(env *LEnv, v *LVal) *LVal {
-	if v.Cells[0].Type != LSExpr {
-		return env.Errorf("argument is not a list %v", v.Cells[0].Type)
+func builtinCDR(env *LEnv, args *LVal) *LVal {
+	v := args.Cells[0]
+	if v.Type != LSExpr {
+		return env.Errorf("argument is not a list %v", v.Type)
 	}
-	if len(v.Cells[0].Cells) == 0 {
+	if len(v.Cells) < 2 {
 		return Nil()
 	}
-	q := QExpr(v.Cells[0].Cells[1:])
-	return q
+	// TODO:  Copy cells into a new list of cells?
+	return QExpr(v.Cells[1:])
+}
+
+func builtinRest(env *LEnv, args *LVal) *LVal {
+	v := args.Cells[0]
+	if !isSeq(v) {
+		return env.Errorf("argument is not a proper sequence %v", v.Type)
+	}
+	cells := seqCells(v)
+	if len(cells) < 2 {
+		return Nil()
+	}
+	// TODO:  Copy cells into a new list of cells?
+	return QExpr(cells[1:])
 }
 
 func builtinFirst(env *LEnv, args *LVal) *LVal {
@@ -1309,9 +1340,18 @@ func builtinLength(env *LEnv, args *LVal) *LVal {
 	seq := args.Cells[0]
 	n := seq.Len()
 	if n < 0 {
-		return env.Errorf("first argument is not a list, bytes, or a string: %v", seq.Type)
+		return env.Errorf("first argument is not a list, vector, bytes, or a string: %v", seq.Type)
 	}
 	return Int(n)
+}
+
+func builtinIsEmpty(env *LEnv, args *LVal) *LVal {
+	seq := args.Cells[0]
+	n := seq.Len()
+	if n < 0 {
+		return env.Errorf("first argument is not a list, vector, bytes, or a string: %v", seq.Type)
+	}
+	return Bool(n == 0)
 }
 
 func builtinCons(env *LEnv, args *LVal) *LVal {
