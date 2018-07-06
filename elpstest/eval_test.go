@@ -135,6 +135,25 @@ string"""`, `"\"\"a raw\nstring"`, ""},
 			{"(concat 'list (list 1 2) (list 3))", "'(1 2 3)", ""},
 			{"(slice 'list '(0 1 2 3 4) 1 3)", "'(1 2)", ""},
 		}},
+		{"append 'list", TestSequence{
+			{"(set 'v (list))", "'()", ""},
+			{"(set 'v1 (append 'list v 1))", "'(1)", ""},
+			{"(set 'v12 (append 'list v1 2))", "'(1 2)", ""},
+			{"(set 'v123 (append 'list v12 3))", "'(1 2 3)", ""},
+			{"(set 'v1234 (append 'list v123 4))", "'(1 2 3 4)", ""},
+			{"v", "'()", ""},
+			{"v1", "'(1)", ""},
+			{"v12", "'(1 2)", ""},
+			{"v123", "'(1 2 3)", ""},
+			{"v1234", "'(1 2 3 4)", ""},
+			{"(set 'v1235 (append 'list v123 5))", "'(1 2 3 5)", ""},
+			// There is never any slice memory shared between the argument and
+			// list return values of append, so the previous append cannot
+			// modify the previously computed value of v1234 lists do not
+			// behave like go slices in this way and are often a poor choice
+			// for an expanding buffer.
+			{"v1234", "'(1 2 3 4)", ""},
+		}},
 		{"make-sequence", TestSequence{
 			{"(make-sequence 0 5)", "'(0 1 2 3 4)", ""},
 			{"(make-sequence 0 5 2)", "'(0 2 4)", ""},

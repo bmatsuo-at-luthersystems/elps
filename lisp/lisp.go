@@ -221,6 +221,8 @@ func Native(v interface{}) *LVal {
 }
 
 // SExpr returns an LVal representing an S-expression, a symbolic expression.
+// Provided cells are used as backing storage for the returned expression and
+// are not copied.
 func SExpr(cells []*LVal) *LVal {
 	return &LVal{
 		Type:  LSExpr,
@@ -229,7 +231,8 @@ func SExpr(cells []*LVal) *LVal {
 }
 
 // QExpr returns an LVal representing an Q-expression, a quoted expression, a
-// list.
+// list.  Provided cells are used as backing storage for the returned list and
+// are not copied.
 func QExpr(cells []*LVal) *LVal {
 	return &LVal{
 		Type:   LSExpr,
@@ -239,11 +242,11 @@ func QExpr(cells []*LVal) *LVal {
 }
 
 // Array returns an LVal representing an array reference.  The dims argument is
-// be a list of integers sizes for each dimension of the array.  Cells contain
-// any initial values for the array.  The dims argument may be nil, in which
-// case a vector (one dimensional array) is returned.  If dims is non-nil then
-// cells must either be nil or have one element for every array element, in
-// row-major order.
+// be a list of integers sizes for each dimension of the array.  If non-empty,
+// cells provides the backing storage for the array.  The dims argument may be
+// nil, in which case a vector (one dimensional array) is returned.  If dims is
+// non-nil then cells must either be nil or have one element for every array
+// element, in row-major order.
 func Array(dims *LVal, cells []*LVal) *LVal {
 	if dims == nil {
 		dims = QExpr([]*LVal{Int(len(cells))})
@@ -265,14 +268,16 @@ func Array(dims *LVal, cells []*LVal) *LVal {
 	}
 	if len(cells) > 0 && len(cells) != totalSize {
 		return Errorf("array contents do not match size")
+	} else if len(cells) == 0 {
+		cells = make([]*LVal, totalSize)
 	}
 
-	acells := make([]*LVal, 1+totalSize)
-	acells[0] = dims.Copy()
-	copy(acells[1:], cells)
 	return &LVal{
-		Type:  LArray,
-		Cells: acells,
+		Type: LArray,
+		Cells: []*LVal{
+			dims.Copy(),
+			QExpr(cells),
+		},
 	}
 }
 
@@ -427,6 +432,8 @@ func (v *LVal) Len() int {
 		return len(v.Bytes)
 	case LSExpr:
 		return len(v.Cells)
+	case LSortMap:
+		return len(v.Map)
 	case LArray:
 		if v.Cells[0].Len() == 1 {
 			return v.Cells[0].Cells[0].Int
@@ -491,7 +498,7 @@ func (v *LVal) ArrayIndex(index ...*LVal) *LVal {
 		index = index[:len(index)-1]
 	}
 
-	return v.Cells[1+i]
+	return v.Cells[1].Cells[i]
 }
 
 // MapGet returns the value corresponding to k in v or an LError if k is not
@@ -732,7 +739,7 @@ func (v *LVal) str(onTheRecord bool) string {
 	case LArray:
 		if v.Cells[0].Len() == 1 {
 			if v.Len() > 0 {
-				return exprString(v, 1, quote+"(vector ", ")")
+				return exprString(v.Cells[1], 0, quote+"(vector ", ")")
 			} else {
 				return quote + "(vector)"
 			}
@@ -801,8 +808,12 @@ func exprString(v *LVal, offset int, left string, right string) string {
 	return buf.String()
 }
 
+func isVec(v *LVal) bool {
+	return v.Type == LArray && v.Cells[0].Len() == 1
+}
+
 func isSeq(v *LVal) bool {
-	return v.Type == LSExpr || (v.Type == LArray && v.Cells[0].Len() == 1)
+	return v.Type == LSExpr || isVec(v)
 }
 
 func seqCells(v *LVal) []*LVal {
@@ -813,7 +824,7 @@ func seqCells(v *LVal) []*LVal {
 		if v.Cells[0].Len() > 1 {
 			panic("multi-dimensional array is not a sequence")
 		}
-		return v.Cells[1:]
+		return v.Cells[1].Cells
 	}
 	panic("type is not a sequence")
 }

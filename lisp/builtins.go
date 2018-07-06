@@ -89,6 +89,8 @@ var langBuiltins = []*langBuiltin{
 	{"slice", Formals("type-specifier", "seq", "start", "end"), builtinSlice},
 	{"list", Formals(VarArgSymbol, "args"), builtinList},
 	{"vector", Formals(VarArgSymbol, "args"), builtinVector},
+	{"append!", Formals("vec", VarArgSymbol, "values"), builtinAppendMutate},
+	{"append", Formals("type-specifier", "vec", VarArgSymbol, "values"), builtinAppend},
 	{"aref", Formals("a", VarArgSymbol, "indices"), builtinARef},
 	{"length", Formals("seq"), builtinLength},
 	{"empty?", Formals("seq"), builtinIsEmpty},
@@ -574,7 +576,7 @@ func builtinMap(env *LEnv, args *LVal) *LVal {
 		switch typespec.Str {
 		case "vector":
 			v = Array(QExpr([]*LVal{Int(lis.Len())}), nil)
-			cells = v.Cells[1:]
+			cells = seqCells(v)
 		case "list":
 			cells = make([]*LVal, lis.Len())
 			v = QExpr(cells)
@@ -1091,7 +1093,7 @@ func builtinSelect(env *LEnv, args *LVal) *LVal {
 	switch typespec.Str {
 	case "vector":
 		v = Array(QExpr([]*LVal{Int(list.Len())}), nil)
-		cells = v.Cells[1:]
+		cells = seqCells(v)
 		cells = cells[0:0:list.Len()]
 	case "list":
 		v = QExpr(nil)
@@ -1113,7 +1115,7 @@ func builtinSelect(env *LEnv, args *LVal) *LVal {
 		v.Cells = cells
 	case "vector":
 		v.Cells[0].Cells[0].Int = len(cells)
-		v.Cells = v.Cells[:1+len(cells)]
+		v.Cells[1].Cells = cells
 	}
 	return v
 }
@@ -1138,7 +1140,7 @@ func builtinReject(env *LEnv, args *LVal) *LVal {
 	switch typespec.Str {
 	case "vector":
 		v = Array(QExpr([]*LVal{Int(list.Len())}), nil)
-		cells = v.Cells[1:]
+		cells = seqCells(v)
 		cells = cells[0:0:list.Len()]
 	case "list":
 		v = QExpr(nil)
@@ -1160,7 +1162,7 @@ func builtinReject(env *LEnv, args *LVal) *LVal {
 		v.Cells = cells
 	case "vector":
 		v.Cells[0].Cells[0].Int = len(cells)
-		v.Cells = v.Cells[:1+len(cells)]
+		v.Cells[1].Cells = cells
 	}
 	return v
 }
@@ -1185,7 +1187,7 @@ func builtinZip(env *LEnv, args *LVal) *LVal {
 	switch typespec.Str {
 	case "vector":
 		v = Array(QExpr([]*LVal{Int(n)}), nil)
-		cells = v.Cells[1 : 1+n]
+		cells = seqCells(v)
 	case "list":
 		cells = make([]*LVal, n)
 		v = QExpr(cells)
@@ -1198,7 +1200,7 @@ func builtinZip(env *LEnv, args *LVal) *LVal {
 		switch typespec.Str {
 		case "vector":
 			elem = Array(QExpr([]*LVal{Int(len(lists))}), nil)
-			elemCells = elem.Cells[1 : 1+len(lists)]
+			elemCells = seqCells(elem)
 		case "list":
 			elemCells = make([]*LVal, len(lists))
 			elem = QExpr(elemCells)
@@ -1260,7 +1262,7 @@ func builtinReverse(env *LEnv, args *LVal) *LVal {
 	switch typespec.Str {
 	case "vector":
 		v = Array(QExpr([]*LVal{Int(list.Len())}), nil)
-		cells = v.Cells[1 : 1+list.Len()]
+		cells = seqCells(v)
 	case "list":
 		cells = make([]*LVal, list.Len())
 		v = QExpr(cells)
@@ -1324,6 +1326,46 @@ func builtinVector(env *LEnv, args *LVal) *LVal {
 	return Array(nil, args.Cells)
 }
 
+func builtinAppendMutate(env *LEnv, args *LVal) *LVal {
+	vec, vals := args.Cells[0], args.Cells[1:]
+	if !isVec(vec) {
+		return env.Errorf("first argument is not a vector: %v", vec.Type)
+	}
+	dims := vec.Cells[0]
+	dims.Cells[0].Int += len(vals)
+	vec.Cells[1].Cells = append(vec.Cells[1].Cells, vals...)
+	return vec
+}
+
+func builtinAppend(env *LEnv, args *LVal) *LVal {
+	typespec, seq, vals := args.Cells[0], args.Cells[1], args.Cells[2:]
+	if typespec.Type != LSymbol {
+		return env.Errorf("first argument is not a valid type specification: %v", typespec.Type)
+	}
+	if !isSeq(seq) {
+		return env.Errorf("second argument is not a proper sequence: %v", seq.Type)
+	}
+	cells := seqCells(seq)
+	switch typespec.Str {
+	case "list":
+		// The Cells of the returned list must not intersect with seqCells(seq)
+		// (in regards to slice memory regions, not referenced LVals).  This is
+		// particularly relevent if seq is a vector.  This makes the following
+		// code more verbose.
+		list := make([]*LVal, 0, len(cells)+len(vals))
+		list = append(list, cells...)
+		list = append(list, vals...)
+		return QExpr(list)
+	case "vector":
+		// The Cells of the returned vector may intersect with seqCells(seq)
+		// when chaining calls to ``append'' so that vectors may be used in a
+		// manner akin to go slices.
+		return Array(nil, append(cells, vals...))
+	default:
+		return env.Errorf("type specifier is invalid: %v", typespec)
+	}
+}
+
 func builtinARef(env *LEnv, args *LVal) *LVal {
 	array, indices := args.Cells[0], args.Cells[1:]
 	if array.Type != LArray {
@@ -1340,7 +1382,7 @@ func builtinLength(env *LEnv, args *LVal) *LVal {
 	seq := args.Cells[0]
 	n := seq.Len()
 	if n < 0 {
-		return env.Errorf("first argument is not a list, vector, bytes, or a string: %v", seq.Type)
+		return env.Errorf("first argument is not a list, map, vector, bytes, or a string: %v", seq.Type)
 	}
 	return Int(n)
 }
@@ -1349,7 +1391,7 @@ func builtinIsEmpty(env *LEnv, args *LVal) *LVal {
 	seq := args.Cells[0]
 	n := seq.Len()
 	if n < 0 {
-		return env.Errorf("first argument is not a list, vector, bytes, or a string: %v", seq.Type)
+		return env.Errorf("first argument is not a list, map, vector, bytes, or a string: %v", seq.Type)
 	}
 	return Bool(n == 0)
 }
