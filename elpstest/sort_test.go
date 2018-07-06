@@ -30,6 +30,15 @@ func TestSort(t *testing.T) {
 			{"(set 'lis '('(1 'a) '(2 'b) '(3 'c)))", "'('(1 'a) '(2 'b) '(3 'c))", ""},
 			{"(insert-sorted 'list lis < '(2.5 'ba) first)", "'('(1 'a) '(2 'b) '(2.5 'ba) '(3 'c))", ""},
 		}},
+		{"insert-sorted", TestSequence{
+			// inserting into sorted vectors
+			{"(set 'vec (vector 1 2 3 4 5))", "(vector 1 2 3 4 5)", ""},
+			{"(insert-sorted 'vector vec < 2.5)", "(vector 1 2 2.5 3 4 5)", ""},
+			{"(insert-sorted 'vector vec < 2.5 identity)", "(vector 1 2 2.5 3 4 5)", ""},
+			{"vec", "(vector 1 2 3 4 5)", ""},
+			{"(set 'vec (vector '(1 'a) '(2 'b) '(3 'c)))", "(vector '(1 'a) '(2 'b) '(3 'c))", ""},
+			{"(insert-sorted 'vector vec < '(2.5 'ba) first)", "(vector '(1 'a) '(2 'b) '(2.5 'ba) '(3 'c))", ""},
+		}},
 	}
 	RunTestSuite(t, tests)
 }
