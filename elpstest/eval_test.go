@@ -13,6 +13,11 @@ string"""`, `"a raw\nstring"`, ""},
 			{`"""""a raw
 string"""`, `"\"\"a raw\nstring"`, ""},
 		}},
+		{"string escape sequences", TestSequence{
+			{`"a string"`, `"a string"`, ""},
+			{`"a\nstring"`, `"a\nstring"`, ""},
+			{`"\"\"a\nstring"`, `"\"\"a\nstring"`, ""},
+		}},
 		{"quotes", TestSequence{
 			{"3", "3", ""},
 			// a single quote on a self-evaluating expression does not show up.
