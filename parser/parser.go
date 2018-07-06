@@ -396,6 +396,11 @@ func evalParsecRoot(env *lisp.LEnv, print bool, root parsec.ParsecNode) (bool, e
 	return true, nil
 }
 
+// The unquoteString function may look broken.  But the goparsec.String()
+// parser is pretty weird.  The input string is parsed (escaped characters in
+// the source text become unescaped).  But, the resulting object (the argument
+// s) is then wrapped by double quotes.  This doesn't really make sense and it
+// concerns me even more about the quality of goparsec.
 func unquoteString(s string) string {
 	return s[1 : len(s)-1]
 }
