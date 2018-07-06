@@ -11,15 +11,14 @@
 
 (test "regexp-match?"
   (defmacro assert-match (patt text)
-    (let ([resym (gensym)])
+    (let ([pattsym (gensym)])
       (quasiquote
-        (let ([(unquote resym) (funcall 'regexp:regexp-compile
-                                        (unquote patt))])
+        (let ([(unquote pattsym) (unquote patt)])
           (assert (funcall 'regexp:regexp-match?
-                           (unquote resym)
+                           (unquote pattsym)
                            (unquote text))
                   "pattern {} does not match text: {}"
-                  (quote (unquote patt))
+                  (quote (unquote pattsym))
                   (quote (unquote text)))))))
   (assert-match "abc?" "ab")
   (assert-match "abc?" "abc")

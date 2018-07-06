@@ -28,9 +28,19 @@ func LoadPackage(env *lisp.LEnv) *lisp.LVal {
 }
 
 var builtins = []*libutil.Builtin{
+	libutil.Function("regexp?", lisp.Formals("value"), BuiltinIsRegexp),
 	libutil.Function("regexp-compile", lisp.Formals("pattern"), BuiltinCompile),
 	libutil.Function("regexp-pattern", lisp.Formals("re"), BuiltinPattern),
 	libutil.Function("regexp-match?", lisp.Formals("re", "text"), BuiltinIsMatch),
+}
+
+func BuiltinIsRegexp(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
+	v := args.Cells[0]
+	if v.Type != lisp.LNative {
+		return lisp.Bool(false)
+	}
+	_, ok := v.Native.(*regexp.Regexp)
+	return lisp.Bool(ok)
 }
 
 func BuiltinCompile(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
@@ -40,7 +50,7 @@ func BuiltinCompile(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
 	}
 	re, err := regexp.Compile(patt.Str)
 	if err != nil {
-		return env.ErrorCondition("invalid-regexp-pattern", err)
+		return invalidPatternError(env, err)
 	}
 	return lisp.Native(re)
 }
@@ -70,7 +80,18 @@ func BuiltinIsMatch(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
 	}
 }
 
+// getRegexp returns a regexp corresponding to v.  If v is a compiled regexp,
+// the underlying regexp.Regexp is returned.  If v is a string it will be
+// compiled to a regexp and the returned is returned.  Any error encountered is
+// returned as an LVal.
 func getRegexp(env *lisp.LEnv, v *lisp.LVal) (re *regexp.Regexp, lerr *lisp.LVal) {
+	if v.Type == lisp.LString {
+		re, err := regexp.Compile(v.Str)
+		if err != nil {
+			return nil, invalidPatternError(env, err)
+		}
+		return re, nil
+	}
 	if v.Type != lisp.LNative {
 		return nil, env.Errorf("argument is not a regexp: %v", v.Type)
 	}
@@ -79,4 +100,8 @@ func getRegexp(env *lisp.LEnv, v *lisp.LVal) (re *regexp.Regexp, lerr *lisp.LVal
 		return nil, env.Errorf("argument is not a regexp: %v", v)
 	}
 	return re, nil
+}
+
+func invalidPatternError(env *lisp.LEnv, err error) *lisp.LVal {
+	return env.ErrorCondition("invalid-regexp-pattern", err)
 }
