@@ -89,6 +89,8 @@ var langBuiltins = []*langBuiltin{
 	{"slice", Formals("type-specifier", "seq", "start", "end"), builtinSlice},
 	{"list", Formals(VarArgSymbol, "args"), builtinList},
 	{"vector", Formals(VarArgSymbol, "args"), builtinVector},
+	{"append!", Formals("vec", VarArgSymbol, "values"), builtinAppendMutate},
+	{"append", Formals("type-specifier", "vec", VarArgSymbol, "values"), builtinAppend},
 	{"aref", Formals("a", VarArgSymbol, "indices"), builtinARef},
 	{"length", Formals("seq"), builtinLength},
 	{"empty?", Formals("seq"), builtinIsEmpty},
@@ -1322,6 +1324,46 @@ func builtinList(env *LEnv, v *LVal) *LVal {
 
 func builtinVector(env *LEnv, args *LVal) *LVal {
 	return Array(nil, args.Cells)
+}
+
+func builtinAppendMutate(env *LEnv, args *LVal) *LVal {
+	vec, vals := args.Cells[0], args.Cells[1:]
+	if !isVec(vec) {
+		return env.Errorf("first argument is not a vector: %v", vec.Type)
+	}
+	dims := vec.Cells[0]
+	dims.Cells[0].Int += len(vals)
+	vec.Cells[1].Cells = append(vec.Cells[1].Cells, vals...)
+	return vec
+}
+
+func builtinAppend(env *LEnv, args *LVal) *LVal {
+	typespec, seq, vals := args.Cells[0], args.Cells[1], args.Cells[2:]
+	if typespec.Type != LSymbol {
+		return env.Errorf("first argument is not a valid type specification: %v", typespec.Type)
+	}
+	if !isSeq(seq) {
+		return env.Errorf("second argument is not a proper sequence: %v", seq.Type)
+	}
+	cells := seqCells(seq)
+	switch typespec.Str {
+	case "list":
+		// The Cells of the returned list must not intersect with seqCells(seq)
+		// (in regards to slice memory regions, not referenced LVals).  This is
+		// particularly relevent if seq is a vector.  This makes the following
+		// code more verbose.
+		list := make([]*LVal, 0, len(cells)+len(vals))
+		list = append(list, cells...)
+		list = append(list, vals...)
+		return QExpr(list)
+	case "vector":
+		// The Cells of the returned vector may intersect with seqCells(seq)
+		// when chaining calls to ``append'' so that vectors may be used in a
+		// manner akin to go slices.
+		return Array(nil, append(cells, vals...))
+	default:
+		return env.Errorf("type specifier is invalid: %v", typespec)
+	}
 }
 
 func builtinARef(env *LEnv, args *LVal) *LVal {

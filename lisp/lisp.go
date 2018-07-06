@@ -221,6 +221,8 @@ func Native(v interface{}) *LVal {
 }
 
 // SExpr returns an LVal representing an S-expression, a symbolic expression.
+// Provided cells are used as backing storage for the returned expression and
+// are not copied.
 func SExpr(cells []*LVal) *LVal {
 	return &LVal{
 		Type:  LSExpr,
@@ -229,7 +231,8 @@ func SExpr(cells []*LVal) *LVal {
 }
 
 // QExpr returns an LVal representing an Q-expression, a quoted expression, a
-// list.
+// list.  Provided cells are used as backing storage for the returned list and
+// are not copied.
 func QExpr(cells []*LVal) *LVal {
 	return &LVal{
 		Type:   LSExpr,
@@ -239,11 +242,11 @@ func QExpr(cells []*LVal) *LVal {
 }
 
 // Array returns an LVal representing an array reference.  The dims argument is
-// be a list of integers sizes for each dimension of the array.  Cells contain
-// any initial values for the array.  The dims argument may be nil, in which
-// case a vector (one dimensional array) is returned.  If dims is non-nil then
-// cells must either be nil or have one element for every array element, in
-// row-major order.
+// be a list of integers sizes for each dimension of the array.  If non-empty,
+// cells provides the backing storage for the array.  The dims argument may be
+// nil, in which case a vector (one dimensional array) is returned.  If dims is
+// non-nil then cells must either be nil or have one element for every array
+// element, in row-major order.
 func Array(dims *LVal, cells []*LVal) *LVal {
 	if dims == nil {
 		dims = QExpr([]*LVal{Int(len(cells))})
