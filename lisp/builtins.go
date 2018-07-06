@@ -574,7 +574,7 @@ func builtinMap(env *LEnv, args *LVal) *LVal {
 		switch typespec.Str {
 		case "vector":
 			v = Array(QExpr([]*LVal{Int(lis.Len())}), nil)
-			cells = v.Cells[1:]
+			cells = seqCells(v)
 		case "list":
 			cells = make([]*LVal, lis.Len())
 			v = QExpr(cells)
@@ -1091,7 +1091,7 @@ func builtinSelect(env *LEnv, args *LVal) *LVal {
 	switch typespec.Str {
 	case "vector":
 		v = Array(QExpr([]*LVal{Int(list.Len())}), nil)
-		cells = v.Cells[1:]
+		cells = seqCells(v)
 		cells = cells[0:0:list.Len()]
 	case "list":
 		v = QExpr(nil)
@@ -1113,7 +1113,7 @@ func builtinSelect(env *LEnv, args *LVal) *LVal {
 		v.Cells = cells
 	case "vector":
 		v.Cells[0].Cells[0].Int = len(cells)
-		v.Cells = v.Cells[:1+len(cells)]
+		v.Cells[1].Cells = cells
 	}
 	return v
 }
@@ -1138,7 +1138,7 @@ func builtinReject(env *LEnv, args *LVal) *LVal {
 	switch typespec.Str {
 	case "vector":
 		v = Array(QExpr([]*LVal{Int(list.Len())}), nil)
-		cells = v.Cells[1:]
+		cells = seqCells(v)
 		cells = cells[0:0:list.Len()]
 	case "list":
 		v = QExpr(nil)
@@ -1160,7 +1160,7 @@ func builtinReject(env *LEnv, args *LVal) *LVal {
 		v.Cells = cells
 	case "vector":
 		v.Cells[0].Cells[0].Int = len(cells)
-		v.Cells = v.Cells[:1+len(cells)]
+		v.Cells[1].Cells = cells
 	}
 	return v
 }
@@ -1185,7 +1185,7 @@ func builtinZip(env *LEnv, args *LVal) *LVal {
 	switch typespec.Str {
 	case "vector":
 		v = Array(QExpr([]*LVal{Int(n)}), nil)
-		cells = v.Cells[1 : 1+n]
+		cells = seqCells(v)
 	case "list":
 		cells = make([]*LVal, n)
 		v = QExpr(cells)
@@ -1198,7 +1198,7 @@ func builtinZip(env *LEnv, args *LVal) *LVal {
 		switch typespec.Str {
 		case "vector":
 			elem = Array(QExpr([]*LVal{Int(len(lists))}), nil)
-			elemCells = elem.Cells[1 : 1+len(lists)]
+			elemCells = seqCells(elem)
 		case "list":
 			elemCells = make([]*LVal, len(lists))
 			elem = QExpr(elemCells)
@@ -1260,7 +1260,7 @@ func builtinReverse(env *LEnv, args *LVal) *LVal {
 	switch typespec.Str {
 	case "vector":
 		v = Array(QExpr([]*LVal{Int(list.Len())}), nil)
-		cells = v.Cells[1 : 1+list.Len()]
+		cells = seqCells(v)
 	case "list":
 		cells = make([]*LVal, list.Len())
 		v = QExpr(cells)

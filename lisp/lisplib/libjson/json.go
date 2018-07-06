@@ -134,7 +134,7 @@ func (s *Serializer) loadInterface(x interface{}) *lisp.LVal {
 		return m
 	case []interface{}:
 		lis := lisp.Array(lisp.QExpr([]*lisp.LVal{lisp.Int(len(x))}), nil)
-		cells := lis.Cells[1 : 1+len(x)] // bounds may avoid bounds check later
+		cells := lis.Cells[1].Cells
 		for i, v := range x {
 			cells[i] = s.loadInterface(v)
 			if cells[i].Type == lisp.LError {
@@ -313,7 +313,7 @@ func (s *Serializer) GoValue(v *lisp.LVal, stringNums bool) interface{} {
 		s, _ := s.GoSlice(v, stringNums)
 		return s
 	case lisp.LArray:
-		s, _ := s.GoSlice(lisp.QExpr(v.Cells[1:]), stringNums)
+		s, _ := s.GoSlice(v.Cells[1], stringNums)
 		switch v.Cells[0].Len() {
 		case 0:
 			return s[0]
