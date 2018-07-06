@@ -82,7 +82,7 @@ height  funcall
 
 An implementation of tail-recursion optimization should be able to pop frames
 at heights 1 and 0 off of the stack instead pushing `(sum 1 '(2))` onto the
-stack at height 2.  Using the same reasoning its possible to determine that the
+stack at height 0.  Using the same reasoning its possible to determine that the
 computation of `(sub 3 '())` can allow pop two frames off the stack and be
 pushed at height 0.
 
