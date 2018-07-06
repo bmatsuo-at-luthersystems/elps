@@ -427,6 +427,8 @@ func (v *LVal) Len() int {
 		return len(v.Bytes)
 	case LSExpr:
 		return len(v.Cells)
+	case LSortMap:
+		return len(v.Map)
 	case LArray:
 		if v.Cells[0].Len() == 1 {
 			return v.Cells[0].Cells[0].Int

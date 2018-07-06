@@ -1340,7 +1340,7 @@ func builtinLength(env *LEnv, args *LVal) *LVal {
 	seq := args.Cells[0]
 	n := seq.Len()
 	if n < 0 {
-		return env.Errorf("first argument is not a list, vector, bytes, or a string: %v", seq.Type)
+		return env.Errorf("first argument is not a list, map, vector, bytes, or a string: %v", seq.Type)
 	}
 	return Int(n)
 }
@@ -1349,7 +1349,7 @@ func builtinIsEmpty(env *LEnv, args *LVal) *LVal {
 	seq := args.Cells[0]
 	n := seq.Len()
 	if n < 0 {
-		return env.Errorf("first argument is not a list, vector, bytes, or a string: %v", seq.Type)
+		return env.Errorf("first argument is not a list, map, vector, bytes, or a string: %v", seq.Type)
 	}
 	return Bool(n == 0)
 }

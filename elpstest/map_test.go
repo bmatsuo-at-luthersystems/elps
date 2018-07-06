@@ -40,6 +40,12 @@ func TestMaps(t *testing.T) {
 			{`(key? (sorted-map 'a 0) "a")`, `true`, ""},
 			{`(key? (sorted-map 'a 0) "b")`, `false`, ""},
 		}},
+		{"size", TestSequence{
+			{`(empty? (sorted-map))`, `true`, ""},
+			{`(empty? (sorted-map 'a 1))`, `false`, ""},
+			{`(length (sorted-map))`, `0`, ""},
+			{`(length (sorted-map 'a 1))`, `1`, ""},
+		}},
 		{"get-default", TestSequence{
 			// Test the get-default macro.  Ensure that the macro performs a
 			// lazy evaluation of the default expression.
