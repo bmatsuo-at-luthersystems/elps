@@ -1974,7 +1974,7 @@ func builtinFormatString(env *LEnv, args *LVal) *LVal {
 				return env.Errorf("too many formatting direcives for supplied values")
 			}
 			val := fvals[anonIndex]
-			if val.Type == LString {
+			if val.Type == LString && !val.Quoted {
 				buf.WriteString(val.Str)
 			} else {
 				buf.WriteString(val.String())
