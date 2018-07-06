@@ -153,15 +153,18 @@ In general recursion is orthogonal to the concept of terminal call states.
 That is, terminal state analysis for recursive functions is no different from
 that of a standard, non-recursive function like the example that we just walked
 though.  But, it should be fairly clear it should be that when terminal state
-analysis is applied to a tail-recursive function call the call enters its
-terminal state right as the nested function call would have its stack pushed
-onto the frame.  Furthermore, this property of terminal state analysis can be
-used to detect possible sites for memory optimization through call stack
+analysis is applied to a tail-recursive function call there is a chain of stack
+frames, all in their terminal state, which are canditates for stack frame
 ellision.
 
+**TODO:  Add a figure that demonstrates a chain of terminal stack frames that
+indicates possible TRO.**
+
 **NOTE:** Authors don't have access to a proof for this because I built this on
-first principles.  But it is believed a proof to be possible given constraints
-and other restrictions in the problem space discussed in **Solution Notes**.
+first principles.  Furthermore, there is no proof that false positives are
+impossible.  But it is believed that such proofs are possible to construct
+given constraints and other restrictions in the problem space discussed in
+**Solution Notes**.
 
 ## Solution Notes
 
