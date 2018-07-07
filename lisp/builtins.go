@@ -959,7 +959,7 @@ func builtinInsertIndex(env *LEnv, args *LVal) *LVal {
 	switch typespec.Str {
 	case "vector":
 		v = Array(QExpr([]*LVal{Int(1 + list.Len())}), nil)
-		cells = v.Cells[1:]
+		cells = seqCells(v)
 	case "list":
 		cells = make([]*LVal, 1+list.Len())
 		v = QExpr(cells)
@@ -1032,7 +1032,7 @@ func builtinInsertSorted(env *LEnv, args *LVal) *LVal {
 	switch typespec.Str {
 	case "vector":
 		v = Array(QExpr([]*LVal{Int(1 + list.Len())}), nil)
-		cells = v.Cells[1:]
+		cells = seqCells(v)
 	case "list":
 		cells = make([]*LVal, 1+list.Len())
 		v = QExpr(cells)
