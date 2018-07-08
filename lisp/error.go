@@ -22,6 +22,9 @@ func (e *ErrorVal) Error() string {
 		return fmt.Sprintf("%s: %s", e.Str, msg)
 	}
 	fname := e.FunName()
+	if e.Source != nil {
+		fname = e.Source.String() + " " + fname
+	}
 	if fname == "" {
 		return msg
 	}

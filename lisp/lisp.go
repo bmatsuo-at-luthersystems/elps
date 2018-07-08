@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+
+	"bitbucket.org/luthersystems/elps/parser/token"
 )
 
 // LType is the type of an LVal
@@ -81,6 +83,9 @@ var lfunTypeStrings = []string{
 type LVal struct {
 	// Type is the native type for a value in lisp.
 	Type LType
+
+	// Source is the values originating location in source code.
+	Source *token.Location
 
 	// Fields used for numeric types
 	Int   int

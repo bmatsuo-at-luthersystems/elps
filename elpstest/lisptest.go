@@ -14,6 +14,7 @@ import (
 	"bitbucket.org/luthersystems/elps/lisp/lisplib"
 	"bitbucket.org/luthersystems/elps/lisp/lisplib/libtesting"
 	"bitbucket.org/luthersystems/elps/parser"
+	"bitbucket.org/luthersystems/elps/parser/rdparser"
 )
 
 // Runner is a test runner.
@@ -35,7 +36,7 @@ func (r *Runner) NewEnv(t *testing.T) (*lisp.LEnv, error) {
 	runtime := &lisp.Runtime{
 		Registry: lisp.NewRegistry(),
 		Stack:    &lisp.CallStack{},
-		Reader:   parser.NewReader(),
+		Reader:   rdparser.NewReader(),
 		Stderr:   logger,
 	}
 	env := lisp.NewEnvRuntime(runtime)
@@ -181,7 +182,7 @@ func RunTestSuite(t *testing.T, tests TestSuite) {
 		var exprBuf bytes.Buffer
 		env.Runtime.Stderr = io.MultiWriter(os.Stderr, &exprBuf)
 		env.InPackage(lisp.String(lisp.DefaultUserPackage))
-		env.Runtime.Reader = parser.NewReader()
+		env.Runtime.Reader = rdparser.NewReader()
 		for j, expr := range test.TestSequence {
 			exprBuf.Reset()
 			v, _, err := parser.ParseLVal([]byte(expr.Expr))
