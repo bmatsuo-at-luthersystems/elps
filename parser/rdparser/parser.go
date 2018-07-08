@@ -226,6 +226,8 @@ func (p *Parser) ParseConsExpression() *lisp.LVal {
 	open := p.Token()
 	expr := lisp.SExpr(nil)
 	for {
+		for p.expect(token.COMMENT) {
+		}
 		if p.expect(token.EOF) {
 			return p.errorf("unmatched-syntax", "unmatched %s", open.Text)
 		}

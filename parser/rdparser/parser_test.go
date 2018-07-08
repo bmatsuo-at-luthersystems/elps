@@ -18,6 +18,8 @@ func TestComments(t *testing.T) {
 			(1 "abc" '(x y z))`, `(1 "abc" '(x y z))`},
 		{`(1 "abc" ; A comment
 			'(x y z))`, `(1 "abc" '(x y z))`},
+		{`(1 "abc" ; A comment
+			)`, `(1 "abc")`},
 	}
 
 	for i, test := range tests {

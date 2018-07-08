@@ -17,6 +17,22 @@ import (
 	"bitbucket.org/luthersystems/elps/parser/rdparser"
 )
 
+func BenchmarkParse(path string, r func() lisp.Reader) func(*testing.B) {
+	return func(b *testing.B) {
+		buf, err := ioutil.ReadFile(path)
+		if err != nil {
+			b.Fatalf("Unable to read source file %v: %v", path, err)
+		}
+		b.SetBytes(int64(len(buf)))
+		for i := 0; i < b.N; i++ {
+			_, err := r().Read("test", bytes.NewReader(buf))
+			if err != nil {
+				b.Fatalf("Parse failure: %v", err)
+			}
+		}
+	}
+}
+
 // Runner is a test runner.
 type Runner struct {
 	// Loader is the package loader used to initialize the test environment.
