@@ -46,10 +46,10 @@ func (lex *Lexer) NextToken() *token.Token {
 		return lex.charToken(token.BRACE_L)
 	case ']':
 		return lex.charToken(token.BRACE_R)
-	case ':':
-		return lex.charToken(token.QUALIFY)
 	case '\'':
 		return lex.charToken(token.QUOTE)
+	case ':':
+		return lex.readSymbol()
 	case ';':
 		lex.scanner.AcceptSeq(func(c rune) bool { return c != '\n' })
 		return lex.scanner.EmitToken(token.COMMENT)
@@ -160,6 +160,11 @@ func (lex *Lexer) charToken(typ token.Type) *token.Token {
 
 func (lex *Lexer) readSymbol() *token.Token {
 	lex.scanner.AcceptSeq(isWord)
+	if lex.scanner.AcceptRune(':') {
+		// This may produce an invalid symbol that should be detected during
+		// parsing.
+		return lex.readSymbol()
+	}
 	return lex.scanner.EmitToken(token.SYMBOL)
 }
 

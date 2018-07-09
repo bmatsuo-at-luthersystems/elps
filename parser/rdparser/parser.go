@@ -74,8 +74,6 @@ func (p *Parser) ParseExpression() *lisp.LVal {
 		return p.ParseUnbound()
 	case token.SYMBOL:
 		return p.ParseSymbol()
-	case token.QUALIFY:
-		return p.ParseKeyword()
 	case token.PAREN_L:
 		return p.ParseConsExpression()
 	case token.BRACE_L:
@@ -183,30 +181,14 @@ func (p *Parser) ParseSymbol() *lisp.LVal {
 		return p.errorf("parse-error", "invalid symbol: %v", p.PeekType())
 	}
 	tok := p.src.Token
-	sym := p.Symbol(tok.Text)
-	if p.Accept(token.QUALIFY) {
-		if !p.Accept(token.SYMBOL) {
-			p.ReadToken()
-			return p.errorf("unexpected-token", "unexpected %s", p.TokenType())
-		}
-		sym.Str += ":" + p.src.Token.Text
+	pieces := strings.Split(tok.Text, ":")
+	if len(pieces) > 2 {
+		return p.errorf("invalid-symbol", "invalid symbol %q", tok.Text)
 	}
-	sym.Source = tok.Source
-	return sym
-}
-
-func (p *Parser) ParseKeyword() *lisp.LVal {
-	if !p.Accept(token.QUALIFY) {
-		return p.errorf("parse-error", "invalid symbol: %v", p.PeekType())
+	if len(pieces) == 2 && pieces[1] == "" {
+		return p.errorf("invalid-symbol", "invalid symbol %q", tok.Text)
 	}
-	tok := p.src.Token
-	if !p.Accept(token.SYMBOL) {
-		p.ReadToken()
-		return p.errorf("unexpected-token", "unexpected %s", p.TokenType())
-	}
-	sym := lisp.Symbol(":" + p.src.Token.Text)
-	sym.Source = tok.Source
-	return sym
+	return p.Symbol(tok.Text)
 }
 
 func (p *Parser) ParseConsExpression() *lisp.LVal {

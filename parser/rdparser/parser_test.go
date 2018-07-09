@@ -71,6 +71,7 @@ func TestParser(t *testing.T) {
 		{`(1 2 3)`, `(1 2 3)`},
 		{`(1 "abc" '(x y z))`, `(1 "abc" '(x y z))`},
 		{`(1 "abc" [x y z])`, `(1 "abc" '(x y z))`},
+		{`(abc :def)`, `(abc :def)`},
 		{`#^"abc"`, `(lisp:expr "abc")`},
 		{`#^'%`, `(lisp:expr '%)`},
 		{`#^%1`, `(lisp:expr %1)`},

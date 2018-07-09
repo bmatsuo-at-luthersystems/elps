@@ -41,7 +41,6 @@ const (
 
 	// Operators
 	NEGATIVE // arithmetic negation is parsed specially
-	QUALIFY
 	QUOTE
 	UNBOUND
 
@@ -66,7 +65,6 @@ func (typ Type) String() string {
 		STRING_RAW: "raw-string",
 		COMMENT:    ";",
 		NEGATIVE:   "-",
-		QUALIFY:    ":",
 		QUOTE:      "'",
 		UNBOUND:    "#^",
 		PAREN_L:    "(",
