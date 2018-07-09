@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"bitbucket.org/luthersystems/elps/parser/token"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestComments(t *testing.T) {
@@ -96,5 +97,33 @@ func TestParser(t *testing.T) {
 		if exprs[0].String() != test.output {
 			t.Errorf("test %d: expected output: %s", i, test.output)
 		}
+	}
+}
+
+func TestErrors(t *testing.T) {
+	tests := []struct {
+		source string
+		errmsg string
+	}{
+		{`(1 2 3`, `test0:1: unmatched-syntax: unmatched (`},
+		{`(1 2 3)
+		0
+		0134
+`, `test1:3: invalid-integer-literal: integer literal starts with 0: 0134`},
+		{`(1 2 3)
+		134.
+		"abc"`, `test2:2: scan-error: invalid floating point literal starting: 134.`},
+	}
+
+	for i, test := range tests {
+		name := fmt.Sprintf("test%d", i)
+		p := New(token.NewScanner(name, strings.NewReader(test.source)))
+		_, err := p.ParseProgram()
+		if err == nil {
+			t.Errorf("test %d: did not produce an error", i)
+			continue
+		}
+		msg := err.Error()
+		assert.Equal(t, test.errmsg, msg)
 	}
 }

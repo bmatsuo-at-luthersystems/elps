@@ -17,6 +17,13 @@ type ErrorVal LVal
 // name of the function that generated the error will be printed preceding the
 // error, if the function can be determined.
 func (e *ErrorVal) Error() string {
+	if e.Source != nil {
+		return fmt.Sprintf("%s: %s", e.Source, e.baseMessage())
+	}
+	return e.baseMessage()
+}
+
+func (e *ErrorVal) baseMessage() string {
 	msg := e.ErrorMessage()
 	if e.Str != "error" {
 		return fmt.Sprintf("%s: %s", e.Str, msg)

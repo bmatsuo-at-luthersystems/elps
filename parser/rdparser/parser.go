@@ -314,6 +314,6 @@ func (p *Parser) Accept(typ ...token.Type) bool {
 
 func (p *Parser) errorf(condition string, format string, v ...interface{}) *lisp.LVal {
 	err := lisp.ErrorConditionf(condition, format, v...)
-	err.Source = p.src.Token.Source
+	err.Source = p.Location()
 	return err
 }
