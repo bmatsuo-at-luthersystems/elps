@@ -1,17 +1,21 @@
-package elpstest
+package lisp_test
 
-import "testing"
+import (
+	"testing"
+
+	"bitbucket.org/luthersystems/elps/elpstest"
+)
 
 func TestPackages(t *testing.T) {
-	tests := TestSuite{
-		{"basic namespace evaluation", TestSequence{
+	tests := elpstest.TestSuite{
+		{"basic namespace evaluation", elpstest.TestSequence{
 			// The lisp package contains all default builtins
 			{"(lisp:+ 2 3)", "5", ""},
 			{"(+ 2 3)", "5", ""},
 			{"(lisp:list 1 2 3)", "'(1 2 3)", ""},
 			{"(list 1 2 3)", "'(1 2 3)", ""},
 		}},
-		{"in-package", TestSequence{
+		{"in-package", elpstest.TestSequence{
 			// Switch into a new package and define a function
 			{"(in-package 'new-package)", "()", ""},
 			{"(defun fun (x) (+ x 1))", "()", ""},
@@ -21,7 +25,7 @@ func TestPackages(t *testing.T) {
 			{`(new-package:fun 2)`, `3`, ""},
 			{`(other-package:fun 2)`, `1`, ""},
 		}},
-		{"use-package", TestSequence{
+		{"use-package", elpstest.TestSequence{
 			// Define fun in a new-package
 			{"(in-package 'new-package)", "()", ""},
 			{"(defun fun (x) (internal x))", "()", ""},
@@ -39,5 +43,5 @@ func TestPackages(t *testing.T) {
 			{`(other-package:fun 2)`, `1`, ""},
 		}},
 	}
-	RunTestSuite(t, tests)
+	elpstest.RunTestSuite(t, tests)
 }

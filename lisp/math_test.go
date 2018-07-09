@@ -1,10 +1,14 @@
-package elpstest
+package lisp_test
 
-import "testing"
+import (
+	"testing"
+
+	"bitbucket.org/luthersystems/elps/elpstest"
+)
 
 func TestMath(t *testing.T) {
-	tests := TestSuite{
-		{"arithmetic", TestSequence{
+	tests := elpstest.TestSuite{
+		{"arithmetic", elpstest.TestSequence{
 			// arithmetic functions w/o args
 			{"(+)", "0", ""},
 			{"(-)", "0", ""},
@@ -36,12 +40,12 @@ func TestMath(t *testing.T) {
 			{"(mod -5 3)", "-2", ""},
 		}},
 	}
-	RunTestSuite(t, tests)
+	elpstest.RunTestSuite(t, tests)
 }
 
 func TestLogic(t *testing.T) {
-	tests := TestSuite{
-		{"logic", TestSequence{
+	tests := elpstest.TestSuite{
+		{"logic", elpstest.TestSequence{
 			{"(not true)", "false", ""},
 			{"(not ())", "true", ""},
 			{"(not false)", "true", ""},
@@ -88,7 +92,7 @@ func TestLogic(t *testing.T) {
 			{"(>= 2 1)", "true", ""},
 			{"(>= 2.0 1)", "true", ""},
 		}},
-		{"strings", TestSequence{
+		{"strings", elpstest.TestSequence{
 			{`(string= "" "")`, "true", ""},
 			{`(string= "abc" "abc")`, "true", ""},
 			{`(string= "abc" "ABC")`, `false`, ""},
@@ -116,7 +120,7 @@ func TestLogic(t *testing.T) {
 			{`(string>= "ABC" "abc")`, `false`, ""},
 			{`(string>= "abc" "abcdef")`, `false`, ""},
 		}},
-		{"equal?", TestSequence{
+		{"equal?", elpstest.TestSequence{
 			{`(equal? () ())`, "true", ""},
 			{`(equal? 2 2)`, "true", ""},
 			{`(equal? 2 3)`, `false`, ""},
@@ -129,7 +133,7 @@ func TestLogic(t *testing.T) {
 			{`(equal? "a" "a")`, "true", ""},
 			{`(equal? "a" "A")`, `false`, ""},
 		}},
-		{"aggregation", TestSequence{
+		{"aggregation", elpstest.TestSequence{
 			{"(max 1)", "1", ""},
 			{"(max 1 -1)", "1", ""},
 			{"(max 1 -1 2 3 -1 0)", "3", ""},
@@ -142,5 +146,5 @@ func TestLogic(t *testing.T) {
 			{"(any? (expr (> % 0)) '(0 -1 3 2))", "true", ""},
 		}},
 	}
-	RunTestSuite(t, tests)
+	elpstest.RunTestSuite(t, tests)
 }

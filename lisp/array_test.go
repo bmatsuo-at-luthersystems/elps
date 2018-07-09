@@ -1,10 +1,14 @@
-package elpstest
+package lisp_test
 
-import "testing"
+import (
+	"testing"
+
+	"bitbucket.org/luthersystems/elps/elpstest"
+)
 
 func TestArray(t *testing.T) {
-	tests := TestSuite{
-		{"vector", TestSequence{
+	tests := elpstest.TestSuite{
+		{"vector", elpstest.TestSequence{
 			{"(vector)", "(vector)", ""},
 			{"(vector 1 2 3)", "(vector 1 2 3)", ""},
 			{"(vector (vector 1 2 3))", "(vector (vector 1 2 3))", ""},
@@ -29,14 +33,14 @@ func TestArray(t *testing.T) {
 			{"(second (vector 1 2))", "2", ""},
 			{"(rest (vector 1 2))", "'(2)", ""},
 		}},
-		{"append!", TestSequence{
+		{"append!", elpstest.TestSequence{
 			{"(set 'v (vector))", "(vector)", ""},
 			{"(append! v 1)", "(vector 1)", ""},
 			{"(append! v 2)", "(vector 1 2)", ""},
 			{"(append! v 3)", "(vector 1 2 3)", ""},
 			{"v", "(vector 1 2 3)", ""},
 		}},
-		{"append 'vector", TestSequence{
+		{"append 'vector", elpstest.TestSequence{
 			{"(set 'v (vector))", "(vector)", ""},
 			{"(set 'v1 (append 'vector v 1))", "(vector 1)", ""},
 			{"(set 'v12 (append 'vector v1 2))", "(vector 1 2)", ""},
@@ -57,5 +61,5 @@ func TestArray(t *testing.T) {
 			{"v1234", "(vector 1 2 3 5)", ""},
 		}},
 	}
-	RunTestSuite(t, tests)
+	elpstest.RunTestSuite(t, tests)
 }

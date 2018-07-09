@@ -1,10 +1,14 @@
-package elpstest
+package lisp_test
 
-import "testing"
+import (
+	"testing"
+
+	"bitbucket.org/luthersystems/elps/elpstest"
+)
 
 func TestStack(t *testing.T) {
-	tests := TestSuite{
-		{"basic tail recursion optimization", TestSequence{
+	tests := elpstest.TestSuite{
+		{"basic tail recursion optimization", elpstest.TestSequence{
 			// One of the most trivial tail recursive functions.
 			{`(defun tr1 (x) (if (< 0 x) (tr1 (- x 1)) (debug-stack)))`, `()`, ``},
 			{`(let ([x 10]) (tr1 x))`, `()`, `Stack Trace [4 frames -- entrypoint last]:
@@ -46,5 +50,5 @@ func TestStack(t *testing.T) {
 `},
 		}},
 	}
-	RunTestSuite(t, tests)
+	elpstest.RunTestSuite(t, tests)
 }
