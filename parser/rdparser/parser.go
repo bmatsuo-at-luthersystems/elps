@@ -168,8 +168,8 @@ func (p *Parser) ParseNegative() *lisp.LVal {
 	}
 	switch p.PeekType() {
 	case token.INT, token.FLOAT, token.SYMBOL:
-		p.src.Peek.Source = p.Location()
-		p.src.Peek.Text = p.TokenText() + p.src.Peek.Text
+		p.src.Peek().Source = p.Location()
+		p.src.Peek().Text = p.TokenText() + p.src.Peek().Text
 	default:
 		return p.Symbol(p.TokenText())
 	}
@@ -259,11 +259,11 @@ func (p *Parser) Location() *token.Location {
 }
 
 func (p *Parser) PeekType() token.Type {
-	return p.src.Peek.Type
+	return p.src.Peek().Type
 }
 
 func (p *Parser) PeekLocation() *token.Location {
-	return p.src.Peek.Source
+	return p.src.Peek().Source
 }
 
 func (p *Parser) String(s string) *lisp.LVal {
