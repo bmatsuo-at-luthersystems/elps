@@ -85,7 +85,7 @@ func (p *Parser) ParseExpression() *lisp.LVal {
 		return p.errorf("scan-error", p.TokenText())
 	default:
 		p.ReadToken()
-		return p.errorf("unexpected-token", "%s unexpected %s", p.Location(), p.TokenType())
+		return p.errorf("unexpected-token", "unexpected %s", p.TokenType())
 	}
 }
 
@@ -187,7 +187,7 @@ func (p *Parser) ParseSymbol() *lisp.LVal {
 	if p.Accept(token.QUALIFY) {
 		if !p.Accept(token.SYMBOL) {
 			p.ReadToken()
-			return p.errorf("unexpected-token", "%s unexpected %s", p.src.Token.Source, p.src.Token.Type)
+			return p.errorf("unexpected-token", "unexpected %s", p.TokenType())
 		}
 		sym.Str += ":" + p.src.Token.Text
 	}
@@ -202,7 +202,7 @@ func (p *Parser) ParseKeyword() *lisp.LVal {
 	tok := p.src.Token
 	if !p.Accept(token.SYMBOL) {
 		p.ReadToken()
-		return p.errorf("unexpected-token", "%s unexpected %s", p.src.Token.Source, p.src.Token.Type)
+		return p.errorf("unexpected-token", "unexpected %s", p.TokenType())
 	}
 	sym := lisp.Symbol(":" + p.src.Token.Text)
 	sym.Source = tok.Source
@@ -316,7 +316,7 @@ func (p *Parser) QExpr(cells []*lisp.LVal) *lisp.LVal {
 }
 
 func (p *Parser) tokenLVal(v *lisp.LVal) *lisp.LVal {
-	v.Source = p.Location()
+	*v.Source = *p.Location()
 	return v
 }
 

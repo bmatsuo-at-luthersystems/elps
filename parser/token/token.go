@@ -89,6 +89,8 @@ type Location struct {
 
 func (loc *Location) String() string {
 	switch {
+	case loc.Pos < 0:
+		return fmt.Sprintf("%s", loc.File)
 	case loc.Line == 0:
 		return fmt.Sprintf("%s[%d]", loc.File, loc.Pos)
 	case loc.Col == 0:

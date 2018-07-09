@@ -556,8 +556,13 @@ eval:
 			v = res.Cells[0]
 			goto eval
 		}
-		if res.Type == LError && res.Stack == nil {
-			res.Stack = env.Runtime.Stack.Copy()
+		if res.Type == LError {
+			if res.Source == nil {
+				res.Source = env.Loc
+			}
+			if res.Stack == nil {
+				res.Stack = env.Runtime.Stack.Copy()
+			}
 		}
 		return res
 	case LQuote:
