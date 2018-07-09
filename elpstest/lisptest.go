@@ -8,12 +8,12 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"bitbucket.org/luthersystems/elps/lisp"
 	"bitbucket.org/luthersystems/elps/lisp/lisplib"
 	"bitbucket.org/luthersystems/elps/lisp/lisplib/libtesting"
-	"bitbucket.org/luthersystems/elps/parser"
 	"bitbucket.org/luthersystems/elps/parser/rdparser"
 )
 
@@ -201,7 +201,7 @@ func RunTestSuite(t *testing.T, tests TestSuite) {
 		env.Runtime.Reader = rdparser.NewReader()
 		for j, expr := range test.TestSequence {
 			exprBuf.Reset()
-			v, _, err := parser.ParseLVal([]byte(expr.Expr))
+			v, err := env.Runtime.Reader.Read("test", strings.NewReader(expr.Expr))
 			if err != nil {
 				t.Errorf("test %d %q: expr %d: parse error: %v", i, test.Name, j, err)
 				continue

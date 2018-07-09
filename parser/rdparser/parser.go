@@ -153,13 +153,15 @@ func (p *Parser) ParseUnbound() *lisp.LVal {
 	if expr.Type == lisp.LError {
 		return expr
 	}
+	sym := lisp.Symbol("lisp:expr")
+	sym.Source = expr.Source
 	// Ensure that the expression doesn't contain nested cons expressions.
 	for _, c := range expr.Cells {
 		if c.Type == lisp.LSExpr && !c.Quoted {
 			return p.errorf("unbound-expression-error", "unbound expression cannot contain nested expressions")
 		}
 	}
-	return lisp.SExpr([]*lisp.LVal{lisp.Symbol("lisp:expr"), expr})
+	return p.SExpr([]*lisp.LVal{sym, expr})
 }
 
 func (p *Parser) ParseNegative() *lisp.LVal {
@@ -168,8 +170,10 @@ func (p *Parser) ParseNegative() *lisp.LVal {
 	}
 	switch p.PeekType() {
 	case token.INT, token.FLOAT, token.SYMBOL:
-		p.src.Peek.Source = p.src.Token.Source
-		p.src.Peek.Text = "-" + p.src.Peek.Text
+		p.src.Peek.Source = p.Location()
+		p.src.Peek.Text = p.TokenText() + p.src.Peek.Text
+	default:
+		return p.Symbol(p.TokenText())
 	}
 	return p.ParseExpression()
 }
@@ -210,7 +214,7 @@ func (p *Parser) ParseConsExpression() *lisp.LVal {
 		return p.errorf("parse-error", "invalid symbol: %v", p.PeekType())
 	}
 	open := p.src.Token
-	expr := lisp.SExpr(nil)
+	expr := p.SExpr(nil)
 	for {
 		p.ignoreComments()
 		if p.src.IsEOF() {
@@ -233,7 +237,7 @@ func (p *Parser) ParseList() *lisp.LVal {
 		return p.errorf("parse-error", "invalid symbol: %v", p.PeekType())
 	}
 	open := p.src.Token
-	expr := lisp.QExpr(nil)
+	expr := p.QExpr(nil)
 	for {
 		if p.src.IsEOF() {
 			return p.errorf("unmatched-syntax", "unmatched %s", open.Text)
@@ -303,8 +307,16 @@ func (p *Parser) Quote(v *lisp.LVal) *lisp.LVal {
 	return p.tokenLVal(lisp.Quote(v))
 }
 
+func (p *Parser) SExpr(cells []*lisp.LVal) *lisp.LVal {
+	return p.tokenLVal(lisp.SExpr(cells))
+}
+
+func (p *Parser) QExpr(cells []*lisp.LVal) *lisp.LVal {
+	return p.tokenLVal(lisp.QExpr(cells))
+}
+
 func (p *Parser) tokenLVal(v *lisp.LVal) *lisp.LVal {
-	v.Source = p.src.Token.Source
+	v.Source = p.Location()
 	return v
 }
 

@@ -11,7 +11,7 @@ func TestFP(t *testing.T) {
 			// be tested in an earlier test (say eval_test.go) because the
 			// function id used in the error messages of anonymous functions
 			// is not deterministic.
-			{"(f 1 2 3)", "f: invalid number of arguments: 3", ""},
+			{"(f 1 2 3)", "test:1: f: invalid number of arguments: 3", ""},
 		}},
 		{"map-reduce", TestSequence{
 			{"(map 'list 'list '(1 2 3))", "'('(1) '(2) '(3))", ""},

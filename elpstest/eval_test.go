@@ -33,7 +33,7 @@ string"""`, `"\"\"a raw\nstring"`, ""},
 			{"false", "false", ""},
 			// A bit brittle, but it's ok for now. Replace with a more robust
 			// test later if problematic.
-			{"a", "unbound symbol: a", ""},
+			{"a", "test:1: unbound symbol: a", ""},
 		}},
 		{"lists basics", TestSequence{
 			{"'()", "'()", ""},
@@ -203,7 +203,7 @@ string"""`, `"\"\"a raw\nstring"`, ""},
 			{"(fn2 1 2)", "3", ""},
 		}},
 		{"errors", TestSequence{
-			{`(list 1 2 (error 'test-error "test message") 4)`, "test-error: test message", ""},
+			{`(list 1 2 (error 'test-error "test message") 4)`, "test:1: test-error: test message", ""},
 		}},
 	}
 	RunTestSuite(t, tests)

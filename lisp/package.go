@@ -76,7 +76,9 @@ func (pkg *Package) get(k *LVal) *LVal {
 		}
 		return v.Copy()
 	}
-	return Errorf("unbound symbol: %v", k)
+	lerr := Errorf("unbound symbol: %v", k)
+	lerr.Source = k.Source
+	return lerr
 }
 
 // Exports declares symbols exported by the package.  The symbols are not

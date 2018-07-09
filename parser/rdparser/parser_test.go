@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"bitbucket.org/luthersystems/elps/lisp"
 	"bitbucket.org/luthersystems/elps/parser/token"
 	"github.com/stretchr/testify/assert"
 )
@@ -81,7 +82,9 @@ func TestParser(t *testing.T) {
 
 	for i, test := range tests {
 		name := fmt.Sprintf("test%d", i)
-		p := New(token.NewScanner(name, strings.NewReader(test.source)))
+		t.Log(name)
+		s := token.NewScanner(name, strings.NewReader(test.source))
+		p := New(s)
 		exprs, err := p.ParseProgram()
 		if err != nil {
 			t.Errorf("test %d: parse error: %v", i, err)
@@ -94,9 +97,19 @@ func TestParser(t *testing.T) {
 			t.Errorf("test %d: parsed %d expressions", i, len(exprs))
 			continue
 		}
+		testLValLocation(t, exprs[0])
 		if exprs[0].String() != test.output {
 			t.Errorf("test %d: expected output: %s", i, test.output)
 		}
+	}
+}
+
+func testLValLocation(t *testing.T, v *lisp.LVal) {
+	if v.Source == nil {
+		t.Errorf("value missing source location: %v", v)
+	}
+	for _, v := range v.Cells {
+		testLValLocation(t, v)
 	}
 }
 

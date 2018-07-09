@@ -4,10 +4,10 @@ import "testing"
 
 func TestSpecialOp(t *testing.T) {
 	debugstack := `Stack Trace [4 frames -- entrypoint last]:
-  height 3: lisp:debug-stack
-  height 2: lisp:progn
-  height 1: lisp:let
-  height 0: lisp:let [terminal]
+  height 3: test:4: lisp:debug-stack
+  height 2: test:4: lisp:progn
+  height 1: test:2: lisp:let
+  height 0: test:1: lisp:let [terminal]
 `
 	tests := TestSuite{
 		{"if", TestSequence{

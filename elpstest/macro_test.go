@@ -16,9 +16,9 @@ func TestMacros(t *testing.T) {
 			{"(quasiquote (unquote '(reverse 'list '(1 2 3))))", "'(reverse 'list '(1 2 3))", ""},
 			{"(quasiquote (1 2 (unquote-splicing '(3 4)) 5))", "'(1 2 3 4 5)", ""},
 			{"(let ((xs '(2 1))) (quasiquote (concat 'list '(1 2) (unquote xs))))", "'(concat 'list '(1 2) '(2 1))", ""},
-			{"(quasiquote (unquote test-symbol))", "lisp:quasiquote: unbound symbol: test-symbol", ""},
-			{"(quasiquote (list (unquote-splicing test-symbol)))", "lisp:quasiquote: unbound symbol: test-symbol", ""},
-			{"(quasiquote (unquote-splicing '(+ 2 3)))", "lisp:quasiquote: unquote-splicing used in an invalid context", ""},
+			{"(quasiquote (unquote test-symbol))", "test:1: lisp:quasiquote: unbound symbol: test-symbol", ""},
+			{"(quasiquote (list (unquote-splicing test-symbol)))", "test:1: lisp:quasiquote: unbound symbol: test-symbol", ""},
+			{"(quasiquote (unquote-splicing '(+ 2 3)))", "test:1: lisp:quasiquote: unquote-splicing used in an invalid context", ""},
 		}},
 		{"defmacro", TestSequence{
 			{"(defmacro m0 () (quasiquote (+ 1 1)))", "()", ""},
