@@ -12,11 +12,8 @@ import (
 const miscWordRunes = "0123456789" + miscWordSymbols
 const miscWordSymbols = "._+-*/=<>!&~%?$"
 
-const megabyte = 1024 * 1024
-
 type Lexer struct {
 	scanner *token.Scanner
-	ch      rune // current unicode rune
 
 	// readErr is a reader from
 	readErr error
@@ -30,18 +27,17 @@ func New(s *token.Scanner) *Lexer {
 }
 
 func (lex *Lexer) NextToken() *token.Token {
-	if lex.readErr != nil {
-		return lex.emitError(lex.readErr, true)
+	lex.skipWhitespace()
+	if !lex.scanner.Accept(func(c rune) bool { return true }) {
+		if lex.scanner.EOF() {
+			return lex.emit(token.EOF, "")
+		}
+		err := lex.scanner.Err()
+		if err != nil {
+			lex.emitError(err, false)
+		}
 	}
-	lex.readErr = lex.skipWhitespace()
-	if lex.readErr != nil {
-		return lex.emitError(lex.readErr, true)
-	}
-	lex.readChar()
-	if lex.readErr != nil {
-		return lex.emitError(lex.readErr, true)
-	}
-	switch lex.ch {
+	switch lex.scanner.Rune() {
 	case '(':
 		return lex.charToken(token.PAREN_L)
 	case ')':
@@ -55,24 +51,15 @@ func (lex *Lexer) NextToken() *token.Token {
 	case '\'':
 		return lex.charToken(token.QUOTE)
 	case ';':
-		for lex.peekRune() != '\n' {
-			err := lex.readChar()
-			if err == io.EOF {
-				return lex.scanner.EmitToken(token.COMMENT)
-			}
-			if err != nil {
-				return lex.emitError(err, false)
-			}
-		}
-		if lex.readChar() != nil {
-			return lex.emit(token.ERROR, lex.readErr.Error())
-		}
+		lex.scanner.AcceptSeq(func(c rune) bool { return c != '\n' })
 		return lex.scanner.EmitToken(token.COMMENT)
 	case '#':
-		if lex.readChar() != nil {
-			return lex.emit(token.ERROR, lex.readErr.Error())
+		lex.readChar()
+		err := lex.scanner.Err()
+		if err != nil {
+			return lex.emitError(err, false)
 		}
-		switch lex.ch {
+		switch lex.scanner.Rune() {
 		case '^':
 			tok := lex.scanner.EmitToken(token.UNBOUND)
 			if unicode.IsSpace(lex.peekRune()) {
@@ -81,7 +68,7 @@ func (lex *Lexer) NextToken() *token.Token {
 			return tok
 		default:
 			lex.scanner.Ignore()
-			return lex.errorf("invalid meta character %q", lex.ch)
+			return lex.errorf("invalid meta character %q", lex.scanner.Rune())
 		}
 	case '-':
 		if unicode.IsSpace(lex.peekRune()) {
@@ -90,80 +77,55 @@ func (lex *Lexer) NextToken() *token.Token {
 		return lex.scanner.EmitToken(token.NEGATIVE)
 	case '"':
 		n := 0
-		for lex.peekRune() != '"' {
+		for lex.scanner.AcceptSeq(func(c rune) bool { return c != '"' && c != '\n' }) != 0 {
 			n++
-			err := lex.readChar()
-			if err != nil {
-				return lex.emitError(err, false)
+			if lex.scanner.Accept(func(c rune) bool { return c == '\n' }) {
+				return lex.errorf("unterminated string literal")
 			}
-			switch lex.ch {
-			case '\n':
-				return lex.errorf("invalid-string", "unterminated string literal")
-			case '\\':
+			if lex.scanner.Rune() == '\\' {
 				// Wait until parsing to check the escaped character
-				err := lex.readChar()
-				if err != nil {
-					return lex.emitError(err, false)
+				if !lex.scanner.Accept(func(c rune) bool { return true }) {
+					return lex.errorf("unterminated string literal %q", lex.peekRune())
 				}
 			}
 		}
-		if lex.peekRune() != '"' {
-			return lex.errorf("syntax-error", "unexpected rune %q", lex.peekRune())
+		if !lex.scanner.AcceptRune('"') {
+			if lex.scanner.EOF() {
+				return lex.errorf("unexpected EOF")
+			}
+			err := lex.scanner.Err()
+			if err != nil {
+				return lex.errorf("scan failure: %v", err)
+			}
+			return lex.errorf("unexpected rune %q", lex.peekRune())
 		}
-		err := lex.readChar()
-		if err != nil {
-			return lex.emitError(err, false)
-		}
-		if n > 0 || lex.peekRune() != '"' {
-			// This was a normal string (possibly empty)
+		if n > 0 {
+			// This was a normal string
 			return lex.scanner.EmitToken(token.STRING)
 		}
-		// This is a raw string -- consume the third quote.
-		err = lex.readChar()
-		if err != nil {
-			return lex.emitError(err, false)
+		if !lex.scanner.AcceptRune('"') {
+			// This is just an empty string -- not raw.
+			return lex.scanner.EmitToken(token.STRING)
 		}
+		// This is a raw string
 		for {
-			if lex.peekRune() == '"' {
-				err = lex.readChar()
-				if err != nil {
-					return lex.emitError(err, false)
-				}
-				if lex.peekRune() == '"' {
-					err = lex.readChar()
-					if err != nil {
-						return lex.emitError(err, false)
-					}
-					if lex.peekRune() == '"' {
-						err = lex.readChar()
-						if err != nil {
-							return lex.emitError(err, false)
-						}
-						return lex.scanner.EmitToken(token.STRING_RAW)
-					}
-				}
+			_, ok := lex.scanner.AcceptString(`"""`)
+			if ok {
+				return lex.scanner.EmitToken(token.STRING_RAW)
 			}
-
-			err = lex.readChar()
-			if err != nil {
-				return lex.emitError(err, false)
+			if !lex.scanner.Accept(func(c rune) bool { return true }) {
+				return lex.errorf("unterminated raw-string literal %q", lex.peekRune())
 			}
 		}
 	default:
-		if isDigit(lex.ch) {
+		if isDigit(lex.scanner.Rune()) {
 			return lex.readNumber()
 		}
-
-		if isWordStart(lex.ch) {
-			err := lex.readSymbol()
-			if err != nil {
-				return lex.emit(token.ERROR, err.Error())
-			}
-			return lex.scanner.EmitToken(token.SYMBOL)
+		if isWordStart(lex.scanner.Rune()) {
+			return lex.readSymbol()
 		}
-
-		lex.readErr = fmt.Errorf("unexpected text starting with %q", lex.ch)
-		return lex.emit(token.INVALID, lex.readErr.Error())
+		err := fmt.Errorf("unexpected text starting with %q", lex.scanner.Rune())
+		return lex.emit(token.INVALID, err.Error())
 	}
 }
 
@@ -196,36 +158,20 @@ func (lex *Lexer) charToken(typ token.Type) *token.Token {
 	return tok
 }
 
-func (lex *Lexer) readSymbol() error {
-	for isWord(lex.peekRune()) {
-		err := lex.readChar()
-		if err != nil {
-			return err
-		}
-	}
-	return nil
+func (lex *Lexer) readSymbol() *token.Token {
+	lex.scanner.AcceptSeq(isWord)
+	return lex.scanner.EmitToken(token.SYMBOL)
 }
 
 func (lex *Lexer) readNumber() *token.Token {
 	// TODO: support octal and hex integer literals
-
-	for isDigit(lex.peekRune()) {
-		err := lex.readChar()
-		if err != nil {
-			return lex.emitError(err, false)
-		}
-	}
-	switch lex.peekRune() {
-	case '.':
-		err := lex.readChar()
-		if err != nil {
-			return lex.emitError(err, false)
-		}
+	lex.scanner.AcceptSeqDigit() // the first digit already scanned
+	switch {
+	case lex.scanner.AcceptRune('.'):
 		return lex.readFloatFraction()
-	case 'e', 'E':
-		err := lex.readChar()
-		if err != nil {
-			return lex.emitError(err, false)
+	case lex.scanner.AcceptAny("eE"):
+		if !lex.scanner.Accept(func(c rune) bool { return true }) {
+			return lex.errorf("invalid floating point literal starting: %v", lex.scanner.Text())
 		}
 		return lex.readFloatExponent()
 	default:
@@ -236,20 +182,13 @@ func (lex *Lexer) readNumber() *token.Token {
 }
 
 func (lex *Lexer) readFloatFraction() *token.Token {
-	if !isDigit(lex.peekRune()) {
-		return lex.errorf("invalid floating point literal: %v", lex.scanner.Text())
+	if lex.scanner.AcceptSeqDigit() == 0 {
+		return lex.errorf("invalid floating point literal starting: %v", lex.scanner.Text())
 	}
-	for isDigit(lex.peekRune()) {
-		err := lex.readChar()
-		if err != nil {
-			return lex.emitError(err, false)
-		}
-	}
-	switch lex.peekRune() {
-	case 'e', 'E':
-		err := lex.readChar()
-		if err != nil {
-			return lex.emitError(err, false)
+	switch {
+	case lex.scanner.AcceptAny("eE"):
+		if !lex.scanner.Accept(func(c rune) bool { return true }) {
+			return lex.errorf("invalid floating point literal starting: %v", lex.scanner.Text())
 		}
 		return lex.readFloatExponent()
 	default:
@@ -258,34 +197,17 @@ func (lex *Lexer) readFloatFraction() *token.Token {
 }
 
 func (lex *Lexer) readFloatExponent() *token.Token {
-	switch lex.peekRune() {
-	case '+', '-':
-		err := lex.readChar()
-		if err != nil {
-			return lex.emitError(err, false)
-		}
-	}
-	if !isDigit(lex.peekRune()) {
-		return lex.errorf("invalid floating point literal: %v", lex.scanner.Text())
-	}
-	for isDigit(lex.peekRune()) {
-		err := lex.readChar()
-		if err != nil {
-			return lex.emitError(err, false)
-		}
+	lex.scanner.AcceptAny("+-") // optional sign
+	if lex.scanner.AcceptSeqDigit() == 0 {
+		return lex.errorf("invalid floating point literal starting: %v", lex.scanner.Text())
 	}
 	return lex.scanner.EmitToken(token.FLOAT)
 }
 
-func (lex *Lexer) skipWhitespace() error {
-	for unicode.IsSpace(lex.peekRune()) {
-		err := lex.readChar()
-		if err != nil {
-			return err
-		}
+func (lex *Lexer) skipWhitespace() {
+	if lex.scanner.AcceptSeqSpace() > 0 {
+		lex.scanner.Ignore()
 	}
-	lex.scanner.Ignore()
-	return nil
 }
 
 func (lex *Lexer) peekRune() rune {
@@ -294,29 +216,8 @@ func (lex *Lexer) peekRune() rune {
 }
 
 func (lex *Lexer) readChar() error {
-	lex.readErr = lex.scanner.ScanRune()
-	if lex.readErr != nil {
-		return lex.readErr
-	}
-	lex.ch = lex.scanner.Rune()
+	lex.scanner.ScanRune()
 	return nil
-}
-
-type InvalidUTF8Error struct {
-	File string
-	Pos  int
-	Line int // line number (starting at 1 when tracked)
-}
-
-func (err *InvalidUTF8Error) Error() string {
-	if err.Line > 0 {
-		return fmt.Sprintf("%s:%d: invalid utf-8 rune", err.File, err.Pos)
-	}
-	return fmt.Sprintf("%s: invalid utf-8 rune at byte %d", err.File, err.Pos)
-}
-
-func isLetter(c rune) bool {
-	return unicode.IsLetter(c) || c == '_'
 }
 
 func isWordStart(c rune) bool {

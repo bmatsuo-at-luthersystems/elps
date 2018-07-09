@@ -7,6 +7,23 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestScannerTokenLength(t *testing.T) {
+	const bufsize = 10
+	r := byteFiller('x')
+	s := newScannerBuf("", r, make([]byte, bufsize))
+	var err error
+	for i := 0; i < bufsize; i++ {
+		err = s.ScanRune()
+		if err != nil {
+			t.Error(err)
+		}
+	}
+	err = s.ScanRune()
+	if err == nil {
+		t.Errorf("expected token length error -- got rune: %v", s.Rune())
+	}
+}
+
 func TestScannerEOF(t *testing.T) {
 	r := &io.LimitedReader{
 		R: byteFiller('x'),
@@ -31,6 +48,25 @@ func TestScannerEOF(t *testing.T) {
 		if err != io.EOF {
 			t.Fatalf("Not EOF: %q %q %v", s.Rune(), s.buf, err)
 		}
+		if !s.EOF() {
+			t.Fatalf("Scanner does not think it is EOF")
+		}
+	}
+}
+
+func TestScannerAcceptSeq(t *testing.T) {
+	r := &io.LimitedReader{
+		R: byteFiller('x'),
+		N: 10,
+	}
+	s := newScannerBuf("", r, make([]byte, 20))
+	s.AcceptSeq(func(c rune) bool { return true })
+	s.Ignore()
+	if s.Accept(func(c rune) bool { return true }) {
+		t.Fatal("not EOF")
+	}
+	if !s.EOF() {
+		t.Fatal("not EOF")
 	}
 }
 

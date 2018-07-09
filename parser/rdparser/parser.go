@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"bitbucket.org/luthersystems/elps/lisp"
-	"bitbucket.org/luthersystems/elps/parser/lexer"
 	"bitbucket.org/luthersystems/elps/parser/token"
 )
 
@@ -27,33 +26,23 @@ func (_ *reader) Read(name string, r io.Reader) ([]*lisp.LVal, error) {
 
 // Parser is a lisp parser.
 type Parser struct {
-	lex  *lexer.Lexer
-	curr *token.Token
-	peek *token.Token
+	src *TokenSource
 }
 
 // New initializes and returns a new Parser that reads tokens from scanner.
 func New(scanner *token.Scanner) *Parser {
 	p := &Parser{
-		lex: lexer.New(scanner),
+		src: NewTokenSource(scanner),
 	}
-	p.initTokens()
 	return p
-}
-
-func (p *Parser) initTokens() {
-	// Setup the peek token so the parser is in the proper state when the first
-	// parse function is called.
-	p.ReadToken()
 }
 
 func (p *Parser) ParseProgram() ([]*lisp.LVal, error) {
 	var exprs []*lisp.LVal
 
 	for {
-		for p.expect(token.COMMENT) {
-		}
-		if p.expect(token.EOF) {
+		p.ignoreComments()
+		if p.src.IsEOF() {
 			break
 		}
 		expr := p.ParseExpression()
@@ -67,8 +56,7 @@ func (p *Parser) ParseProgram() ([]*lisp.LVal, error) {
 }
 
 func (p *Parser) ParseExpression() *lisp.LVal {
-	for p.expect(token.COMMENT) {
-	}
+	p.ignoreComments()
 	switch p.PeekType() {
 	case token.INT:
 		return p.ParseLiteralInt()
@@ -94,18 +82,18 @@ func (p *Parser) ParseExpression() *lisp.LVal {
 		return p.ParseList()
 	case token.ERROR, token.INVALID:
 		p.ReadToken()
-		return p.errorf("scan-error", p.Token().Text)
+		return p.errorf("scan-error", p.TokenText())
 	default:
 		p.ReadToken()
-		return p.errorf("unexpected-token", "%s unexpected %s", p.Token().Source, p.Token().Type)
+		return p.errorf("unexpected-token", "%s unexpected %s", p.Location(), p.TokenType())
 	}
 }
 
 func (p *Parser) ParseLiteralInt() *lisp.LVal {
-	if !p.expect(token.INT) {
+	if !p.Accept(token.INT) {
 		return p.errorf("parse-error", "invalid integer literal: %v", p.PeekType())
 	}
-	text := p.Token().Text
+	text := p.TokenText()
 	if strings.HasPrefix(text, "0") && text != "0" {
 		// TODO: octal and hex integer literals
 		return p.errorf("invalid-integer-literal", "integer literal starts with 0: %v", text)
@@ -118,34 +106,32 @@ func (p *Parser) ParseLiteralInt() *lisp.LVal {
 }
 
 func (p *Parser) ParseLiteralFloat() *lisp.LVal {
-	if !p.expect(token.FLOAT) {
+	if !p.Accept(token.FLOAT) {
 		return p.errorf("parse-error", "invalid float literal: %v", p.PeekType())
 	}
-	text := p.Token().Text
-	x, err := strconv.ParseFloat(text, 64)
+	x, err := strconv.ParseFloat(p.TokenText(), 64)
 	if err != nil {
-		return p.errorf("invalid-float", "invalid floating point literal: %v", text)
+		return p.errorf("invalid-float", "invalid floating point literal: %v", p.TokenText())
 	}
 	return p.Float(x)
 }
 
 func (p *Parser) ParseLiteralString() *lisp.LVal {
-	if !p.expect(token.STRING) {
+	if !p.Accept(token.STRING) {
 		return p.errorf("parse-error", "invalid string literal: %v", p.PeekType())
 	}
-	text := p.Token().Text
-	s, err := strconv.Unquote(text)
+	s, err := strconv.Unquote(p.TokenText())
 	if err != nil {
-		return p.errorf("invalid-float", "invalid string literal: %v", text)
+		return p.errorf("invalid-float", "invalid string literal: %v", p.TokenText())
 	}
 	return p.String(s)
 }
 
 func (p *Parser) ParseLiteralStringRaw() *lisp.LVal {
-	if !p.expect(token.STRING_RAW) {
+	if !p.Accept(token.STRING_RAW) {
 		return p.errorf("parse-error", "invalid raw string literal: %v", p.PeekType())
 	}
-	text := p.Token().Text
+	text := p.TokenText()
 	if len(text) < 6 {
 		panic("short raw string")
 	}
@@ -153,14 +139,14 @@ func (p *Parser) ParseLiteralStringRaw() *lisp.LVal {
 }
 
 func (p *Parser) ParseQuote() *lisp.LVal {
-	if !p.expect(token.QUOTE) {
+	if !p.Accept(token.QUOTE) {
 		return p.errorf("parse-error", "invalid quote: %v", p.PeekType())
 	}
 	return p.Quote(p.ParseExpression())
 }
 
 func (p *Parser) ParseUnbound() *lisp.LVal {
-	if !p.expect(token.UNBOUND) {
+	if !p.Accept(token.UNBOUND) {
 		return p.errorf("parse-error", "invalid quote: %v", p.PeekType())
 	}
 	expr := p.ParseExpression()
@@ -177,61 +163,60 @@ func (p *Parser) ParseUnbound() *lisp.LVal {
 }
 
 func (p *Parser) ParseNegative() *lisp.LVal {
-	if !p.expect(token.NEGATIVE) {
+	if !p.Accept(token.NEGATIVE) {
 		return p.errorf("parse-error", "invalid negative: %v", p.PeekType())
 	}
 	switch p.PeekType() {
 	case token.INT, token.FLOAT, token.SYMBOL:
-		p.peek.Source = p.curr.Source
-		p.peek.Text = "-" + p.peek.Text
+		p.src.Peek.Source = p.src.Token.Source
+		p.src.Peek.Text = "-" + p.src.Peek.Text
 	}
 	return p.ParseExpression()
 }
 
 func (p *Parser) ParseSymbol() *lisp.LVal {
-	if !p.expect(token.SYMBOL) {
+	if !p.Accept(token.SYMBOL) {
 		return p.errorf("parse-error", "invalid symbol: %v", p.PeekType())
 	}
-	tok := p.Token()
+	tok := p.src.Token
 	sym := p.Symbol(tok.Text)
-	if p.expect(token.QUALIFY) {
-		if !p.expect(token.SYMBOL) {
+	if p.Accept(token.QUALIFY) {
+		if !p.Accept(token.SYMBOL) {
 			p.ReadToken()
-			return p.errorf("unexpected-token", "%s unexpected %s", p.Token().Source, p.Token().Type)
+			return p.errorf("unexpected-token", "%s unexpected %s", p.src.Token.Source, p.src.Token.Type)
 		}
-		sym.Str += ":" + p.Token().Text
+		sym.Str += ":" + p.src.Token.Text
 	}
 	sym.Source = tok.Source
 	return sym
 }
 
 func (p *Parser) ParseKeyword() *lisp.LVal {
-	if !p.expect(token.QUALIFY) {
+	if !p.Accept(token.QUALIFY) {
 		return p.errorf("parse-error", "invalid symbol: %v", p.PeekType())
 	}
-	tok := p.Token()
-	if !p.expect(token.SYMBOL) {
+	tok := p.src.Token
+	if !p.Accept(token.SYMBOL) {
 		p.ReadToken()
-		return p.errorf("unexpected-token", "%s unexpected %s", p.Token().Source, p.Token().Type)
+		return p.errorf("unexpected-token", "%s unexpected %s", p.src.Token.Source, p.src.Token.Type)
 	}
-	sym := lisp.Symbol(":" + p.Token().Text)
+	sym := lisp.Symbol(":" + p.src.Token.Text)
 	sym.Source = tok.Source
 	return sym
 }
 
 func (p *Parser) ParseConsExpression() *lisp.LVal {
-	if !p.expect(token.PAREN_L) {
+	if !p.Accept(token.PAREN_L) {
 		return p.errorf("parse-error", "invalid symbol: %v", p.PeekType())
 	}
-	open := p.Token()
+	open := p.src.Token
 	expr := lisp.SExpr(nil)
 	for {
-		for p.expect(token.COMMENT) {
-		}
-		if p.expect(token.EOF) {
+		p.ignoreComments()
+		if p.src.IsEOF() {
 			return p.errorf("unmatched-syntax", "unmatched %s", open.Text)
 		}
-		if p.expect(token.PAREN_R) {
+		if p.Accept(token.PAREN_R) {
 			break
 		}
 		x := p.ParseExpression()
@@ -244,16 +229,16 @@ func (p *Parser) ParseConsExpression() *lisp.LVal {
 }
 
 func (p *Parser) ParseList() *lisp.LVal {
-	if !p.expect(token.BRACE_L) {
+	if !p.Accept(token.BRACE_L) {
 		return p.errorf("parse-error", "invalid symbol: %v", p.PeekType())
 	}
-	open := p.Token()
+	open := p.src.Token
 	expr := lisp.QExpr(nil)
 	for {
-		if p.expect(token.EOF) {
+		if p.src.IsEOF() {
 			return p.errorf("unmatched-syntax", "unmatched %s", open.Text)
 		}
-		if p.expect(token.BRACE_R) {
+		if p.Accept(token.BRACE_R) {
 			break
 		}
 		x := p.ParseExpression()
@@ -265,22 +250,34 @@ func (p *Parser) ParseList() *lisp.LVal {
 	return expr
 }
 
+func (p *Parser) ignoreComments() {
+	for p.Accept(token.COMMENT) {
+	}
+}
+
 func (p *Parser) ReadToken() *token.Token {
-	p.curr = p.peek
-	p.peek = p.lex.NextToken()
-	return p.curr
+	p.src.Scan()
+	return p.src.Token
 }
 
-func (p *Parser) Token() *token.Token {
-	return p.curr
+func (p *Parser) TokenText() string {
+	return p.src.Token.Text
 }
 
-func (p *Parser) Peek() *token.Token {
-	return p.peek
+func (p *Parser) TokenType() token.Type {
+	return p.src.Token.Type
+}
+
+func (p *Parser) Location() *token.Location {
+	return p.src.Token.Source
 }
 
 func (p *Parser) PeekType() token.Type {
-	return p.peek.Type
+	return p.src.Peek.Type
+}
+
+func (p *Parser) PeekLocation() *token.Location {
+	return p.src.Peek.Source
 }
 
 func (p *Parser) String(s string) *lisp.LVal {
@@ -307,26 +304,16 @@ func (p *Parser) Quote(v *lisp.LVal) *lisp.LVal {
 }
 
 func (p *Parser) tokenLVal(v *lisp.LVal) *lisp.LVal {
-	v.Source = p.Token().Source
+	v.Source = p.src.Token.Source
 	return v
 }
 
-func (p *Parser) expect(typ ...token.Type) bool {
-	peekType := p.peek.Type
-	if len(typ) == 0 {
-		return peekType != token.EOF
-	}
-	for _, typ := range typ {
-		if typ == peekType {
-			p.ReadToken()
-			return true
-		}
-	}
-	return false
+func (p *Parser) Accept(typ ...token.Type) bool {
+	return p.src.AcceptType(typ...)
 }
 
 func (p *Parser) errorf(condition string, format string, v ...interface{}) *lisp.LVal {
 	err := lisp.ErrorConditionf(condition, format, v...)
-	err.Source = p.Token().Source
+	err.Source = p.src.Token.Source
 	return err
 }

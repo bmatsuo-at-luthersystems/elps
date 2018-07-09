@@ -2,6 +2,19 @@ package token
 
 import "fmt"
 
+// Source is an abstract stream of tokens which allows one token lookahead.
+type Source interface {
+	// Token returns the current token.  Token returns nil if Scan has not been
+	// called.
+	Token() *Token
+	// Peek returns the next token in the stream.  At the end of the stream
+	// Peek should return a value to indicate the lack of a token (EOF).
+	Peek() *Token
+	// Scan advances the token stream if possible.  If there are no tokens
+	// remaining Scan returns false.
+	Scan() bool
+}
+
 type Token struct {
 	Type   Type
 	Text   string
@@ -83,4 +96,13 @@ func (loc *Location) String() string {
 	default:
 		return fmt.Sprintf("%s:%d:%d", loc.File, loc.Line, loc.Col)
 	}
+}
+
+type LocationError struct {
+	Err    error
+	Source *Location
+}
+
+func (err *LocationError) Error() string {
+	return fmt.Sprintf("%s: %s", err.Source, err.Err)
 }

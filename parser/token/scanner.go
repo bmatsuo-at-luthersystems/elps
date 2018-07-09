@@ -3,6 +3,8 @@ package token
 import (
 	"fmt"
 	"io"
+	"strings"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -144,6 +146,174 @@ func (s *Scanner) scan(r Rune) {
 	}
 }
 
+// Err returns an error encountered during the last read on the input stream.
+// Err will always return false while there are still buffered runes that need
+// to be accepted.
+func (s *Scanner) Err() error {
+	if s.readErr == nil {
+		return nil
+	}
+	if s.readErr == io.EOF {
+		return nil
+	}
+	if len(s.buf) == s.next {
+		// No buffer space remaining to be accepted
+		return s.readErr
+	}
+	if len(s.buf)-s.next < utf8.UTFMax {
+		c, n := utf8.DecodeRune(s.buf[s.next:])
+		if c == utf8.RuneError && n == 1 {
+			// Not possible to scan another valid rune -- possibly truncated
+			// utf-8 sequence.
+			return s.readErr
+		}
+	}
+	// There are still runes to consume before the error needs to be reported.
+	return nil
+}
+
+func (s *Scanner) EOF() bool {
+	if len(s.buf) == 0 {
+		return true
+	}
+	if s.readErr == nil {
+		return false
+	}
+	if s.readErr != io.EOF {
+		return false
+	}
+	return s.next >= len(s.buf)
+}
+
+func (s *Scanner) Accept(fn func(rune) bool) bool {
+	peek, ok := s.Peek()
+	if !ok {
+		return false
+	}
+	if fn(peek) {
+		err := s.ScanRune()
+		if err != nil {
+			return false
+		}
+		return true
+	}
+	return false
+}
+
+func (s *Scanner) AcceptRune(c rune) bool {
+	peek, ok := s.Peek()
+	if !ok {
+		return false
+	}
+	if peek == c {
+		err := s.ScanRune()
+		if err != nil {
+			return false
+		}
+		return true
+	}
+	return false
+}
+
+func (s *Scanner) AcceptDigit() bool {
+	peek, ok := s.Peek()
+	if !ok {
+		return false
+	}
+	if '0' <= peek && peek <= '9' {
+		err := s.ScanRune()
+		if err != nil {
+			return false
+		}
+		return true
+	}
+	return false
+}
+
+func (s *Scanner) AcceptSpace() bool {
+	peek, ok := s.Peek()
+	if !ok {
+		return false
+	}
+	if unicode.IsSpace(peek) {
+		err := s.ScanRune()
+		if err != nil {
+			return false
+		}
+		return true
+	}
+	return false
+}
+
+func (s *Scanner) AcceptAny(charset string) bool {
+	if len(charset) == 1 {
+		return s.AcceptRune(rune(charset[0]))
+	}
+	peek, ok := s.Peek()
+	if !ok {
+		return false
+	}
+	if strings.ContainsRune(charset, peek) {
+		err := s.ScanRune()
+		if err != nil {
+			return false
+		}
+		return true
+	}
+	return false
+}
+
+func (s *Scanner) AcceptSeq(fn func(rune) bool) int {
+	var n int
+	for s.Accept(fn) {
+		n++
+	}
+	return n
+}
+
+func (s *Scanner) AcceptSeqRune(c rune) int {
+	var n int
+	for s.AcceptRune(c) {
+		n++
+	}
+	return n
+}
+
+func (s *Scanner) AcceptSeqAny(charset string) int {
+	var n int
+	for s.AcceptAny(charset) {
+		n++
+	}
+	return n
+}
+
+func (s *Scanner) AcceptSeqDigit() int {
+	var n int
+	for s.AcceptDigit() {
+		n++
+	}
+	return n
+}
+
+func (s *Scanner) AcceptSeqSpace() int {
+	var n int
+	for s.AcceptSpace() {
+		n++
+	}
+	return n
+}
+
+func (s *Scanner) AcceptString(literal string) (int, bool) {
+	var n int
+	for _, c := range literal {
+		if !s.AcceptRune(c) {
+			return n, false
+		}
+		n++
+	}
+	return n, true
+}
+
 func (s *Scanner) checkRuneError() error {
 	if s.c.IsRuneError() {
 		return fmt.Errorf("invalid utf-8 sequence in source text starting with byte %q", s.buf[s.pos])
@@ -180,8 +350,13 @@ func (s *Scanner) checkExtend() error {
 	if rem < utf8.UTFMax {
 		s.extend()
 	}
-	if len(s.buf)-s.next == 0 {
+	if len(s.buf) == 0 {
 		return io.EOF
+	}
+	if s.next == len(s.buf) {
+		// If this is happening then we haven't seen EOF and the extension
+		// routine was anable to do anything to extend the buffer.
+		return fmt.Errorf("token exceeds maximum allowable size")
 	}
 	return nil
 }
@@ -204,8 +379,6 @@ func (s *Scanner) extend() bool {
 func (s *Scanner) fill(end int) {
 	if s.readErr == io.EOF {
 		s.buf = s.buf[:end]
-	} else if s.readErr != nil {
-		return
 	}
 	n, err := io.ReadFull(s.r, s.buf[end:])
 	s.buf = s.buf[:end+n]
