@@ -1,4 +1,4 @@
-package parser_test
+package reparser_test
 
 import (
 	"path/filepath"
@@ -6,10 +6,10 @@ import (
 	"testing"
 
 	"bitbucket.org/luthersystems/elps/elpstest"
-	"bitbucket.org/luthersystems/elps/parser"
+	"bitbucket.org/luthersystems/elps/parser/reparser"
 )
 
-const fixtureDir = "testfixtures"
+const fixtureDir = "../testfixtures"
 
 func BenchmarkParser(b *testing.B) {
 	files, err := filepath.Glob(filepath.Join(fixtureDir, "*.lisp"))
@@ -18,6 +18,6 @@ func BenchmarkParser(b *testing.B) {
 	}
 	sort.Strings(files) // should be redundant
 	for _, path := range files {
-		b.Run(filepath.Base(path), elpstest.BenchmarkParse(path, parser.NewReader))
+		b.Run(filepath.Base(path), elpstest.BenchmarkParse(path, reparser.NewReader))
 	}
 }
