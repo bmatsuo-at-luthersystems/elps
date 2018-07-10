@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -28,15 +29,19 @@ var runCmd = &cobra.Command{
 		}
 
 		env := lisp.NewEnv(nil)
+		reader := parser.NewReader()
 		for i := range exprs {
-			complete, err := parser.Parse(env, runPrint, exprs[i])
+			vals, err := reader.Read("run", bytes.NewReader(exprs[i]))
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(1)
 			}
-			if !complete {
-				fmt.Fprintln(os.Stderr, "syntax error")
-				os.Exit(1)
+			for _, val := range vals {
+				err := lisp.GoError(env.Eval(val))
+				if err != nil {
+					fmt.Fprintln(os.Stderr, err)
+					os.Exit(1)
+				}
 			}
 		}
 	},

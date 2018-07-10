@@ -14,7 +14,7 @@ import (
 	"bitbucket.org/luthersystems/elps/lisp"
 	"bitbucket.org/luthersystems/elps/lisp/lisplib"
 	"bitbucket.org/luthersystems/elps/lisp/lisplib/libtesting"
-	"bitbucket.org/luthersystems/elps/parser/rdparser"
+	"bitbucket.org/luthersystems/elps/parser"
 )
 
 func BenchmarkParse(path string, r func() lisp.Reader) func(*testing.B) {
@@ -52,7 +52,7 @@ func (r *Runner) NewEnv(t *testing.T) (*lisp.LEnv, error) {
 	runtime := &lisp.Runtime{
 		Registry: lisp.NewRegistry(),
 		Stack:    &lisp.CallStack{},
-		Reader:   rdparser.NewReader(),
+		Reader:   parser.NewReader(),
 		Stderr:   logger,
 	}
 	env := lisp.NewEnvRuntime(runtime)
@@ -198,7 +198,7 @@ func RunTestSuite(t *testing.T, tests TestSuite) {
 		var exprBuf bytes.Buffer
 		env.Runtime.Stderr = io.MultiWriter(os.Stderr, &exprBuf)
 		env.InPackage(lisp.String(lisp.DefaultUserPackage))
-		env.Runtime.Reader = rdparser.NewReader()
+		env.Runtime.Reader = parser.NewReader()
 		for j, expr := range test.TestSequence {
 			exprBuf.Reset()
 			v, err := env.Runtime.Reader.Read("test", strings.NewReader(expr.Expr))

@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"bitbucket.org/luthersystems/elps/lisp"
-	"bitbucket.org/luthersystems/elps/parser/rdparser"
+	"bitbucket.org/luthersystems/elps/parser"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -41,7 +41,7 @@ func TestRuntimeErrors(t *testing.T) {
 
 func TestLoadErrors(t *testing.T) {
 	env := lisp.NewEnv(nil)
-	env.Runtime.Reader = rdparser.NewReader()
+	env.Runtime.Reader = parser.NewReader()
 	lerr := lisp.InitializeUserEnv(env)
 	if lisp.GoError(lerr) != nil {
 		t.Fatal(lisp.GoError(lerr))

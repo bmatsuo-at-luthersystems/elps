@@ -1,4 +1,4 @@
-package reparser_test
+package regexparser_test
 
 import (
 	"path/filepath"
@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"bitbucket.org/luthersystems/elps/elpstest"
-	"bitbucket.org/luthersystems/elps/parser/reparser"
+	"bitbucket.org/luthersystems/elps/parser/regexparser"
 )
 
 const fixtureDir = "../testfixtures"
@@ -18,6 +18,6 @@ func BenchmarkParser(b *testing.B) {
 	}
 	sort.Strings(files) // should be redundant
 	for _, path := range files {
-		b.Run(filepath.Base(path), elpstest.BenchmarkParse(path, reparser.NewReader))
+		b.Run(filepath.Base(path), elpstest.BenchmarkParse(path, regexparser.NewReader))
 	}
 }
