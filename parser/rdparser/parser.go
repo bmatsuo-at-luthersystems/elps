@@ -26,15 +26,20 @@ func (_ *reader) Read(name string, r io.Reader) ([]*lisp.LVal, error) {
 
 // Parser is a lisp parser.
 type Parser struct {
-	src *TokenSource
+	parsing bool
+	src     *TokenSource
+}
+
+// NewFromSource initializes and returns a Parser that reads tokens from src.
+func NewFromSource(src *TokenSource) *Parser {
+	return &Parser{
+		src: src,
+	}
 }
 
 // New initializes and returns a new Parser that reads tokens from scanner.
 func New(scanner *token.Scanner) *Parser {
-	p := &Parser{
-		src: NewTokenSource(scanner),
-	}
-	return p
+	return NewFromSource(NewTokenSource(scanner))
 }
 
 func (p *Parser) ParseProgram() ([]*lisp.LVal, error) {
@@ -56,34 +61,51 @@ func (p *Parser) ParseProgram() ([]*lisp.LVal, error) {
 }
 
 func (p *Parser) ParseExpression() *lisp.LVal {
+	fn := p.parseExpression()
+
+	// We have a token marking the beginning of an expression.  Flag that we
+	// are currently in the middle of an expression while we finish parsing the
+	// expression so that an Interactive parser can determine what state we are
+	// in (and thus imply what the REPL prompt should be).
+	p.parsing = true
+	defer func() { p.parsing = false }()
+
+	return fn(p)
+}
+
+func (p *Parser) parseExpression() func(p *Parser) *lisp.LVal {
 	p.ignoreComments()
 	switch p.PeekType() {
 	case token.INT:
-		return p.ParseLiteralInt()
+		return (*Parser).ParseLiteralInt
 	case token.FLOAT:
-		return p.ParseLiteralFloat()
+		return (*Parser).ParseLiteralFloat
 	case token.STRING:
-		return p.ParseLiteralString()
+		return (*Parser).ParseLiteralString
 	case token.STRING_RAW:
-		return p.ParseLiteralStringRaw()
+		return (*Parser).ParseLiteralStringRaw
 	case token.NEGATIVE:
-		return p.ParseNegative()
+		return (*Parser).ParseNegative
 	case token.QUOTE:
-		return p.ParseQuote()
+		return (*Parser).ParseQuote
 	case token.UNBOUND:
-		return p.ParseUnbound()
+		return (*Parser).ParseUnbound
 	case token.SYMBOL:
-		return p.ParseSymbol()
+		return (*Parser).ParseSymbol
 	case token.PAREN_L:
-		return p.ParseConsExpression()
+		return (*Parser).ParseConsExpression
 	case token.BRACE_L:
-		return p.ParseList()
+		return (*Parser).ParseList
 	case token.ERROR, token.INVALID:
-		p.ReadToken()
-		return p.errorf("scan-error", p.TokenText())
+		return func(p *Parser) *lisp.LVal {
+			p.ReadToken()
+			return p.errorf("scan-error", p.TokenText())
+		}
 	default:
-		p.ReadToken()
-		return p.errorf("unexpected-token", "unexpected %s", p.TokenType())
+		return func(p *Parser) *lisp.LVal {
+			p.ReadToken()
+			return p.errorf("unexpected-token", "unexpected %s", p.TokenType())
+		}
 	}
 }
 

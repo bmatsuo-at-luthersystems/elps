@@ -71,7 +71,11 @@ testloop:
 		var tokens []*token.Token
 		numToken := 0
 		for {
-			tok := lex.NextToken()
+			toks := lex.ReadToken()
+			if len(toks) != 1 {
+				t.Fatalf("test %d: lexer returned %d tokens", i, len(toks))
+			}
+			tok := toks[0]
 			tok.Source = nil
 			tokens = append(tokens, tok)
 			if tok.Type == token.EOF || tok.Type == token.ERROR {

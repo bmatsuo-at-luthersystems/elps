@@ -26,7 +26,7 @@ func New(s *token.Scanner) *Lexer {
 	return lex
 }
 
-func (lex *Lexer) NextToken() *token.Token {
+func (lex *Lexer) ReadToken() []*token.Token {
 	lex.skipWhitespace()
 	if !lex.scanner.Accept(func(c rune) bool { return true }) {
 		if lex.scanner.EOF() {
@@ -52,7 +52,7 @@ func (lex *Lexer) NextToken() *token.Token {
 		return lex.readSymbol()
 	case ';':
 		lex.scanner.AcceptSeq(func(c rune) bool { return c != '\n' })
-		return lex.scanner.EmitToken(token.COMMENT)
+		return lex.emitText(token.COMMENT)
 	case '#':
 		lex.readChar()
 		err := lex.scanner.Err()
@@ -61,9 +61,9 @@ func (lex *Lexer) NextToken() *token.Token {
 		}
 		switch lex.scanner.Rune() {
 		case '^':
-			tok := lex.scanner.EmitToken(token.UNBOUND)
+			tok := lex.emitText(token.UNBOUND)
 			if unicode.IsSpace(lex.peekRune()) {
-				return lex.errorf("whitespace following %s", tok.Text)
+				return lex.errorf("whitespace following %s", tok[0].Text)
 			}
 			return tok
 		default:
@@ -72,9 +72,9 @@ func (lex *Lexer) NextToken() *token.Token {
 		}
 	case '-':
 		if unicode.IsSpace(lex.peekRune()) {
-			return lex.scanner.EmitToken(token.SYMBOL)
+			return lex.emitText(token.SYMBOL)
 		}
-		return lex.scanner.EmitToken(token.NEGATIVE)
+		return lex.emitText(token.NEGATIVE)
 	case '"':
 		n := 0
 		for lex.scanner.AcceptSeq(func(c rune) bool { return c != '"' && c != '\n' }) != 0 {
@@ -101,17 +101,17 @@ func (lex *Lexer) NextToken() *token.Token {
 		}
 		if n > 0 {
 			// This was a normal string
-			return lex.scanner.EmitToken(token.STRING)
+			return lex.emitText(token.STRING)
 		}
 		if !lex.scanner.AcceptRune('"') {
 			// This is just an empty string -- not raw.
-			return lex.scanner.EmitToken(token.STRING)
+			return lex.emitText(token.STRING)
 		}
 		// This is a raw string
 		for {
 			_, ok := lex.scanner.AcceptString(`"""`)
 			if ok {
-				return lex.scanner.EmitToken(token.STRING_RAW)
+				return lex.emitText(token.STRING_RAW)
 			}
 			if !lex.scanner.Accept(func(c rune) bool { return true }) {
 				return lex.errorf("unterminated raw-string literal %q", lex.peekRune())
@@ -129,17 +129,21 @@ func (lex *Lexer) NextToken() *token.Token {
 	}
 }
 
-func (lex *Lexer) emit(typ token.Type, text string) *token.Token {
-	tok := &token.Token{
+func (lex *Lexer) emit(typ token.Type, text string) []*token.Token {
+	tok := []*token.Token{&token.Token{
 		Type:   typ,
 		Text:   text,
 		Source: lex.scanner.LocStart(),
-	}
+	}}
 	lex.scanner.Ignore()
 	return tok
 }
 
-func (lex *Lexer) emitError(err error, expectEOF bool) *token.Token {
+func (lex *Lexer) emitText(typ token.Type) []*token.Token {
+	return []*token.Token{lex.scanner.EmitToken(typ)}
+}
+
+func (lex *Lexer) emitError(err error, expectEOF bool) []*token.Token {
 	if err == io.EOF {
 		if expectEOF {
 			return lex.emit(token.EOF, "")
@@ -149,26 +153,26 @@ func (lex *Lexer) emitError(err error, expectEOF bool) *token.Token {
 	return lex.emit(token.ERROR, err.Error())
 }
 
-func (lex *Lexer) errorf(format string, v ...interface{}) *token.Token {
+func (lex *Lexer) errorf(format string, v ...interface{}) []*token.Token {
 	return lex.emitError(fmt.Errorf(format, v...), false)
 }
 
-func (lex *Lexer) charToken(typ token.Type) *token.Token {
+func (lex *Lexer) charToken(typ token.Type) []*token.Token {
 	tok := lex.scanner.EmitToken(typ)
-	return tok
+	return []*token.Token{tok}
 }
 
-func (lex *Lexer) readSymbol() *token.Token {
+func (lex *Lexer) readSymbol() []*token.Token {
 	lex.scanner.AcceptSeq(isWord)
 	if lex.scanner.AcceptRune(':') {
 		// This may produce an invalid symbol that should be detected during
 		// parsing.
 		return lex.readSymbol()
 	}
-	return lex.scanner.EmitToken(token.SYMBOL)
+	return lex.emitText(token.SYMBOL)
 }
 
-func (lex *Lexer) readNumber() *token.Token {
+func (lex *Lexer) readNumber() []*token.Token {
 	// TODO: support octal and hex integer literals
 	lex.scanner.AcceptSeqDigit() // the first digit already scanned
 	switch {
@@ -180,13 +184,13 @@ func (lex *Lexer) readNumber() *token.Token {
 		}
 		return lex.readFloatExponent()
 	default:
-		return lex.scanner.EmitToken(token.INT)
+		return lex.emitText(token.INT)
 	}
 	// the returned string may not actually be a usable number (overflow), but
 	// we can find that out at parse time -- not scan time.
 }
 
-func (lex *Lexer) readFloatFraction() *token.Token {
+func (lex *Lexer) readFloatFraction() []*token.Token {
 	if lex.scanner.AcceptSeqDigit() == 0 {
 		return lex.errorf("invalid floating point literal starting: %v", lex.scanner.Text())
 	}
@@ -197,16 +201,16 @@ func (lex *Lexer) readFloatFraction() *token.Token {
 		}
 		return lex.readFloatExponent()
 	default:
-		return lex.scanner.EmitToken(token.FLOAT)
+		return lex.emitText(token.FLOAT)
 	}
 }
 
-func (lex *Lexer) readFloatExponent() *token.Token {
+func (lex *Lexer) readFloatExponent() []*token.Token {
 	lex.scanner.AcceptAny("+-") // optional sign
 	if lex.scanner.AcceptSeqDigit() == 0 {
 		return lex.errorf("invalid floating point literal starting: %v", lex.scanner.Text())
 	}
-	return lex.scanner.EmitToken(token.FLOAT)
+	return lex.emitText(token.FLOAT)
 }
 
 func (lex *Lexer) skipWhitespace() {
