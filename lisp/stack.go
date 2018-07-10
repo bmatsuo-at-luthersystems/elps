@@ -6,6 +6,8 @@ import (
 	"io"
 	"log"
 	"os"
+
+	"bitbucket.org/luthersystems/elps/parser/token"
 )
 
 // CallStack is a function call stack.
@@ -15,6 +17,7 @@ type CallStack struct {
 
 // CallFrame is one frame in the CallStack
 type CallFrame struct {
+	Source   *token.Location
 	FID      string
 	Package  string
 	Name     string
@@ -46,6 +49,31 @@ func (f *CallFrame) QualifiedFunName(ignore ...string) string {
 	buf.WriteString(":")
 	buf.WriteString(name)
 	return buf.String()
+}
+
+func (f *CallFrame) String() string {
+	if f.Source != nil {
+		return fmt.Sprintf("%s: %s", f.Source, f.desc())
+	}
+	return f.desc()
+}
+
+func (f *CallFrame) desc() string {
+	var mod bytes.Buffer
+	if f.Terminal {
+		mod.WriteString(" [terminal]")
+	}
+	if f.TROBlock {
+		mod.WriteString(" [tro-blocked]")
+	}
+	name := f.FID
+	if f.Name != "" {
+		name = f.Name
+	}
+	if f.Package != "" {
+		name = f.Package + ":" + name
+	}
+	return fmt.Sprintf("%s%s", name, mod.String())
 }
 
 // Copy creates a copy of the current stack so that it can be attach to a
@@ -109,8 +137,13 @@ func (s *CallStack) TerminalFID(fid string) int {
 }
 
 // PushFID pushes a new stack frame with the given FID onto s.
-func (s *CallStack) PushFID(fid, pkg, name string) {
-	s.Frames = append(s.Frames, CallFrame{FID: fid, Package: pkg, Name: name})
+func (s *CallStack) PushFID(src *token.Location, fid, pkg, name string) {
+	s.Frames = append(s.Frames, CallFrame{
+		Source:  src,
+		FID:     fid,
+		Package: pkg,
+		Name:    name,
+	})
 }
 
 // Pop removes the top CallFrame from the stack and returns it.  If the stack
@@ -133,22 +166,8 @@ func (s *CallStack) DebugPrint(w io.Writer) (int, error) {
 	}
 	indent := "  "
 	for i := len(s.Frames) - 1; i >= 0; i-- {
-		f := s.Frames[i]
-		var mod bytes.Buffer
-		if f.Terminal {
-			mod.WriteString(" [terminal]")
-		}
-		if f.TROBlock {
-			mod.WriteString(" [tro-blocked]")
-		}
-		name := f.FID
-		if f.Name != "" {
-			name = f.Name
-		}
-		if f.Package != "" {
-			name = f.Package + ":" + name
-		}
-		_n, err := fmt.Fprintf(w, "%sheight %d: %s%s\n", indent, i, name, mod.String())
+		fstr := s.Frames[i].String()
+		_n, err := fmt.Fprintf(w, "%sheight %d: %s\n", indent, i, fstr)
 		n += _n
 		if err != nil {
 			return n, err

@@ -1,31 +1,33 @@
-package elpstest
+package lisp_test
 
 import (
 	"testing"
+
+	"bitbucket.org/luthersystems/elps/elpstest"
 )
 
 func TestEval(t *testing.T) {
-	tests := TestSuite{
-		{"raw strings", TestSequence{
+	tests := elpstest.TestSuite{
+		{"raw strings", elpstest.TestSequence{
 			{`"""a raw string"""`, `"a raw string"`, ""},
 			{`"""a raw
 string"""`, `"a raw\nstring"`, ""},
 			{`"""""a raw
 string"""`, `"\"\"a raw\nstring"`, ""},
 		}},
-		{"string escape sequences", TestSequence{
+		{"string escape sequences", elpstest.TestSequence{
 			{`"a string"`, `"a string"`, ""},
 			{`"a\nstring"`, `"a\nstring"`, ""},
 			{`"\"\"a\nstring"`, `"\"\"a\nstring"`, ""},
 		}},
-		{"quotes", TestSequence{
+		{"quotes", elpstest.TestSequence{
 			{"3", "3", ""},
 			// a single quote on a self-evaluating expression does not show up.
 			{"'3", "3", ""},
 			// a double quotes on a self-evaluating expression both show up.
 			{"''3", "''3", ""},
 		}},
-		{"symbols", TestSequence{
+		{"symbols", elpstest.TestSequence{
 			{"()", "()", ""},
 			{"'true", "'true", ""},
 			{"true", "true", ""},
@@ -33,9 +35,9 @@ string"""`, `"\"\"a raw\nstring"`, ""},
 			{"false", "false", ""},
 			// A bit brittle, but it's ok for now. Replace with a more robust
 			// test later if problematic.
-			{"a", "unbound symbol: a", ""},
+			{"a", "test:1: unbound symbol: a", ""},
 		}},
-		{"lists basics", TestSequence{
+		{"lists basics", elpstest.TestSequence{
 			{"'()", "'()", ""},
 			{"'(1 2 3)", "'(1 2 3)", ""},
 			{"(nth '() 0)", "()", ""},
@@ -51,7 +53,7 @@ string"""`, `"\"\"a raw\nstring"`, ""},
 			{`(cdr '(1))`, `()`, ``},
 			{`(car '(a b c))`, `a`, ``}, // not quoted
 		}},
-		{"types", TestSequence{
+		{"types", elpstest.TestSequence{
 			{`(symbol? true)`, `true`, ""},
 			{`(symbol? false)`, `true`, ""},
 			{`(symbol? 1)`, `false`, ""},
@@ -110,7 +112,7 @@ string"""`, `"\"\"a raw\nstring"`, ""},
 			{`(sorted-map? (vector 1 2 3))`, `false`, ""},
 			{`(sorted-map? (sorted-map))`, `true`, ""},
 		}},
-		{"function basics", TestSequence{
+		{"function basics", elpstest.TestSequence{
 			{"(lambda ())", "(lambda ())", ""},
 			{"((lambda ()))", "()", ""},
 			{"(lambda (x) x)", "(lambda (x) x)", ""},
@@ -122,13 +124,13 @@ string"""`, `"\"\"a raw\nstring"`, ""},
 			{"((lambda (x &rest y) (cons x y)) 1 2 3)", "'(1 2 3)", ""},
 			{"((lambda (&rest x) (reverse 'list x)) 1 2 3)", "'(3 2 1)", ""},
 		}},
-		{"length", TestSequence{
+		{"length", elpstest.TestSequence{
 			{`(length "abc")`, `3`, ``},
 			{`(length '(a b))`, `2`, ``},
 			{`(length [])`, `0`, ``},
 			{`(length (vector 1 2 3 4))`, `4`, ``},
 		}},
-		{"emtpy?", TestSequence{
+		{"emtpy?", elpstest.TestSequence{
 			{`(empty? "abc")`, `false`, ``},
 			{`(empty? '(a b))`, `false`, ``},
 			{`(empty? [])`, `true`, ``},
@@ -136,14 +138,14 @@ string"""`, `"\"\"a raw\nstring"`, ""},
 			{`(empty? (vector))`, `true`, ``},
 			{`(empty? "")`, `true`, ``},
 		}},
-		{"funcall", TestSequence{
+		{"funcall", elpstest.TestSequence{
 			{`(funcall (lambda () 1))`, `1`, ""},
 			{`(funcall (lambda (x) (+ 1 x)) 1)`, `2`, ""},
 			{`(funcall (lambda (&rest xs) (cdr xs)) 1 2 3)`, `'(2 3)`, ""},
 			{`(funcall '+ 1 2 3)`, `6`, ""},
 			{`(funcall 'lisp:+ 1 2 3)`, `6`, ""},
 		}},
-		{"apply", TestSequence{
+		{"apply", elpstest.TestSequence{
 			{`(apply (lambda () 1) '())`, `1`, ""},
 			{`(apply (lambda (x) (+ 1 x)) '(1))`, `2`, ""},
 			{`(apply (lambda (x) (+ 1 x)) 1 '())`, `2`, ""},
@@ -151,14 +153,14 @@ string"""`, `"\"\"a raw\nstring"`, ""},
 			{`(apply '+ 1 2 '(3))`, `6`, ""},
 			{`(apply 'lisp:+ 1 2 3 '())`, `6`, ""},
 		}},
-		{"variadic arguments", TestSequence{
+		{"variadic arguments", elpstest.TestSequence{
 			{"((lambda (&rest x) (reverse 'list x)) 1 2 3)", "'(3 2 1)", ""},
 			{"((lambda (x &rest y) (cons x y)) 1 2 3)", "'(1 2 3)", ""},
 			{"((lambda (x &rest y) (cons x y)) 1 2 3)", "'(1 2 3)", ""},
 			{"((lambda (x y &rest z) (cons x (cons y z))) 1 2 3)", "'(1 2 3)", ""},
 			{"((lambda (x y &rest z) (cons x (cons y z))) 1 2)", "'(1 2)", ""},
 		}},
-		{"optional arguments", TestSequence{
+		{"optional arguments", elpstest.TestSequence{
 			{"((lambda (&optional x) (cons 1 x)))", "'(1)", ""},
 			{"((lambda (&optional x) (cons 1 x)) '(2))", "'(1 2)", ""},
 			{"((lambda (&optional x y) (+ (or x 1) (or y 2))))", "3", ""},
@@ -170,7 +172,7 @@ string"""`, `"\"\"a raw\nstring"`, ""},
 			{"((lambda (r &optional x y) (+ r (or x 1) (or y 2))) 1 2)", "5", ""},
 			{"((lambda (r &optional x y) (+ r (or x 1) (or y 2))) 1 2 3)", "6", ""},
 		}},
-		{"keyword arguments", TestSequence{
+		{"keyword arguments", elpstest.TestSequence{
 			{"((lambda (&key x) (reverse 'list x)))", "'()", ""},
 			{"((lambda (&key x) (reverse 'list x)) :x '(1 2 3))", "'(3 2 1)", ""},
 			{"((lambda (&key x y) (cons (or x 1) y)) :y '(2))", "'(1 2)", ""},
@@ -178,11 +180,11 @@ string"""`, `"\"\"a raw\nstring"`, ""},
 			{"((lambda (r &key x) (cons (or x 1) (reverse 'list r))) '(2 3) :x 4)", "'(4 3 2)", ""},
 			{"((lambda (r &key x y) (cons r (cons (or x 1) y))) 0 :y '(2))", "'(0 1 2)", ""},
 		}},
-		{"partial evaluation", TestSequence{
+		{"partial evaluation", elpstest.TestSequence{
 			{"((lambda (x y) (+ x y)) 1)", "(lambda (y (x 1)) (+ x y))", ""},
 			{"(((lambda (x y) (+ x y)) 1) 2)", "3", ""},
 		}},
-		{"lists", TestSequence{
+		{"lists", elpstest.TestSequence{
 			{"(cons 1 (cons 2 (cons 3 ())))", "'(1 2 3)", ""},
 			{"(list 1 2 3)", "'(1 2 3)", ""},
 			{"(concat 'list (list 1 2) (list 3))", "'(1 2 3)", ""},
@@ -199,7 +201,7 @@ string"""`, `"\"\"a raw\nstring"`, ""},
 			{"(concat 'list (list 1 2) (list 3))", "'(1 2 3)", ""},
 			{"(slice 'list '(0 1 2 3 4) 1 3)", "'(1 2)", ""},
 		}},
-		{"insert-index", TestSequence{
+		{"insert-index", elpstest.TestSequence{
 			{`(insert-index 'list '() 0 1)`, `'(1)`, ""},
 			{`(insert-index 'list '(2) 0 1)`, `'(1 2)`, ""},
 			{`(insert-index 'list '(1) 1 2)`, `'(1 2)`, ""},
@@ -209,7 +211,7 @@ string"""`, `"\"\"a raw\nstring"`, ""},
 			{`(insert-index 'vector (vector 1) 1 2)`, `(vector 1 2)`, ""},
 			{`(insert-index 'vector (vector 1 3) 1 2)`, `(vector 1 2 3)`, ""},
 		}},
-		{"append 'list", TestSequence{
+		{"append 'list", elpstest.TestSequence{
 			{"(set 'v (list))", "'()", ""},
 			{"(set 'v1 (append 'list v 1))", "'(1)", ""},
 			{"(set 'v12 (append 'list v1 2))", "'(1 2)", ""},
@@ -228,11 +230,11 @@ string"""`, `"\"\"a raw\nstring"`, ""},
 			// for an expanding buffer.
 			{"v1234", "'(1 2 3 4)", ""},
 		}},
-		{"make-sequence", TestSequence{
+		{"make-sequence", elpstest.TestSequence{
 			{"(make-sequence 0 5)", "'(0 1 2 3 4)", ""},
 			{"(make-sequence 0 5 2)", "'(0 2 4)", ""},
 		}},
-		{"filtering", TestSequence{
+		{"filtering", elpstest.TestSequence{
 			{"(select 'list #^(< % 3) '())", "'()", ""},
 			{"(select 'list #^(< % 3) '(0 1 2 3 4 5))", "'(0 1 2)", ""},
 			{"(select 'list #^(< % 3) '(3 4 5 6))", "'()", ""},
@@ -252,7 +254,7 @@ string"""`, `"\"\"a raw\nstring"`, ""},
 			{"(reject 'vector (expr (< % 3)) '(0 1 2 3 4 5))", "(vector 3 4 5)", ""},
 			{"(reject 'vector (expr (< % 3)) '(0 1 1 -1 2 2))", "(vector)", ""},
 		}},
-		{"defun", TestSequence{
+		{"defun", elpstest.TestSequence{
 			// defun macro
 			{"(defun fn0 () (+ 1 1))", "()", ""},
 			{"(defun fn1 (n) (+ n 1))", "()", ""},
@@ -261,9 +263,9 @@ string"""`, `"\"\"a raw\nstring"`, ""},
 			{"(fn1 1)", "2", ""},
 			{"(fn2 1 2)", "3", ""},
 		}},
-		{"errors", TestSequence{
-			{`(list 1 2 (error 'test-error "test message") 4)`, "test-error: test message", ""},
+		{"errors", elpstest.TestSequence{
+			{`(list 1 2 (error 'test-error "test message") 4)`, "test:1: test-error: test message", ""},
 		}},
 	}
-	RunTestSuite(t, tests)
+	elpstest.RunTestSuite(t, tests)
 }

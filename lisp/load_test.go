@@ -1,10 +1,14 @@
-package elpstest
+package lisp_test
 
-import "testing"
+import (
+	"testing"
+
+	"bitbucket.org/luthersystems/elps/elpstest"
+)
 
 func TestLoad(t *testing.T) {
-	tests := TestSuite{
-		{"load simple strings", TestSequence{
+	tests := elpstest.TestSuite{
+		{"load simple strings", elpstest.TestSequence{
 			{`(load-string "(+ 2 3)")`, "5", ""},
 			{`((load-string "(lambda (x) (* x 2))") 4)`, "8", ""},
 			{`(load-string "(defun double (x) (* x 2))")`, "()", ""},
@@ -13,5 +17,5 @@ func TestLoad(t *testing.T) {
 			{`(double 3)`, "-6", ""},
 		}},
 	}
-	RunTestSuite(t, tests)
+	elpstest.RunTestSuite(t, tests)
 }

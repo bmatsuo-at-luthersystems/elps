@@ -1,10 +1,14 @@
-package elpstest
+package lisp_test
 
-import "testing"
+import (
+	"testing"
+
+	"bitbucket.org/luthersystems/elps/elpstest"
+)
 
 func TestMaps(t *testing.T) {
-	tests := TestSuite{
-		{"value association", TestSequence{
+	tests := elpstest.TestSuite{
+		{"value association", elpstest.TestSequence{
 			// Test that maps associate values property.  Furthermore, it must
 			// be ensured that ``assoc!'' mutates its argument while ``assoc''
 			// returns a copy.
@@ -18,7 +22,7 @@ func TestMaps(t *testing.T) {
 			{`(get m 'abc)`, "2", ""},
 			{`(get m 'b)`, "1", ""},
 		}},
-		{"order", TestSequence{
+		{"order", elpstest.TestSequence{
 			// Test that the default representation of a map always has sorted
 			// keys and that the ``keys'' builtin returns a properly sorted
 			// list.  That is, without numeric keys the expression (map
@@ -33,20 +37,20 @@ func TestMaps(t *testing.T) {
 			{`(assoc! m "a" 3)`, `(sorted-map 'a 3 "abc" 2 'b 1)`, ""},
 			{"(keys m)", `'('a "abc" 'b)`, ""},
 		}},
-		{"key?", TestSequence{
+		{"key?", elpstest.TestSequence{
 			// Test map membership.
 			{`(key? (sorted-map) "a")`, `false`, ""},
 			{`(key? (sorted-map 'a 0) 'a)`, `true`, ""},
 			{`(key? (sorted-map 'a 0) "a")`, `true`, ""},
 			{`(key? (sorted-map 'a 0) "b")`, `false`, ""},
 		}},
-		{"size", TestSequence{
+		{"size", elpstest.TestSequence{
 			{`(empty? (sorted-map))`, `true`, ""},
 			{`(empty? (sorted-map 'a 1))`, `false`, ""},
 			{`(length (sorted-map))`, `0`, ""},
 			{`(length (sorted-map 'a 1))`, `1`, ""},
 		}},
-		{"get-default", TestSequence{
+		{"get-default", elpstest.TestSequence{
 			// Test the get-default macro.  Ensure that the macro performs a
 			// lazy evaluation of the default expression.
 			{`(get-default (sorted-map) "a" "default")`, `"default"`, ""},
@@ -57,5 +61,5 @@ func TestMaps(t *testing.T) {
 			{`(get-default m "a" "default")`, `0`, ""},
 		}},
 	}
-	RunTestSuite(t, tests)
+	elpstest.RunTestSuite(t, tests)
 }

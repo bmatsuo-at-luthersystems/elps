@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+
+	"bitbucket.org/luthersystems/elps/parser/token"
 )
 
 // LType is the type of an LVal
@@ -81,6 +83,9 @@ var lfunTypeStrings = []string{
 type LVal struct {
 	// Type is the native type for a value in lisp.
 	Type LType
+
+	// Source is the values originating location in source code.
+	Source *token.Location
 
 	// Fields used for numeric types
 	Int   int
@@ -162,48 +167,54 @@ func Bool(b bool) *LVal {
 // Int returns an LVal representing the number x.
 func Int(x int) *LVal {
 	return &LVal{
-		Type: LInt,
-		Int:  x,
+		Source: nativeSource(),
+		Type:   LInt,
+		Int:    x,
 	}
 }
 
 // Float returns an LVal representation of the number x
 func Float(x float64) *LVal {
 	return &LVal{
-		Type:  LFloat,
-		Float: x,
+		Source: nativeSource(),
+		Type:   LFloat,
+		Float:  x,
 	}
 }
 
 // String returns an LVal representing the string str.
 func String(str string) *LVal {
 	return &LVal{
-		Type: LString,
-		Str:  str,
+		Source: nativeSource(),
+		Type:   LString,
+		Str:    str,
 	}
 }
 
 // Bytes returns an LVal representing binary data b.
 func Bytes(b []byte) *LVal {
 	return &LVal{
-		Type:  LBytes,
-		Bytes: b,
+		Source: nativeSource(),
+		Type:   LBytes,
+		Bytes:  b,
 	}
 }
 
 // Symbol returns an LVal resprenting the symbol s
 func Symbol(s string) *LVal {
 	return &LVal{
-		Type: LSymbol,
-		Str:  s,
+		Source: nativeSource(),
+		Type:   LSymbol,
+		Str:    s,
 	}
 }
 
 // QSymbol returns an LVal resprenting the quoted symbol
 func QSymbol(s string) *LVal {
 	return &LVal{
-		Type: LQSymbol,
-		Str:  s,
+		Source: nativeSource(),
+		Type:   LQSymbol,
+		Str:    s,
 	}
 }
 
@@ -215,6 +226,7 @@ func Nil() *LVal {
 // Native returns an LVal containng a native Go value.
 func Native(v interface{}) *LVal {
 	return &LVal{
+		Source: nativeSource(),
 		Type:   LNative,
 		Native: v,
 	}
@@ -225,8 +237,9 @@ func Native(v interface{}) *LVal {
 // are not copied.
 func SExpr(cells []*LVal) *LVal {
 	return &LVal{
-		Type:  LSExpr,
-		Cells: cells,
+		Source: nativeSource(),
+		Type:   LSExpr,
+		Cells:  cells,
 	}
 }
 
@@ -235,6 +248,7 @@ func SExpr(cells []*LVal) *LVal {
 // are not copied.
 func QExpr(cells []*LVal) *LVal {
 	return &LVal{
+		Source: nativeSource(),
 		Type:   LSExpr,
 		Quoted: true,
 		Cells:  cells,
@@ -273,7 +287,8 @@ func Array(dims *LVal, cells []*LVal) *LVal {
 	}
 
 	return &LVal{
-		Type: LArray,
+		Source: nativeSource(),
+		Type:   LArray,
 		Cells: []*LVal{
 			dims.Copy(),
 			QExpr(cells),
@@ -284,14 +299,16 @@ func Array(dims *LVal, cells []*LVal) *LVal {
 // SortedMap returns an LVal represented a sorted map
 func SortedMap() *LVal {
 	return &LVal{
-		Type: LSortMap,
-		Map:  make(map[interface{}]*LVal),
+		Source: nativeSource(),
+		Type:   LSortMap,
+		Map:    make(map[interface{}]*LVal),
 	}
 }
 
 // Fun returns an LVal representing a function
 func Fun(fid string, formals *LVal, fn LBuiltin) *LVal {
 	return &LVal{
+		Source:  nativeSource(),
 		Type:    LFun,
 		Builtin: fn,
 		FID:     fid,
@@ -302,6 +319,7 @@ func Fun(fid string, formals *LVal, fn LBuiltin) *LVal {
 // Macro returns an LVal representing a macro
 func Macro(fid string, formals *LVal, fn LBuiltin) *LVal {
 	return &LVal{
+		Source:  nativeSource(),
 		Type:    LFun,
 		FunType: LFunMacro,
 		Builtin: fn,
@@ -316,6 +334,7 @@ func Macro(fid string, formals *LVal, fn LBuiltin) *LVal {
 // evaluation, unlike macros.
 func SpecialOp(fid string, formals *LVal, fn LBuiltin) *LVal {
 	return &LVal{
+		Source:  nativeSource(),
 		Type:    LFun,
 		FunType: LFunSpecialOp,
 		Builtin: fn,
@@ -346,9 +365,10 @@ func Error(err error) *LVal {
 // value.
 func ErrorCondition(condition string, err error) *LVal {
 	return &LVal{
-		Type:  LError,
-		Str:   condition,
-		Cells: []*LVal{Native(err)},
+		Source: nativeSource(),
+		Type:   LError,
+		Str:    condition,
+		Cells:  []*LVal{Native(err)},
 	}
 }
 
@@ -374,9 +394,10 @@ func Errorf(format string, v ...interface{}) *LVal {
 // appropriate value.
 func ErrorConditionf(condition string, format string, v ...interface{}) *LVal {
 	return &LVal{
-		Type:  LError,
-		Str:   condition,
-		Cells: []*LVal{String(fmt.Sprintf(format, v...))},
+		Source: nativeSource(),
+		Type:   LError,
+		Str:    condition,
+		Cells:  []*LVal{String(fmt.Sprintf(format, v...))},
 	}
 }
 
@@ -387,6 +408,7 @@ func Quote(v *LVal) *LVal {
 		return v
 	}
 	quote := &LVal{
+		Source: nativeSource(),
 		Type:   LQuote,
 		Quoted: true,
 		Cells:  []*LVal{v},
@@ -827,4 +849,11 @@ func seqCells(v *LVal) []*LVal {
 		return v.Cells[1].Cells
 	}
 	panic("type is not a sequence")
+}
+
+func nativeSource() *token.Location {
+	return &token.Location{
+		File: "<native code>",
+		Pos:  -1,
+	}
 }

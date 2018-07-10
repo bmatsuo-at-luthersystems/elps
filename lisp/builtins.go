@@ -39,8 +39,8 @@ func (fun *langBuiltin) Eval(env *LEnv, args *LVal) *LVal {
 
 var userBuiltins []*langBuiltin
 var langBuiltins = []*langBuiltin{
-	{"load-string", Formals("source-code"), builtinLoadString},
-	{"load-bytes", Formals("source-code"), builtinLoadBytes},
+	{"load-string", Formals("source-code", KeyArgSymbol, "name"), builtinLoadString},
+	{"load-bytes", Formals("source-code", KeyArgSymbol, "name"), builtinLoadBytes},
 	{"in-package", Formals("package-name"), builtinInPackage},
 	{"use-package", Formals(VarArgSymbol, "package-name"), builtinUsePackage},
 	{"export", Formals(VarArgSymbol, "symbol"), builtinExport},
@@ -157,9 +157,16 @@ func DefaultBuiltins() []LBuiltinDef {
 }
 
 func builtinLoadString(env *LEnv, args *LVal) *LVal {
-	source := args.Cells[0]
+	source, name := args.Cells[0], args.Cells[1]
 	if source.Type != LString {
 		return env.Errorf("first argument is not a string: %v", source.Type)
+	}
+	if !name.IsNil() && name.Type != LString {
+		return env.Errorf("name is not a string: %v", name.Type)
+	}
+	_name := "load-string"
+	if name.Str != "" {
+		_name = name.Str
 	}
 
 	// Load the source in the root environment so the loaded code does not
@@ -167,7 +174,7 @@ func builtinLoadString(env *LEnv, args *LVal) *LVal {
 	// stack but the stack frame TROBlock will prevent tail recursion
 	// optimization from unwinding the stack to/beyond this point.
 	env.Runtime.Stack.Top().TROBlock = true
-	v := env.root().LoadString("load-string", source.Str)
+	v := env.root().LoadString(_name, source.Str)
 	if v.Type == LError && v.Stack == nil {
 		v.Stack = env.Runtime.Stack.Copy()
 	}
@@ -175,9 +182,16 @@ func builtinLoadString(env *LEnv, args *LVal) *LVal {
 }
 
 func builtinLoadBytes(env *LEnv, args *LVal) *LVal {
-	source := args.Cells[0]
+	source, name := args.Cells[0], args.Cells[1]
 	if source.Type != LBytes {
 		return env.Errorf("first argument is not bytes: %v", source.Type)
+	}
+	if !name.IsNil() && name.Type != LString {
+		return env.Errorf("name is not a string: %v", name.Type)
+	}
+	_name := "load-bytes"
+	if name.Str != "" {
+		_name = name.Str
 	}
 
 	// Load the source in the root environment so the loaded code does not
@@ -185,7 +199,7 @@ func builtinLoadBytes(env *LEnv, args *LVal) *LVal {
 	// stack but the stack frame TROBlock will prevent tail recursion
 	// optimization from unwinding the stack to/beyond this point.
 	env.Runtime.Stack.Top().TROBlock = true
-	v := env.root().Load("load-bytes", bytes.NewReader(source.Bytes))
+	v := env.root().Load(_name, bytes.NewReader(source.Bytes))
 	if v.Type == LError && v.Stack == nil {
 		v.Stack = env.Runtime.Stack.Copy()
 	}

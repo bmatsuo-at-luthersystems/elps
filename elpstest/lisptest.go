@@ -8,13 +8,30 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"bitbucket.org/luthersystems/elps/lisp"
 	"bitbucket.org/luthersystems/elps/lisp/lisplib"
 	"bitbucket.org/luthersystems/elps/lisp/lisplib/libtesting"
-	"bitbucket.org/luthersystems/elps/parser"
+	"bitbucket.org/luthersystems/elps/parser/rdparser"
 )
+
+func BenchmarkParse(path string, r func() lisp.Reader) func(*testing.B) {
+	return func(b *testing.B) {
+		buf, err := ioutil.ReadFile(path)
+		if err != nil {
+			b.Fatalf("Unable to read source file %v: %v", path, err)
+		}
+		b.SetBytes(int64(len(buf)))
+		for i := 0; i < b.N; i++ {
+			_, err := r().Read("test", bytes.NewReader(buf))
+			if err != nil {
+				b.Fatalf("Parse failure: %v", err)
+			}
+		}
+	}
+}
 
 // Runner is a test runner.
 type Runner struct {
@@ -35,7 +52,7 @@ func (r *Runner) NewEnv(t *testing.T) (*lisp.LEnv, error) {
 	runtime := &lisp.Runtime{
 		Registry: lisp.NewRegistry(),
 		Stack:    &lisp.CallStack{},
-		Reader:   parser.NewReader(),
+		Reader:   rdparser.NewReader(),
 		Stderr:   logger,
 	}
 	env := lisp.NewEnvRuntime(runtime)
@@ -181,10 +198,10 @@ func RunTestSuite(t *testing.T, tests TestSuite) {
 		var exprBuf bytes.Buffer
 		env.Runtime.Stderr = io.MultiWriter(os.Stderr, &exprBuf)
 		env.InPackage(lisp.String(lisp.DefaultUserPackage))
-		env.Runtime.Reader = parser.NewReader()
+		env.Runtime.Reader = rdparser.NewReader()
 		for j, expr := range test.TestSequence {
 			exprBuf.Reset()
-			v, _, err := parser.ParseLVal([]byte(expr.Expr))
+			v, err := env.Runtime.Reader.Read("test", strings.NewReader(expr.Expr))
 			if err != nil {
 				t.Errorf("test %d %q: expr %d: parse error: %v", i, test.Name, j, err)
 				continue

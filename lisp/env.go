@@ -7,6 +7,8 @@ import (
 	"os"
 	"strings"
 	"sync/atomic"
+
+	"bitbucket.org/luthersystems/elps/parser/token"
 )
 
 // DefaultLangPackage is the name of default language package
@@ -47,6 +49,7 @@ func InitializeUserEnv(env *LEnv) *LVal {
 // LEnv is a lisp environment.
 type LEnv struct {
 	ID      uint
+	Loc     *token.Location
 	Scope   map[string]*LVal
 	FunName map[string]string
 	Parent  *LEnv
@@ -461,10 +464,11 @@ func (env *LEnv) ErrorCondition(condition string, v ...interface{}) *LVal {
 		}
 	}
 	return &LVal{
-		Type:  LError,
-		Str:   condition,
-		Stack: env.Runtime.Stack.Copy(),
-		Cells: cells,
+		Type:   LError,
+		Source: env.Loc,
+		Str:    condition,
+		Stack:  env.Runtime.Stack.Copy(),
+		Cells:  cells,
 	}
 }
 
@@ -483,10 +487,11 @@ func (env *LEnv) Errorf(format string, v ...interface{}) *LVal {
 // with a copy env.Runtime.Stack.
 func (env *LEnv) ErrorConditionf(condition string, format string, v ...interface{}) *LVal {
 	return &LVal{
-		Type:  LError,
-		Str:   condition,
-		Stack: env.Runtime.Stack.Copy(),
-		Cells: []*LVal{String(fmt.Sprintf(format, v...))},
+		Source: env.Loc,
+		Type:   LError,
+		Str:    condition,
+		Stack:  env.Runtime.Stack.Copy(),
+		Cells:  []*LVal{String(fmt.Sprintf(format, v...))},
 	}
 }
 
@@ -501,6 +506,7 @@ eval:
 	if v.Spliced {
 		return env.Errorf("spliced value used as expression")
 	}
+	env.Loc = v.Source
 	// Builtins signal that they are executing their final expression (which
 	// will be returned verbatim) by evaluating an LVal marked as terminal.
 	// When this happens we want to mark the stack as terminal so tail
@@ -550,8 +556,13 @@ eval:
 			v = res.Cells[0]
 			goto eval
 		}
-		if res.Type == LError && res.Stack == nil {
-			res.Stack = env.Runtime.Stack.Copy()
+		if res.Type == LError {
+			if res.Source == nil {
+				res.Source = env.Loc
+			}
+			if res.Stack == nil {
+				res.Stack = env.Runtime.Stack.Copy()
+			}
 		}
 		return res
 	case LQuote:
@@ -604,7 +615,7 @@ func (env *LEnv) MacroCall(fun, args *LVal) *LVal {
 	}
 
 	// Push a frame onto the stack to represent the function's execution.
-	env.Runtime.Stack.PushFID(fun.FID, fun.Package, env.GetFunName(fun))
+	env.Runtime.Stack.PushFID(env.Loc, fun.FID, fun.Package, env.GetFunName(fun))
 	defer env.Runtime.Stack.Pop()
 	// Macros can't participate in tail-recursion optimization at all.  Enable
 	// the TROBlock on the stack fram so TerminalFID never seeks past the
@@ -643,7 +654,7 @@ func (env *LEnv) SpecialOpCall(fun, args *LVal) *LVal {
 	}
 
 	// Push a frame onto the stack to represent the function's execution.
-	env.Runtime.Stack.PushFID(fun.FID, fun.Package, env.GetFunName(fun))
+	env.Runtime.Stack.PushFID(env.Loc, fun.FID, fun.Package, env.GetFunName(fun))
 	defer env.Runtime.Stack.Pop()
 
 	// Special functions in general cannot be candidates for tail-recursion
@@ -696,7 +707,7 @@ func (env *LEnv) funCall(fun, args *LVal, curry bool) *LVal {
 	npop = env.Runtime.Stack.TerminalFID(fun.FID)
 
 	// Push a frame onto the stack to represent the function's execution.
-	env.Runtime.Stack.PushFID(fun.FID, fun.Package, env.GetFunName(fun))
+	env.Runtime.Stack.PushFID(env.Loc, fun.FID, fun.Package, env.GetFunName(fun))
 	defer env.Runtime.Stack.Pop()
 
 	if npop > 0 {
@@ -746,6 +757,9 @@ func decrementMarkTailRec(mark *LVal) (done bool) {
 }
 
 func (env *LEnv) evalSExprCells(s *LVal) *LVal {
+	loc := env.Loc
+	defer func() { env.Loc = loc }()
+
 	cells := s.Cells
 	newCells := make([]*LVal, 1, len(s.Cells))
 	if env.Runtime.Stack.Top() != nil {

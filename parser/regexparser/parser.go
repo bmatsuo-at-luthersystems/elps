@@ -9,7 +9,7 @@ Package parser provides a lisp parser.
 	strcontent := /[^"]+/ | '\' '"'
 	symbol := /[^[:space:]]+/
 */
-package parser
+package reparser
 
 import (
 	"fmt"

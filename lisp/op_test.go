@@ -1,16 +1,20 @@
-package elpstest
+package lisp_test
 
-import "testing"
+import (
+	"testing"
+
+	"bitbucket.org/luthersystems/elps/elpstest"
+)
 
 func TestSpecialOp(t *testing.T) {
 	debugstack := `Stack Trace [4 frames -- entrypoint last]:
-  height 3: lisp:debug-stack
-  height 2: lisp:progn
-  height 1: lisp:let
-  height 0: lisp:let [terminal]
+  height 3: test:4: lisp:debug-stack
+  height 2: test:4: lisp:progn
+  height 1: test:2: lisp:let
+  height 0: test:1: lisp:let [terminal]
 `
-	tests := TestSuite{
-		{"if", TestSequence{
+	tests := elpstest.TestSuite{
+		{"if", elpstest.TestSequence{
 			// if operator
 			{"(if () 1 2)", "2", ""},
 			{"(if true 1 2)", "1", ""},
@@ -21,7 +25,7 @@ func TestSpecialOp(t *testing.T) {
 			{"(if '(()) 1 2)", "1", ""},
 			{`(if "false" 1 2)`, "1", ""},
 		}},
-		{"let", TestSequence{
+		{"let", elpstest.TestSequence{
 			{`(let ())`, "()", ""},
 			{`(let ((x 1)) x)`, "1", ""},
 			{`(let ([x 1]) x)`, "1", ""},
@@ -32,14 +36,14 @@ func TestSpecialOp(t *testing.T) {
 						[y (+ (progn (debug-stack) x) 1)])
 					(+ x y)))`, "2", debugstack},
 		}},
-		{"let*", TestSequence{
+		{"let*", elpstest.TestSequence{
 			{`(let* ())`, "()", ""},
 			{`(let* ((x 1)) x)`, "1", ""},
 			{`(let* ([x 1]) x)`, "1", ""},
 			{`(let* ([x 1] [y 2]) (+ x y))`, "3", ""},
 			{`(let* ([x 0]) (let* ([x 1] [y (+ x 1)]) (+ x y)))`, "3", ""},
 		}},
-		{"cond", TestSequence{
+		{"cond", elpstest.TestSequence{
 			{`(cond)`, "()", ""},
 			{`(cond (else 1))`, "1", ""},
 			{`(cond (:else 1))`, "1", ""},
@@ -48,7 +52,7 @@ func TestSpecialOp(t *testing.T) {
 			{`(cond (true 1 (+ 1 2)) (else 1))`, "3", ""},
 			{`(cond ((< 1 2) 3) (else 1))`, "3", ""},
 		}},
-		{"expr", TestSequence{
+		{"expr", elpstest.TestSequence{
 			{`((expr ()))`, "()", ""},
 			{`((expr "hello"))`, `"hello"`, ""},
 			{`((expr %) 123)`, "123", ""},
@@ -59,7 +63,7 @@ func TestSpecialOp(t *testing.T) {
 			{`((expr (cons 1 %&optional)))`, "'(1)", ""},
 			{`((expr (cons 1 %&optional)) '(2))`, "'(1 2)", ""},
 		}},
-		{"#^", TestSequence{
+		{"#^", elpstest.TestSequence{
 			{`(#^())`, "()", ""},
 			{`(#^"hello")`, `"hello"`, ""},
 			{`(#^% 123)`, "123", ""},
@@ -72,12 +76,12 @@ func TestSpecialOp(t *testing.T) {
 			{`(#^'(cons 1 %))`, "'(cons 1 %)", ""},
 			{`(#^(list 1 '%))`, "'(1 '%)", ""},
 		}},
-		{"threading", TestSequence{
+		{"threading", elpstest.TestSequence{
 			{`(thread-last 1 (+ 2) (< 2))`, `true`, ""},
 			{`(thread-last 1 (+ 2) (> 2))`, `false`, ""},
 			{`(thread-first 1 (+   2) (<   2))`, `false`, ""},
 			{`(thread-first 1 (+   2) (>   2))`, `true`, ""},
 		}},
 	}
-	RunTestSuite(t, tests)
+	elpstest.RunTestSuite(t, tests)
 }
