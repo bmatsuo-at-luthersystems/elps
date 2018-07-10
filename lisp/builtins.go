@@ -1477,7 +1477,7 @@ func builtinIsFloat(env *LEnv, args *LVal) *LVal {
 
 func builtinIsSymbol(env *LEnv, args *LVal) *LVal {
 	v := args.Cells[0]
-	return Bool(v.Type == LString)
+	return Bool(v.Type == LSymbol)
 }
 
 func builtinIsString(env *LEnv, args *LVal) *LVal {
@@ -1487,7 +1487,7 @@ func builtinIsString(env *LEnv, args *LVal) *LVal {
 
 func builtinIsBytes(env *LEnv, args *LVal) *LVal {
 	v := args.Cells[0]
-	return Bool(v.Type == LString)
+	return Bool(v.Type == LBytes)
 }
 
 func builtinEqual(env *LEnv, args *LVal) *LVal {
