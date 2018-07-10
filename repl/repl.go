@@ -1,14 +1,17 @@
 package repl
 
 import (
+	"bytes"
 	"fmt"
-	"io"
 	"os"
 	"strings"
 
 	"bitbucket.org/luthersystems/elps/lisp"
 	"bitbucket.org/luthersystems/elps/lisp/lisplib"
 	"bitbucket.org/luthersystems/elps/parser"
+	"bitbucket.org/luthersystems/elps/parser/lexer"
+	"bitbucket.org/luthersystems/elps/parser/rdparser"
+	"bitbucket.org/luthersystems/elps/parser/token"
 	"github.com/chzyer/readline"
 )
 
@@ -36,45 +39,60 @@ func RunRepl(prompt string) {
 	if err != nil {
 		panic(err)
 	}
-	contPrompt := strings.Repeat(" ", len(prompt)) // prompt had better be ascii...
 
-	var buf []byte
-	for {
-		var line []byte
-		line, err = rl.ReadSlice()
-		if err != nil && err != readline.ErrInterrupt {
-			break
-		}
-		if err == readline.ErrInterrupt {
-			line = nil
-			buf = nil
-			rl.SetPrompt(prompt)
-		}
-		if len(buf) != 0 {
-			buf = append(buf, '\n')
-			line = append(buf, line...)
-			buf = nil
-			rl.SetPrompt(prompt)
-		}
-		if len(line) != 0 {
-			complete, err := parser.Parse(env, true, line)
-			if lisperr, ok := err.(*lisp.ErrorVal); ok {
-				lisperr.WriteTrace(os.Stderr)
-			} else if err != nil {
-				fmt.Fprintf(os.Stderr, "TYPE %T\n", err)
-				errln(err)
+	var eof bool
+
+	p := rdparser.NewInteractive(nil)
+	p.Read = func() []*token.Token {
+		prompt := p.Prompt()
+		rl.SetPrompt(prompt)
+		for {
+			var line []byte
+			line, err = rl.ReadSlice()
+			if err != nil && err != readline.ErrInterrupt {
+				// Set eof so the parser breaks out of its loop.
+				eof = true
+				return []*token.Token{&token.Token{
+					Type: token.EOF,
+					Text: "",
+				}}
+			}
+			if err == readline.ErrInterrupt {
+				line = nil
 				continue
 			}
-			if !complete {
-				buf = line
-				rl.SetPrompt(contPrompt)
+			var tokens []*token.Token
+			scanner := token.NewScanner("stdin", bytes.NewReader(line))
+			lex := lexer.New(scanner)
+			for {
+				tok := lex.ReadToken()
+				if len(tok) != 1 {
+					panic("bad tokens")
+				}
+				if tok[0].Type == token.EOF {
+					return tokens
+				}
+				tokens = append(tokens, tok...)
+				if tok[0].Type == token.ERROR {
+					// This will work itself out eventually...
+					return tokens
+				}
 			}
 		}
 	}
-	if err != io.EOF {
-		errln(err)
-		return
+
+	for {
+		expr, err := p.ParseExpression()
+		if err != nil {
+			fmt.Fprintln(env.Runtime.Stderr, err)
+			if eof {
+				break
+			}
+		}
+		val := env.Eval(expr)
+		fmt.Fprintln(env.Runtime.Stderr, val)
 	}
+
 	errln("done")
 }
 

@@ -67,8 +67,10 @@ func (p *Parser) ParseExpression() *lisp.LVal {
 	// are currently in the middle of an expression while we finish parsing the
 	// expression so that an Interactive parser can determine what state we are
 	// in (and thus imply what the REPL prompt should be).
-	p.parsing = true
-	defer func() { p.parsing = false }()
+	if !p.parsing {
+		p.parsing = true
+		defer func() { p.parsing = false }()
+	}
 
 	return fn(p)
 }
