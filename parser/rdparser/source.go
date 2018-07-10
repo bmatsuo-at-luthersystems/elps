@@ -10,7 +10,7 @@ import (
 // implementation a REPL or other dynamic environments.
 type TokenStream interface {
 	// ReadToken returns a set of token from an input source.  When no more
-	// tokens can be generated NextToken returns a token with type token.EOF.
+	// tokens can be generated ReadToken returns a token with type token.EOF.
 	// ReadToken never returns an empty slice.  In the presence of io errors a
 	// TokenStream must return a token with type token.ERROR whenever called.
 	ReadToken() []*token.Token
@@ -20,7 +20,7 @@ type TokenStream interface {
 // a TokenSource wants a token.
 type TokenGenerator func() []*token.Token
 
-// NextToken implements TokenStream.
+// ReadToken implements TokenStream.
 func (fn TokenGenerator) ReadToken() []*token.Token {
 	return fn()
 }

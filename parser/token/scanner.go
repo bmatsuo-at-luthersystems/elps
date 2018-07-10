@@ -355,7 +355,7 @@ func (s *Scanner) checkExtend() error {
 	}
 	if s.next == len(s.buf) {
 		// If this is happening then we haven't seen EOF and the extension
-		// routine was anable to do anything to extend the buffer.
+		// routine was unable to do anything to extend the buffer.
 		return fmt.Errorf("token exceeds maximum allowable size")
 	}
 	return nil

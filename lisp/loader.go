@@ -25,9 +25,9 @@ func LoaderMust(fn Loader, err error) Loader {
 }
 
 // TextLoader parses a text stream using r and returns a Loader which evaluates
-// the stream's expressions whenn called.  The reader will be invoked only
-// once.  TextLoader will return an error if r produces any reference types
-// (bytes, map, array, native, etc).
+// the stream's expressions when called.  The reader will be invoked only once.
+// TextLoader will return an error if r produces any reference types (bytes,
+// map, array, native, etc).
 func TextLoader(r Reader, name string, stream io.Reader) (Loader, error) {
 	exprs, err := r.Read(name, stream)
 	if err != nil {
@@ -62,7 +62,7 @@ func TextLoader(r Reader, name string, stream io.Reader) (Loader, error) {
 func checkLoaderExpr(v *LVal) error {
 	switch v.Type {
 	case LBytes, LSortMap, LArray, LNative:
-		return fmt.Errorf("loader a reference type expression: %v", v.Type)
+		return fmt.Errorf("cannot cache reference type expression: %v", v.Type)
 	}
 	for _, cell := range v.Cells {
 		err := checkLoaderExpr(cell)
