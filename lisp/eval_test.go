@@ -124,6 +124,10 @@ string"""`, `"\"\"a raw\nstring"`, ""},
 			{"((lambda (x &rest y) (cons x y)) 1 2 3)", "'(1 2 3)", ""},
 			{"((lambda (&rest x) (reverse 'list x)) 1 2 3)", "'(3 2 1)", ""},
 		}},
+		{"concat", elpstest.TestSequence{
+			{`(concat 'string "a" (to-bytes "b") '(99))`, `"abc"`, ""},
+			{`(to-string (concat 'bytes "a" (to-bytes "b") (vector 99)))`, `"abc"`, ""},
+		}},
 		{"length", elpstest.TestSequence{
 			{`(length "abc")`, `3`, ``},
 			{`(length '(a b))`, `2`, ``},

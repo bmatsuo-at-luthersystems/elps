@@ -843,16 +843,113 @@ func builtinSortedMap(env *LEnv, args *LVal) *LVal {
 }
 
 func builtinConcat(env *LEnv, args *LVal) *LVal {
-	typespec, rest := args.Cells[0], args.Cells[1:]
+	typespec := args.Cells[0]
 	if typespec.Type != LSymbol {
 		return env.Errorf("first argument is not a valid type specification: %v", typespec.Type)
 	}
+	switch typespec.Str {
+	case "vector", "list":
+		return builtinConcatSeq(env, args)
+	case "string":
+		return builtinConcatString(env, args)
+	case "bytes":
+		return builtinConcatBytes(env, args)
+	default:
+		return env.Errorf("type specifier is not valid: %v", typespec)
+	}
+}
+
+func builtinConcatString(env *LEnv, args *LVal) *LVal {
+	// typespec is already known to be bytes here
+	_, rest := args.Cells[0], args.Cells[1:]
+	size := 0
+	for _, v := range rest {
+		n := v.Len()
+		if n < 0 {
+			return env.Errorf("argument is not sequence of bytes: %v", v.Type)
+		}
+		size += n
+	}
+	buf := bytes.NewBuffer(make([]byte, 0, size))
+	for _, v := range rest {
+		switch v.Type {
+		case LBytes:
+			buf.Write(v.Bytes)
+		case LString:
+			buf.WriteString(v.Str)
+		default:
+			lerr := appendBytes(env, v, func(x byte) {
+				buf.WriteByte(x)
+			})
+			if lerr != nil {
+				return lerr
+			}
+		}
+	}
+	return String(buf.String())
+}
+
+func builtinConcatBytes(env *LEnv, args *LVal) *LVal {
+	// typespec is already known to be bytes here
+	_, rest := args.Cells[0], args.Cells[1:]
+	size := 0
+	for _, v := range rest {
+		n := v.Len()
+		if n < 0 {
+			return env.Errorf("argument is not sequence of bytes: %v", v.Type)
+		}
+		size += n
+	}
+	buf := make([]byte, 0, size)
+	for _, v := range rest {
+		switch v.Type {
+		case LBytes:
+			buf = append(buf, v.Bytes...)
+		case LString:
+			buf = append(buf, v.Str...)
+		default:
+			lerr := appendBytes(env, v, func(x byte) {
+				buf = append(buf, x)
+			})
+			if lerr != nil {
+				return lerr
+			}
+		}
+	}
+	return Bytes(buf)
+}
+
+func appendBytes(env *LEnv, seq *LVal, fn func(x byte)) *LVal {
+	if !isSeq(seq) {
+		return env.Errorf("argument is not a sequence of bytes: %v", seq.Type)
+	}
+	cells := seqCells(seq)
+	// Check all cells before appending any bytes.
+	for _, v := range cells {
+		if v.Type != LInt {
+			return env.Errorf("argument sequence contains an invalid value: %v", v.Type)
+		}
+		if v.Int < 0 || v.Int > 0xFF {
+			return env.Errorf("argument sequence contains an invalid value: %v", v)
+		}
+	}
+	for _, v := range cells {
+		fn(byte(v.Int))
+	}
+	return nil
+}
+
+func builtinConcatSeq(env *LEnv, args *LVal) *LVal {
+	typespec, rest := args.Cells[0], args.Cells[1:]
 	size := 0
 	for _, v := range rest {
 		if !isSeq(v) {
 			return env.Errorf("argument is not a proper sequence: %v", v.Type)
 		}
 		size += v.Len()
+	}
+	if size == 0 {
+		return Nil()
 	}
 	var ret *LVal
 	var cells []*LVal
