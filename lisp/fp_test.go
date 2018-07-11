@@ -52,7 +52,7 @@ func TestFP(t *testing.T) {
 		}},
 		{"complex composition", elpstest.TestSequence{
 			{"(defun g (x &rest xs) (cons x xs))", "()", ""},
-			{"(compose (reverse 'list) g)", "(lambda (x &rest xs) (lisp:funcall <builtin> (lisp:apply (lambda (x &rest xs) (cons x xs)) x xs)))", ""},
+			{"(compose (reverse 'list) g)", "(lambda (x &rest xs) (lisp:funcall #<builtin> (lisp:apply (lambda (x &rest xs) (cons x xs)) x xs)))", ""},
 			{"((compose (reverse 'list) list) 1 2 3)", "'(3 2 1)", ""},
 			{"((compose (reverse 'list) g) 1 2 3)", "'(3 2 1)", ""},
 		}},

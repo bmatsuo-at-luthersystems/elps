@@ -777,9 +777,9 @@ func (v *LVal) str(onTheRecord bool) string {
 	case LBytes:
 		b := v.Bytes()
 		if len(b) == 0 {
-			return quote + "#<(bytes)"
+			return quote + "#<bytes>"
 		}
-		return quote + "#<(bytes " + strings.Trim(fmt.Sprint(b), "[]") + ")"
+		return quote + "#<bytes " + strings.Trim(fmt.Sprint(b), "[]") + ">"
 	case LError:
 		if v.Quoted {
 			quote = QUOTE
@@ -801,7 +801,7 @@ func (v *LVal) str(onTheRecord bool) string {
 			quote = QUOTE
 		}
 		if v.Builtin != nil {
-			return fmt.Sprintf("%s<builtin>", quote)
+			return fmt.Sprintf("%s#<builtin>", quote)
 		}
 		vars := lambdaVars(v.Cells[0], boundVars(v))
 		return fmt.Sprintf("%s(lambda %v%v)", quote, vars, bodyStr(v.Cells[1:]))
@@ -818,15 +818,15 @@ func (v *LVal) str(onTheRecord bool) string {
 				return quote + "(vector)"
 			}
 		}
-		return fmt.Sprintf("<array dims=%s>", v.Cells[0])
+		return fmt.Sprintf("#<array dims=%s>", v.Cells[0])
 	case LNative:
-		return fmt.Sprintf("<native value: %T>", v.Native)
+		return fmt.Sprintf("#<native value: %T>", v.Native)
 	case LMarkTailRec:
-		return quote + fmt.Sprintf("<tail-recursion frames=%d (%s %s)>", v.Cells[0].Int, v.Cells[1], v.Cells[2])
+		return quote + fmt.Sprintf("#<tail-recursion frames=%d (%s %s)>", v.Cells[0].Int, v.Cells[1], v.Cells[2])
 	case LMarkMacExpand:
-		return quote + fmt.Sprintf("<macro-expansion %s)>", v.Cells[0])
+		return quote + fmt.Sprintf("#<macro-expansion %s)>", v.Cells[0])
 	default:
-		return quote + fmt.Sprintf("<%s %#v>", v.Type, v)
+		return quote + fmt.Sprintf("#<%s %#v>", v.Type, v)
 	}
 }
 
