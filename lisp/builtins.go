@@ -864,12 +864,13 @@ func builtinConcat(env *LEnv, args *LVal) *LVal {
 }
 
 func builtinConcatString(env *LEnv, args *LVal) *LVal {
-	// typespec is already known to be bytes here
+	// typespec is already known to be 'string here
 	_, rest := args.Cells[0], args.Cells[1:]
 	size := 0
 	for _, v := range rest {
 		n := v.Len()
 		if n < 0 {
+			// A type with no length cannot be a byte-sequence.
 			return env.Errorf("argument is not sequence of bytes: %v", v.Type)
 		}
 		size += n
@@ -894,12 +895,13 @@ func builtinConcatString(env *LEnv, args *LVal) *LVal {
 }
 
 func builtinConcatBytes(env *LEnv, args *LVal) *LVal {
-	// typespec is already known to be bytes here
+	// typespec is already known to be 'bytes here
 	_, rest := args.Cells[0], args.Cells[1:]
 	size := 0
 	for _, v := range rest {
 		n := v.Len()
 		if n < 0 {
+			// A type with no length cannot be a byte-sequence.
 			return env.Errorf("argument is not sequence of bytes: %v", v.Type)
 		}
 		size += n
