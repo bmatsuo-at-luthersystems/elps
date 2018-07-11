@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"strings"
 
 	"bitbucket.org/luthersystems/elps/parser/token"
 )
@@ -774,7 +775,11 @@ func (v *LVal) str(onTheRecord bool) string {
 	case LString:
 		return quote + fmt.Sprintf("%q", v.Str)
 	case LBytes:
-		return quote + fmt.Sprint(v.Bytes())
+		b := v.Bytes()
+		if len(b) == 0 {
+			return quote + "#<(bytes)"
+		}
+		return quote + "#<(bytes " + strings.Trim(fmt.Sprint(b), "[]") + ")"
 	case LError:
 		if v.Quoted {
 			quote = QUOTE
