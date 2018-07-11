@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"strings"
 
 	"bitbucket.org/luthersystems/elps/parser/token"
 )
@@ -14,25 +15,65 @@ type LType uint
 
 // Possible LValType values
 const (
+	// LInvalid (0) is not a valid lisp type.
 	LInvalid LType = iota
+	// LInt values store an int in the LVal.Int field.
 	LInt
+	// LFloat values store a float64 in the LVal.Float field.
 	LFloat
+	// LError values use the LVal.Cells slice to store the following items:
+	//		[0] a symbol representing the error "condition" (class name)
+	//		[1:] error data (of any type)
+	//
+	// In addition, LError values store a copy of the function call stack at
+	// the time of their creation in the LVal.Stack field.
 	LError
+	// LSymbol values store a string representation of the symbol in the
+	// LVal.Str field.
 	LSymbol
-	LQSymbol
+	LQSymbol // TODO:  Remove this... I can't believe it actually has usages
+	// LSExpr values are "list" values in lisp and store their values in
+	// LVal.Cells.
 	LSExpr
+	// LFun values use the following fields in an LVal:
+	// 		LVal.FID      a string containing a unique function identifier
+	// 		LVal.Env      a lexical environment
+	// 		LVal.Builtin  a reference to a native go function
+	// 		LVal.FunType  an enumerated value describing function evaluation
+	// 		              semantics (e.g. macro, special op, regular function)
+	//
+	// In addition to these fields, a function defined in lisp (with defun,
+	// lambda, defmacro, etc) use the LVal.Cells field to store the following
+	// items:
+	//		[0]  a list describing the function's arguments
+	//		[1:] body expressions of the function (potentially no expressions)
 	LFun
+	// LQuote values are special values only used to represents two or more
+	// levels of quoting (e.g. ''3 or '''''''()).  The first level of quoting
+	// takes places by setting the LVal.Quoted field on a value with a normal
+	// value in LVal.Type.  LQuote values must always have a true LVal.Quoted
+	// field.
 	LQuote
+	// LString values store a string in the LVal.Str field.
 	LString
+	// LBytes values store a *[]byte in the LVal.Native field.  LVal.Native,
+	// and the contained pointer, must must never be nil (the slice being
+	// pointed to may be nil though).
 	LBytes
+	// LSortMap value uses the LVal.Map field to store a map.
 	LSortMap
+	// LArray values use the LVal.Cells slice to store the following items:
+	//		[0] a list containing dimension cardinalities in index 0
+	//  	[1] a list containing row-major ordered array values
 	LArray
+	// LNative values store a Go value in the LVal.Native field.
 	LNative
 	// Mark LVals are used to trasmit information down the stack through return
 	// values.  Because the LEnv does not evaluate expressions using a stack
 	// based virtual machine these Mark values, which often wrap other LVal
 	// data in their Cells, are passed back from functions.  Typically the
-	// environment is sole responsible for managing mark values.
+	// environment is solely responsible for managing mark values and
+	// applications should never see them during calls to builtin functions.
 	LMarkTailRec   // LEnv resumes a call a set number of frames down the stack.
 	LMarkMacExpand // LEnv will evaluate the returned LVal a subsequent time.
 )
@@ -93,9 +134,6 @@ type LVal struct {
 
 	// Str used by LSymbol and LString values
 	Str string
-
-	// Bytes used by LBytes values
-	Bytes []byte
 
 	// Package name for symbols and functions.
 	Package string
@@ -196,7 +234,7 @@ func Bytes(b []byte) *LVal {
 	return &LVal{
 		Source: nativeSource(),
 		Type:   LBytes,
-		Bytes:  b,
+		Native: &b,
 	}
 }
 
@@ -451,7 +489,7 @@ func (v *LVal) Len() int {
 	case LString:
 		return len(v.Str)
 	case LBytes:
-		return len(v.Bytes)
+		return len(v.Bytes())
 	case LSExpr:
 		return len(v.Cells)
 	case LSortMap:
@@ -464,6 +502,16 @@ func (v *LVal) Len() int {
 	default:
 		return -1
 	}
+}
+
+// Bytes returns the []byte stored in v.  Bytes panics if v.Type is not LBytes.
+func (v *LVal) Bytes() []byte {
+	if v.Type != LBytes {
+		panic("not bytes: " + v.Type.String())
+	}
+	// NOTE:  Bytes are stored as a pointer to a slice to allow for effecient
+	// appending in the same style as normal vectors.
+	return *v.Native.(*[]byte)
 }
 
 // MapKeys returns a list of keys in the map.  MapKeys panics if v.Type is not
@@ -727,7 +775,11 @@ func (v *LVal) str(onTheRecord bool) string {
 	case LString:
 		return quote + fmt.Sprintf("%q", v.Str)
 	case LBytes:
-		return quote + fmt.Sprint(v.Bytes)
+		b := v.Bytes()
+		if len(b) == 0 {
+			return quote + "#<bytes>"
+		}
+		return quote + "#<bytes " + strings.Trim(fmt.Sprint(b), "[]") + ">"
 	case LError:
 		if v.Quoted {
 			quote = QUOTE
@@ -749,7 +801,7 @@ func (v *LVal) str(onTheRecord bool) string {
 			quote = QUOTE
 		}
 		if v.Builtin != nil {
-			return fmt.Sprintf("%s<builtin>", quote)
+			return fmt.Sprintf("%s#<builtin>", quote)
 		}
 		vars := lambdaVars(v.Cells[0], boundVars(v))
 		return fmt.Sprintf("%s(lambda %v%v)", quote, vars, bodyStr(v.Cells[1:]))
@@ -766,15 +818,15 @@ func (v *LVal) str(onTheRecord bool) string {
 				return quote + "(vector)"
 			}
 		}
-		return fmt.Sprintf("<array dims=%s>", v.Cells[0])
+		return fmt.Sprintf("#<array dims=%s>", v.Cells[0])
 	case LNative:
-		return fmt.Sprintf("<native value: %T>", v.Native)
+		return fmt.Sprintf("#<native value: %T>", v.Native)
 	case LMarkTailRec:
-		return quote + fmt.Sprintf("<tail-recursion frames=%d (%s %s)>", v.Cells[0].Int, v.Cells[1], v.Cells[2])
+		return quote + fmt.Sprintf("#<tail-recursion frames=%d (%s %s)>", v.Cells[0].Int, v.Cells[1], v.Cells[2])
 	case LMarkMacExpand:
-		return quote + fmt.Sprintf("<macro-expansion %s)>", v.Cells[0])
+		return quote + fmt.Sprintf("#<macro-expansion %s)>", v.Cells[0])
 	default:
-		return quote + fmt.Sprintf("<%s %#v>", v.Type, v)
+		return quote + fmt.Sprintf("#<%s %#v>", v.Type, v)
 	}
 }
 

@@ -41,8 +41,8 @@ func builtinEncode(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
 		base64.StdEncoding.Encode(b, []byte(v.Str))
 		return lisp.Bytes(b)
 	case lisp.LBytes:
-		b := make([]byte, base64.StdEncoding.EncodedLen(len(v.Bytes)))
-		base64.StdEncoding.Encode(b, v.Bytes)
+		b := make([]byte, base64.StdEncoding.EncodedLen(len(v.Bytes())))
+		base64.StdEncoding.Encode(b, v.Bytes())
 		return lisp.Bytes(b)
 	default:
 		return env.Errorf("argument is not a string: %v", v.Type)
@@ -59,8 +59,8 @@ func builtinDecode(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
 		}
 		return lisp.Bytes(b)
 	case lisp.LBytes:
-		b := make([]byte, base64.StdEncoding.DecodedLen(len(v.Bytes)))
-		n, err := base64.StdEncoding.Decode(b, v.Bytes)
+		b := make([]byte, base64.StdEncoding.DecodedLen(len(v.Bytes())))
+		n, err := base64.StdEncoding.Decode(b, v.Bytes())
 		if err != nil {
 			return env.Error(err)
 		}
