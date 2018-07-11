@@ -94,9 +94,6 @@ type LVal struct {
 	// Str used by LSymbol and LString values
 	Str string
 
-	// Bytes used by LBytes values
-	Bytes []byte
-
 	// Package name for symbols and functions.
 	Package string
 
@@ -196,7 +193,7 @@ func Bytes(b []byte) *LVal {
 	return &LVal{
 		Source: nativeSource(),
 		Type:   LBytes,
-		Bytes:  b,
+		Native: &b,
 	}
 }
 
@@ -451,7 +448,7 @@ func (v *LVal) Len() int {
 	case LString:
 		return len(v.Str)
 	case LBytes:
-		return len(v.Bytes)
+		return len(v.Bytes())
 	case LSExpr:
 		return len(v.Cells)
 	case LSortMap:
@@ -464,6 +461,16 @@ func (v *LVal) Len() int {
 	default:
 		return -1
 	}
+}
+
+// Bytes returns the []byte stored in v.  Bytes panics if v.Type is not LBytes.
+func (v *LVal) Bytes() []byte {
+	if v.Type != LBytes {
+		panic("not bytes: " + v.Type.String())
+	}
+	// NOTE:  Bytes are stored as a pointer to a slice to allow for effecient
+	// appending in the same style as normal vectors.
+	return *v.Native.(*[]byte)
 }
 
 // MapKeys returns a list of keys in the map.  MapKeys panics if v.Type is not
@@ -727,7 +734,7 @@ func (v *LVal) str(onTheRecord bool) string {
 	case LString:
 		return quote + fmt.Sprintf("%q", v.Str)
 	case LBytes:
-		return quote + fmt.Sprint(v.Bytes)
+		return quote + fmt.Sprint(v.Bytes())
 	case LError:
 		if v.Quoted {
 			quote = QUOTE

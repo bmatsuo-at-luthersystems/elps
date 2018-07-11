@@ -195,7 +195,7 @@ func (s *Serializer) DumpMessageBuiltin(env *lisp.LEnv, args *lisp.LVal) *lisp.L
 	if val.Type != lisp.LBytes {
 		panic("unexpected lval: " + val.Type.String())
 	}
-	b := val.Bytes
+	b := val.Bytes()
 	msg := (*json.RawMessage)(&b)
 	var _ json.Marshaler = msg
 	return lisp.Native(msg)
@@ -239,7 +239,7 @@ func (s *Serializer) LoadBytesBuiltin(env *lisp.LEnv, args *lisp.LVal) *lisp.LVa
 			return stringNums
 		}
 	}
-	return s.attachStack(env, s.Load(js.Bytes, lisp.True(stringNums)))
+	return s.attachStack(env, s.Load(js.Bytes(), lisp.True(stringNums)))
 }
 
 func (s *Serializer) DumpStringBuiltin(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {

@@ -57,7 +57,7 @@ func TestArray(t *testing.T) {
 			// this causes side effects in the value of v1234.  The assumed
 			// performance benefit seems valuable but in general (append
 			// 'vector ...) should be used sparingly and with care.  The
-			// append! function will be better.
+			// append! function will be easier to reason about.
 			{"v1234", "(vector 1 2 3 5)", ""},
 		}},
 	}

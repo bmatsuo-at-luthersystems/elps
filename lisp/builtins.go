@@ -91,6 +91,10 @@ var langBuiltins = []*langBuiltin{
 	{"vector", Formals(VarArgSymbol, "args"), builtinVector},
 	{"append!", Formals("vec", VarArgSymbol, "values"), builtinAppendMutate},
 	{"append", Formals("type-specifier", "vec", VarArgSymbol, "values"), builtinAppend},
+	{"append-bytes!", Formals("bytes", "values"), builtinAppendBytesMutate},
+	// NOTE:  ``append-bytes'' does not accept a type-specifier argument
+	// because 'string would be equivalent to (concat 'string ...)
+	{"append-bytes", Formals("bytes", "byte-sequence"), builtinAppendBytes},
 	{"aref", Formals("a", VarArgSymbol, "indices"), builtinARef},
 	{"length", Formals("seq"), builtinLength},
 	{"empty?", Formals("seq"), builtinIsEmpty},
@@ -199,7 +203,7 @@ func builtinLoadBytes(env *LEnv, args *LVal) *LVal {
 	// stack but the stack frame TROBlock will prevent tail recursion
 	// optimization from unwinding the stack to/beyond this point.
 	env.Runtime.Stack.Top().TROBlock = true
-	v := env.root().Load(_name, bytes.NewReader(source.Bytes))
+	v := env.root().Load(_name, bytes.NewReader(source.Bytes()))
 	if v.Type == LError && v.Stack == nil {
 		v.Stack = env.Runtime.Stack.Copy()
 	}
@@ -412,7 +416,7 @@ func toString(val *LVal) (string, error) {
 	case LSymbol:
 		return val.Str, nil
 	case LBytes:
-		return string(val.Bytes), nil
+		return string(val.Bytes()), nil
 	case LInt:
 		i := strconv.Itoa(val.Int)
 		return i, nil
@@ -874,15 +878,15 @@ func builtinConcatString(env *LEnv, args *LVal) *LVal {
 	for _, v := range rest {
 		switch v.Type {
 		case LBytes:
-			buf.Write(v.Bytes)
+			buf.Write(v.Bytes())
 		case LString:
 			buf.WriteString(v.Str)
 		default:
-			lerr := appendBytes(env, v, func(x byte) {
+			err := appendBytes(env, v, func(x byte) {
 				buf.WriteByte(x)
 			})
-			if lerr != nil {
-				return lerr
+			if err != nil {
+				return env.Error(err)
 			}
 		}
 	}
@@ -904,33 +908,33 @@ func builtinConcatBytes(env *LEnv, args *LVal) *LVal {
 	for _, v := range rest {
 		switch v.Type {
 		case LBytes:
-			buf = append(buf, v.Bytes...)
+			buf = append(buf, v.Bytes()...)
 		case LString:
 			buf = append(buf, v.Str...)
 		default:
-			lerr := appendBytes(env, v, func(x byte) {
+			err := appendBytes(env, v, func(x byte) {
 				buf = append(buf, x)
 			})
-			if lerr != nil {
-				return lerr
+			if err != nil {
+				return env.Error(err)
 			}
 		}
 	}
 	return Bytes(buf)
 }
 
-func appendBytes(env *LEnv, seq *LVal, fn func(x byte)) *LVal {
+func appendBytes(env *LEnv, seq *LVal, fn func(x byte)) error {
 	if !isSeq(seq) {
-		return env.Errorf("argument is not a sequence of bytes: %v", seq.Type)
+		return fmt.Errorf("argument is not a sequence of bytes: %v", seq.Type)
 	}
 	cells := seqCells(seq)
 	// Check all cells before appending any bytes.
 	for _, v := range cells {
 		if v.Type != LInt {
-			return env.Errorf("argument sequence contains an invalid value: %v", v.Type)
+			return fmt.Errorf("value not a byte: %v", v.Type)
 		}
 		if v.Int < 0 || v.Int > 0xFF {
-			return env.Errorf("argument sequence contains an invalid value: %v", v)
+			return fmt.Errorf("value overflows byte: %v", v)
 		}
 	}
 	for _, v := range cells {
@@ -1439,6 +1443,9 @@ func builtinVector(env *LEnv, args *LVal) *LVal {
 
 func builtinAppendMutate(env *LEnv, args *LVal) *LVal {
 	vec, vals := args.Cells[0], args.Cells[1:]
+	if vec.Type == LBytes {
+		return appendMutateBytes(env, args)
+	}
 	if !isVec(vec) {
 		return env.Errorf("first argument is not a vector: %v", vec.Type)
 	}
@@ -1448,10 +1455,49 @@ func builtinAppendMutate(env *LEnv, args *LVal) *LVal {
 	return vec
 }
 
+func appendMutateBytes(env *LEnv, args *LVal) *LVal {
+	lbytes, xs := args.Cells[0], args.Cells[1:]
+	b := lbytes.Bytes()
+	err := appendBytes(env, QExpr(xs), func(x byte) {
+		b = append(b, x)
+	})
+	if err != nil {
+		return env.Error(err)
+	}
+	*lbytes.Native.(*[]byte) = b
+	return lbytes
+}
+
+func builtinAppendBytesMutate(env *LEnv, args *LVal) *LVal {
+	lbytes, byteseq := args.Cells[0], args.Cells[1]
+	if lbytes.Type != LBytes {
+		return env.Errorf("first argument is not bytes: %v", lbytes.Type)
+	}
+	b := lbytes.Bytes()
+	switch byteseq.Type {
+	case LString:
+		b = append(b, byteseq.Str...)
+	case LBytes:
+		b = append(b, byteseq.Bytes()...)
+	default:
+		err := appendBytes(env, byteseq, func(x byte) {
+			b = append(b, x)
+		})
+		if err != nil {
+			return env.Error(err)
+		}
+	}
+	*lbytes.Native.(*[]byte) = b
+	return lbytes
+}
+
 func builtinAppend(env *LEnv, args *LVal) *LVal {
 	typespec, seq, vals := args.Cells[0], args.Cells[1], args.Cells[2:]
 	if typespec.Type != LSymbol {
 		return env.Errorf("first argument is not a valid type specification: %v", typespec.Type)
+	}
+	if typespec.Str == "bytes" {
+		return builtinAppend_Bytes(env, args)
 	}
 	if !isSeq(seq) {
 		return env.Errorf("second argument is not a proper sequence: %v", seq.Type)
@@ -1475,6 +1521,44 @@ func builtinAppend(env *LEnv, args *LVal) *LVal {
 	default:
 		return env.Errorf("type specifier is invalid: %v", typespec)
 	}
+}
+
+// NOTE:  The name of this function is funky because the append-bytes function
+// will have other behavior, and there is another func in this file called
+// appendBytes.
+func builtinAppend_Bytes(env *LEnv, args *LVal) *LVal {
+	// the type sequence has already been validated.
+	_, lbytes, xs := args.Cells[0], args.Cells[1], args.Cells[2:]
+	b := lbytes.Bytes()
+	err := appendBytes(env, QExpr(xs), func(x byte) {
+		b = append(b, x)
+	})
+	if err != nil {
+		return env.Error(err)
+	}
+	return Bytes(b)
+}
+
+func builtinAppendBytes(env *LEnv, args *LVal) *LVal {
+	lbytes, byteseq := args.Cells[0], args.Cells[1]
+	if lbytes.Type != LBytes {
+		return env.Errorf("first argument is not bytes: %v", lbytes.Type)
+	}
+	b := lbytes.Bytes()
+	switch byteseq.Type {
+	case LString:
+		b = append(b, byteseq.Str...)
+	case LBytes:
+		b = append(b, byteseq.Bytes()...)
+	default:
+		err := appendBytes(env, byteseq, func(x byte) {
+			b = append(b, x)
+		})
+		if err != nil {
+			return env.Error(err)
+		}
+	}
+	return Bytes(b)
 }
 
 func builtinARef(env *LEnv, args *LVal) *LVal {

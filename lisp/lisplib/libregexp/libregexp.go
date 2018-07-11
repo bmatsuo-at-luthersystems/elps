@@ -74,7 +74,7 @@ func BuiltinIsMatch(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
 	case lisp.LString:
 		return lisp.Bool(re.MatchString(text.Str))
 	case lisp.LBytes:
-		return lisp.Bool(re.Match(text.Bytes))
+		return lisp.Bool(re.Match(text.Bytes()))
 	default:
 		return env.Errorf("argument is not a string or bytes: %v", text.Type)
 	}
