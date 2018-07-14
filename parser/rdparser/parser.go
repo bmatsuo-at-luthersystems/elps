@@ -1,6 +1,7 @@
 package rdparser
 
 import (
+	"errors"
 	"io"
 	"strconv"
 	"strings"
@@ -80,6 +81,10 @@ func (p *Parser) parseExpression() func(p *Parser) *lisp.LVal {
 	switch p.PeekType() {
 	case token.INT:
 		return (*Parser).ParseLiteralInt
+	case token.INT_OCTAL_MACRO:
+		return (*Parser).ParseLiteralIntOctal
+	case token.INT_HEX_MACRO:
+		return (*Parser).ParseLiteralIntHex
 	case token.FLOAT:
 		return (*Parser).ParseLiteralFloat
 	case token.STRING:
@@ -116,15 +121,47 @@ func (p *Parser) ParseLiteralInt() *lisp.LVal {
 		return p.errorf("parse-error", "invalid integer literal: %v", p.PeekType())
 	}
 	text := p.TokenText()
-	if strings.HasPrefix(text, "0") && text != "0" {
-		// TODO: octal and hex integer literals
-		return p.errorf("invalid-integer-literal", "integer literal starts with 0: %v", text)
-	}
 	x, err := strconv.Atoi(text)
 	if err != nil {
 		return p.errorf("integer-overflow-error", "integer literal overflows int: %v", text)
 	}
 	return p.Int(x)
+}
+
+func (p *Parser) ParseLiteralIntOctal() *lisp.LVal {
+	if !p.Accept(token.INT_OCTAL_MACRO) {
+		return p.errorf("parse-error", "unexpected token: %v", p.PeekType())
+	}
+	if !p.Accept(token.INT_OCTAL) {
+		if p.Accept(token.ERROR, token.INVALID) {
+			return p.scanError("invalid-octal-literal")
+		}
+		return p.errorf("invalid-octal-literal", "unexpected token: %v", p.PeekType())
+	}
+	text := p.TokenText()
+	x, err := strconv.ParseInt(text, 8, 0)
+	if err != nil {
+		return p.errorf("integer-overflow-error", "octal literal overflows int: %v", text)
+	}
+	return p.Int(int(x))
+}
+
+func (p *Parser) ParseLiteralIntHex() *lisp.LVal {
+	if !p.Accept(token.INT_HEX_MACRO) {
+		return p.errorf("parse-error", "unexpected token: %v", p.PeekType())
+	}
+	if !p.Accept(token.INT_HEX) {
+		if p.Accept(token.ERROR, token.INVALID) {
+			return p.scanError("invalid-hex-literal")
+		}
+		return p.errorf("invalid-hex-literal", "unexpected token: %v", p.PeekType())
+	}
+	text := p.TokenText()
+	x, err := strconv.ParseInt(text, 16, 0)
+	if err != nil {
+		return p.errorf("integer-overflow-error", "hex literal overflows int: %v", text)
+	}
+	return p.Int(int(x))
 }
 
 func (p *Parser) ParseLiteralFloat() *lisp.LVal {
@@ -332,6 +369,12 @@ func (p *Parser) Accept(typ ...token.Type) bool {
 
 func (p *Parser) errorf(condition string, format string, v ...interface{}) *lisp.LVal {
 	err := lisp.ErrorConditionf(condition, format, v...)
+	err.Source = p.Location()
+	return err
+}
+
+func (p *Parser) scanError(condition string) *lisp.LVal {
+	err := lisp.ErrorCondition(condition, errors.New(p.TokenText()))
 	err.Source = p.Location()
 	return err
 }

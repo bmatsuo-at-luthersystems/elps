@@ -61,6 +61,10 @@ func RunRepl(prompt string) {
 				line = nil
 				continue
 			}
+			line = bytes.TrimSpace(line)
+			if len(line) == 0 {
+				continue
+			}
 			var tokens []*token.Token
 			scanner := token.NewScanner("stdin", bytes.NewReader(line))
 			lex := lexer.New(scanner)
@@ -88,6 +92,7 @@ func RunRepl(prompt string) {
 			if eof {
 				break
 			}
+			continue
 		}
 		val := env.Eval(expr)
 		fmt.Fprintln(env.Runtime.Stderr, val)

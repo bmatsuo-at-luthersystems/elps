@@ -9,11 +9,14 @@ import (
 	"bitbucket.org/luthersystems/elps/parser/token"
 )
 
+type LexFn func(*Lexer) []*token.Token
+
 const miscWordRunes = "0123456789" + miscWordSymbols
 const miscWordSymbols = "._+-*/=<>!&~%?$"
 
 type Lexer struct {
 	scanner *token.Scanner
+	lex     LexFn
 
 	// readErr is a reader from
 	readErr error
@@ -22,11 +25,16 @@ type Lexer struct {
 func New(s *token.Scanner) *Lexer {
 	lex := &Lexer{
 		scanner: s,
+		lex:     (*Lexer).readToken,
 	}
 	return lex
 }
 
 func (lex *Lexer) ReadToken() []*token.Token {
+	return lex.lex(lex)
+}
+
+func (lex *Lexer) readToken() []*token.Token {
 	lex.skipWhitespace()
 	if !lex.scanner.Accept(func(c rune) bool { return true }) {
 		if lex.scanner.EOF() {
@@ -62,13 +70,18 @@ func (lex *Lexer) ReadToken() []*token.Token {
 		switch lex.scanner.Rune() {
 		case '^':
 			tok := lex.emitText(token.UNBOUND)
-			if unicode.IsSpace(lex.peekRune()) {
-				return lex.errorf("whitespace following %s", tok[0].Text)
-			}
-			return tok
+			return lex.emitMacroChar(tok)
+		case 'o', 'O':
+			tok := lex.emitText(token.INT_OCTAL_MACRO)
+			lex.lex = (*Lexer).readOctalLiteral
+			return lex.emitMacroChar(tok)
+		case 'x', 'X':
+			tok := lex.emitText(token.INT_HEX_MACRO)
+			lex.lex = (*Lexer).readHexLiteral
+			return lex.emitMacroChar(tok)
 		default:
 			lex.scanner.Ignore()
-			return lex.errorf("invalid meta character %q", lex.scanner.Rune())
+			return lex.errorf("invalid dispatch macro character %q", lex.scanner.Rune())
 		}
 	case '-':
 		if unicode.IsSpace(lex.peekRune()) {
@@ -129,6 +142,17 @@ func (lex *Lexer) ReadToken() []*token.Token {
 	}
 }
 
+func (lex *Lexer) resetState() {
+	lex.lex = (*Lexer).readToken
+}
+
+func (lex *Lexer) emitMacroChar(tok []*token.Token) []*token.Token {
+	if unicode.IsSpace(lex.peekRune()) {
+		return lex.errorf("whitespace following %s", tok[0].Text)
+	}
+	return tok
+}
+
 func (lex *Lexer) emit(typ token.Type, text string) []*token.Token {
 	tok := []*token.Token{&token.Token{
 		Type:   typ,
@@ -170,6 +194,34 @@ func (lex *Lexer) readSymbol() []*token.Token {
 		return lex.readSymbol()
 	}
 	return lex.emitText(token.SYMBOL)
+}
+
+func (lex *Lexer) readOctalLiteral() []*token.Token {
+	lex.resetState()
+	n := lex.scanner.AcceptSeq(func(c rune) bool {
+		return '0' <= c && c <= '7'
+	})
+	if n == 0 {
+		return lex.errorf("invalid octal literal character: %q", lex.peekRune())
+	}
+	if unicode.IsDigit(lex.peekRune()) || isWord(lex.peekRune()) {
+		return lex.errorf("invalid octal literal character: %q", lex.peekRune())
+	}
+	return lex.emitText(token.INT_OCTAL)
+}
+
+func (lex *Lexer) readHexLiteral() []*token.Token {
+	lex.resetState()
+	n := lex.scanner.AcceptSeq(func(c rune) bool {
+		return isDigit(c) || ('a' <= c && c <= 'f') || ('A' <= c && c <= 'F')
+	})
+	if n == 0 {
+		return lex.errorf("invalid hexidecimal literal character: %q", lex.peekRune())
+	}
+	if unicode.IsDigit(lex.peekRune()) || isWord(lex.peekRune()) {
+		return lex.errorf("invalid hexidecimal literal character: %q", lex.peekRune())
+	}
+	return lex.emitText(token.INT_HEX)
 }
 
 func (lex *Lexer) readNumber() []*token.Token {
