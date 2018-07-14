@@ -46,6 +46,8 @@ func New(scanner *token.Scanner) *Parser {
 func (p *Parser) ParseProgram() ([]*lisp.LVal, error) {
 	var exprs []*lisp.LVal
 
+	p.ignoreHashBang()
+
 	for {
 		p.ignoreComments()
 		if p.src.IsEOF() {
@@ -74,6 +76,14 @@ func (p *Parser) ParseExpression() *lisp.LVal {
 	}
 
 	return fn(p)
+}
+
+func (p *Parser) ignoreHashBang() {
+	if p.PeekType() != token.HASH_BANG {
+		return
+	}
+	p.src.Scan()
+	p.src.AcceptType(token.COMMENT)
 }
 
 func (p *Parser) parseExpression() func(p *Parser) *lisp.LVal {
@@ -111,7 +121,7 @@ func (p *Parser) parseExpression() func(p *Parser) *lisp.LVal {
 	default:
 		return func(p *Parser) *lisp.LVal {
 			p.ReadToken()
-			return p.errorf("unexpected-token", "unexpected %s", p.TokenType())
+			return p.errorf("parse-error", "unexpected token: %v", p.TokenType())
 		}
 	}
 }

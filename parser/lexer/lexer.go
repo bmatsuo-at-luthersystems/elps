@@ -68,6 +68,10 @@ func (lex *Lexer) readToken() []*token.Token {
 			return lex.emitError(err, false)
 		}
 		switch lex.scanner.Rune() {
+		case '!':
+			tok := lex.emitText(token.HASH_BANG)
+			lex.lex = (*Lexer).readHashBang
+			return lex.emitMacroChar(tok)
 		case '^':
 			tok := lex.emitText(token.UNBOUND)
 			return lex.emitMacroChar(tok)
@@ -148,6 +152,7 @@ func (lex *Lexer) resetState() {
 
 func (lex *Lexer) emitMacroChar(tok []*token.Token) []*token.Token {
 	if unicode.IsSpace(lex.peekRune()) {
+		lex.resetState()
 		return lex.errorf("whitespace following %s", tok[0].Text)
 	}
 	return tok
@@ -184,6 +189,12 @@ func (lex *Lexer) errorf(format string, v ...interface{}) []*token.Token {
 func (lex *Lexer) charToken(typ token.Type) []*token.Token {
 	tok := lex.scanner.EmitToken(typ)
 	return []*token.Token{tok}
+}
+
+func (lex *Lexer) readHashBang() []*token.Token {
+	lex.resetState()
+	lex.scanner.AcceptSeq(func(c rune) bool { return c != '\n' })
+	return lex.emitText(token.COMMENT)
 }
 
 func (lex *Lexer) readSymbol() []*token.Token {

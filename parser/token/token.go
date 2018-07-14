@@ -30,6 +30,8 @@ const (
 	ERROR
 	EOF
 
+	HASH_BANG
+
 	// Atomic expressions & literals
 	SYMBOL
 	INT
@@ -62,6 +64,7 @@ func (typ Type) String() string {
 		INVALID:         "invalid",
 		ERROR:           "error",
 		EOF:             "EOF",
+		HASH_BANG:       "#!",
 		SYMBOL:          "symbol",
 		INT:             "int",
 		INT_OCTAL_MACRO: "#o",

@@ -137,6 +137,14 @@ func TestErrors(t *testing.T) {
 		{`(1 2 3)
 		134.
 		"abc"`, `test3:2: scan-error: invalid floating point literal starting: 134.`},
+		{`#!/usr/bin/env elps
+		(1 2 3)
+		0
+		#xABC
+		#!/usr/bin/env foo
+		#o123
+		#o9
+`, `test4:5: parse-error: unexpected token: #!`},
 	}
 
 	for i, test := range tests {
