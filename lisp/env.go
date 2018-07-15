@@ -627,7 +627,7 @@ func (env *LEnv) MacroCall(fun, args *LVal) *LVal {
 	// macro's callsite.
 	env.Runtime.Stack.Top().TROBlock = true
 
-	r := env.call(fun, args, false)
+	r := env.call(fun, args)
 	if r == nil {
 		env.Runtime.Stack.DebugPrint(os.Stderr)
 		panic("nil LVal returned from function call")
@@ -671,7 +671,7 @@ func (env *LEnv) SpecialOpCall(fun, args *LVal) *LVal {
 	// by tail-recursion-optimization.
 
 callf:
-	r := env.call(fun, args, false)
+	r := env.call(fun, args)
 	if r == nil {
 		env.Runtime.Stack.DebugPrint(os.Stderr)
 		panic("nil LVal returned from function call")
@@ -693,11 +693,11 @@ callf:
 }
 
 func (env *LEnv) FunCall(fun, args *LVal) *LVal {
-	return env.funCall(fun, args, true)
+	return env.funCall(fun, args)
 }
 
 // FunCall invokes regular function fun with the argument list args.
-func (env *LEnv) funCall(fun, args *LVal, curry bool) *LVal {
+func (env *LEnv) funCall(fun, args *LVal) *LVal {
 	if fun.Type != LFun {
 		return env.Errorf("not a function: %v", fun.Type)
 	}
@@ -720,7 +720,7 @@ func (env *LEnv) funCall(fun, args *LVal, curry bool) *LVal {
 	}
 
 callf:
-	r := env.call(fun, args, curry)
+	r := env.call(fun, args)
 	if r == nil {
 		env.Runtime.Stack.DebugPrint(os.Stderr)
 		panic("nil LVal returned from function call")
@@ -825,19 +825,10 @@ func (env *LEnv) evalSExprCells(s *LVal) *LVal {
 
 // call invokes LFun fun with the list args.  In general it is not safe to call
 // env.call bacause the stack must be setup for tail recursion optimization.
-func (env *LEnv) call(fun *LVal, args *LVal, curry bool) *LVal {
-	// FIXME:  A shallow copy is probably correct here.(?)  We don't want to
-	// copy the Env so that updates to the global scope are reflected.
-	fun = fun.Copy()
-	result := env.bindFormals(fun, args, curry)
-	if result.Type == LError {
-		return result
-	}
-	if result.Type == LFun {
-		return result
-	}
-	if !result.IsNil() {
-		panic("unexpected result of binding formal arguments")
+func (env *LEnv) call(fun *LVal, args *LVal) *LVal {
+	fenv, list := env.bind(fun, args)
+	if list.Type == LError {
+		return list
 	}
 
 	// NOTE:  The book's suggestion of chaining env here seems like dynamic
@@ -853,7 +844,7 @@ func (env *LEnv) call(fun *LVal, args *LVal, curry bool) *LVal {
 
 		// FIXME:  I think fun.Env is probably correct here.  But it wouldn't
 		// surprise me if at least one builtin breaks when it switches.
-		return fn(env, QExpr(fun.Cells[1:]))
+		return fn(env, list)
 	}
 
 	// With formal arguments bound, we can switch into the function's package
@@ -875,17 +866,16 @@ func (env *LEnv) call(fun *LVal, args *LVal, curry bool) *LVal {
 		}
 	}
 
-	body := fun.Cells[1:]
-	if len(body) == 0 {
+	if list.Len() == 0 {
 		return Nil()
 	}
+	body := list.Copy().Cells
 	if !fun.IsMacro() {
 		body[len(body)-1].Terminal = true
 	}
 	var ret *LVal
-	funenv := fun.Env()
 	for i := range body {
-		ret = funenv.Eval(body[i])
+		ret = fenv.Eval(body[i])
 		if ret.Type == LError {
 			return ret
 		}
@@ -893,18 +883,16 @@ func (env *LEnv) call(fun *LVal, args *LVal, curry bool) *LVal {
 	return ret
 }
 
-// bindFormalArguments may return an error, if an error was encountered during
-// the binding process, a function if required arguments remain to be bound, or
-// nil if all argument symbols were bound to values.
+// If fun is a builtin bind returns an LEnv for executing fun and a list of
+// arguments.  If fun is a lambda bind returns a non-nil lexical environment
+// and a list of body expressions (subslice of fun.Cells).  If an error is
+// encountered then bind returns it as the second argument.
 //
-// If bindFormals returns nil any argument symbols not bound to values in args
-// will be bound to a nil value.
-//
-// NOTE:  The process of binding formals is currently a destructive one which
-// modifies fun.  Typically, before calling bindFormals fun should be copied to
-// ensure that the function may be called again in the future.
-func (env *LEnv) bindFormals(fun, args *LVal, curry bool) *LVal {
-	funenv := fun.Env()
+// The bind function does not modify fun or args.
+func (env *LEnv) bind(fun, args *LVal) (*LEnv, *LVal) {
+	funenv := fun.Env().Copy()
+	args = QExpr(args.Cells)             // args.Cells will be modified (cell values will not)
+	formals := QExpr(fun.Cells[0].Cells) // formals.Cells will be modified
 	narg := len(args.Cells)
 	putArg := func(k, v *LVal) {
 		funenv.Put(k, v)
@@ -912,30 +900,29 @@ func (env *LEnv) bindFormals(fun, args *LVal, curry bool) *LVal {
 	putVarArg := func(k *LVal, v *LVal) {
 		funenv.Put(k, v)
 	}
+	var builtinArgs []*LVal
 	if funenv == nil {
 		// FIXME?: Builtins don't have lexical envs.  We just store the args in
 		// the cells for builtin functions.  A side effect of this is that
 		// bindFormalNext is required to make put() calls in the order args are
 		// defined.
 		putArg = func(k, v *LVal) {
-			fun.Cells = append(fun.Cells, v)
+			builtinArgs = append(builtinArgs, v)
 		}
 		putVarArg = func(k *LVal, v *LVal) {
-			fun.Cells = append(fun.Cells, v.Cells...)
+			builtinArgs = append(builtinArgs, v.Cells...)
 		}
 	}
-	formals := fun.Cells[0]
 	nformal := len(formals.Cells)
 	for len(formals.Cells) != 0 {
 		ret := env.bindFormalNext(fun, formals, args, putArg, putVarArg)
 		if ret.Type == LError {
-			return ret
+			return nil, ret
 		}
 		if ret.Type == LFun {
-			if curry {
-				return ret
-			}
-			return env.Errorf("invalid number of arguments: %v", narg)
+			// This is where one might return new function that allows partial
+			// binding of function arguments.
+			return nil, env.Errorf("invalid number of arguments: %v", narg)
 		}
 		if !ret.IsNil() {
 			panic("unexpected formal binding state")
@@ -946,9 +933,12 @@ func (env *LEnv) bindFormals(fun, args *LVal, curry bool) *LVal {
 		nformal = len(formals.Cells)
 	}
 	if len(args.Cells) > 0 {
-		return env.Errorf("invalid number of arguments: %d", narg)
+		return nil, env.Errorf("invalid number of arguments: %d", narg)
 	}
-	return Nil()
+	if funenv == nil {
+		return env, QExpr(builtinArgs)
+	}
+	return funenv, QExpr(fun.Cells[1:])
 }
 
 type bindfunc func(k, v *LVal)

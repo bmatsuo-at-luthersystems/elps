@@ -779,12 +779,6 @@ func (v *LVal) Copy() *LVal {
 	}
 	cp := &LVal{}
 	*cp = *v // shallow copy of all fields including Map and Bytes
-	if v.Type == LFun {
-		// The function invocation procedure requires altering of the Env in a
-		// persistent way (partial argument binding).  So a copy of FunData is
-		// required.
-		cp.Native = v.FunData().Copy()
-	}
 	if v.Type != LArray {
 		// Arrays are memory references but use Cells as backing storage.  So
 		// we can only copy the cells when the type is not an array.
