@@ -50,7 +50,7 @@ func (pkg *Package) Get(k *LVal) *LVal {
 		// Set the function's name here in case the same function is defined
 		// with multiple names.  We want to try and use the name the programmer
 		// used.  The name may even come from a higher scope.
-		pkg.FunNames[v.FID] = k.Str
+		pkg.FunNames[v.FID()] = k.Str
 	}
 	return v
 }
@@ -72,7 +72,7 @@ func (pkg *Package) get(k *LVal) *LVal {
 			// Set the function's name here in case the same function is
 			// defined with multiple names.  We want to try and use the name
 			// the programmer used.
-			pkg.FunNames[v.FID] = k.Str
+			pkg.FunNames[v.FID()] = k.Str
 		}
 		return v.Copy()
 	}
@@ -124,7 +124,7 @@ func (pkg *Package) Put(k, v *LVal) {
 		panic("nil value")
 	}
 	if v.Type == LFun {
-		pkg.FunNames[v.FID] = k.Str
+		pkg.FunNames[v.FID()] = k.Str
 	}
 	pkg.Symbols[k.Str] = v.Copy()
 }

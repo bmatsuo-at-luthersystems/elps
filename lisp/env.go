@@ -191,7 +191,7 @@ func (env *LEnv) Get(k *LVal) *LVal {
 		// Set the function's name here in case the same function is defined
 		// with multiple names.  We want to try and use the name the programmer
 		// used.  The name may even come from a higher scope.
-		env.FunName[v.FID] = k.Str
+		env.FunName[v.FID()] = k.Str
 	}
 	return v
 }
@@ -245,7 +245,7 @@ func (env *LEnv) get(k *LVal) *LVal {
 		}
 		lerr := pkg.Get(Symbol(pieces[1]))
 		if lerr.Type == LError {
-			lerr.Stack = env.Runtime.Stack.Copy()
+			lerr.SetCallStack(env.Runtime.Stack.Copy())
 		}
 		return lerr
 	default:
@@ -257,7 +257,7 @@ func (env *LEnv) get(k *LVal) *LVal {
 			// Set the function's name here in case the same function is
 			// defined with multiple names.  We want to try and use the name
 			// the programmer used.
-			env.FunName[v.FID] = k.Str
+			env.FunName[v.FID()] = k.Str
 		}
 		return v.Copy()
 	}
@@ -270,7 +270,7 @@ func (env *LEnv) get(k *LVal) *LVal {
 func (env *LEnv) packageGet(k *LVal) *LVal {
 	lerr := env.Runtime.Package.Get(k)
 	if lerr.Type == LError {
-		lerr.Stack = env.Runtime.Stack.Copy()
+		lerr.SetCallStack(env.Runtime.Stack.Copy())
 	}
 	return lerr
 }
@@ -278,9 +278,12 @@ func (env *LEnv) packageGet(k *LVal) *LVal {
 // GetFunName returns the function name (if any) known to be bound to the given
 // FID.
 func (env *LEnv) GetFunName(f *LVal) string {
-	pkgname := f.Package
+	if f.Type != LFun {
+		panic("not a function: " + f.Type.String())
+	}
+	pkgname := f.Package()
 	if pkgname == "" {
-		log.Printf("unknown package for function %s", f.FID)
+		log.Printf("unknown package for function %s", f.FID())
 		return ""
 	}
 	pkg := env.Runtime.Registry.Packages[pkgname]
@@ -288,7 +291,7 @@ func (env *LEnv) GetFunName(f *LVal) string {
 		log.Printf("failed to find package %q", pkgname)
 		return ""
 	}
-	return pkg.FunNames[f.FID]
+	return pkg.FunNames[f.FID()]
 }
 
 // Put takes an LSymbol k and binds it to v in env.
@@ -306,7 +309,7 @@ func (env *LEnv) Put(k, v *LVal) {
 		panic("nil value")
 	}
 	if v.Type == LFun {
-		env.FunName[v.FID] = k.Str
+		env.FunName[v.FID()] = k.Str
 	}
 	env.Scope[k.Str] = v.Copy()
 }
@@ -332,12 +335,14 @@ func (env *LEnv) Lambda(formals *LVal, body []*LVal) *LVal {
 	cells = append(cells, body...)
 	fenv := NewEnv(env)
 	fun := &LVal{
-		Type:  LFun,
-		Env:   fenv,
-		FID:   fenv.getFID(),
+		Type: LFun,
+		Native: &LFunData{
+			FID:     fenv.getFID(),
+			Package: env.Runtime.Package.Name,
+			Env:     fenv,
+		},
 		Cells: cells,
 	}
-	fun.Package = env.Runtime.Package.Name
 	return fun
 }
 
@@ -363,7 +368,7 @@ func (env *LEnv) AddMacros(external bool, macs ...LBuiltinDef) {
 		}
 		id := fmt.Sprintf("<builtin-macro ``%s''>", mac.Name())
 		fn := Macro(id, mac.Formals(), mac.Eval)
-		fn.Package = pkg.Name
+		fn.FunData().Package = pkg.Name
 		pkg.Put(k, fn)
 		if external {
 			pkg.Externals = append(pkg.Externals, k.Str)
@@ -386,7 +391,7 @@ func (env *LEnv) AddSpecialOps(external bool, ops ...LBuiltinDef) {
 		}
 		id := fmt.Sprintf("<special-op ``%s''>", op.Name())
 		fn := SpecialOp(id, op.Formals(), op.Eval)
-		fn.Package = pkg.Name
+		fn.FunData().Package = pkg.Name
 		pkg.Put(k, fn)
 		if external {
 			pkg.Externals = append(pkg.Externals, k.Str)
@@ -409,7 +414,7 @@ func (env *LEnv) AddBuiltins(external bool, funs ...LBuiltinDef) {
 		}
 		id := fmt.Sprintf("<builtin-function ``%s''>", f.Name())
 		v := Fun(id, f.Formals(), f.Eval)
-		v.Package = pkg.Name
+		v.FunData().Package = pkg.Name
 		pkg.Put(k, v)
 		if external {
 			pkg.Externals = append(pkg.Externals, k.Str)
@@ -452,10 +457,10 @@ func (env *LEnv) ErrorCondition(condition string, v ...interface{}) *LVal {
 				panic("invalid error argument")
 			}
 			return &LVal{
-				Type:  LError,
-				Str:   condition,
-				Stack: env.Runtime.Stack.Copy(),
-				Cells: []*LVal{Native(v)},
+				Type:   LError,
+				Str:    condition,
+				Native: env.Runtime.Stack.Copy(),
+				Cells:  []*LVal{Native(v)},
 			}
 		case string:
 			cells = append(cells, String(v))
@@ -467,7 +472,7 @@ func (env *LEnv) ErrorCondition(condition string, v ...interface{}) *LVal {
 		Type:   LError,
 		Source: env.Loc,
 		Str:    condition,
-		Stack:  env.Runtime.Stack.Copy(),
+		Native: env.Runtime.Stack.Copy(),
 		Cells:  cells,
 	}
 }
@@ -490,7 +495,7 @@ func (env *LEnv) ErrorConditionf(condition string, format string, v ...interface
 		Source: env.Loc,
 		Type:   LError,
 		Str:    condition,
-		Stack:  env.Runtime.Stack.Copy(),
+		Native: env.Runtime.Stack.Copy(),
 		Cells:  []*LVal{String(fmt.Sprintf(format, v...))},
 	}
 }
@@ -542,7 +547,7 @@ eval:
 			}
 			lerr := pkg.Get(Symbol(pieces[1]))
 			if lerr.Type == LError {
-				lerr.Stack = env.Runtime.Stack.Copy()
+				lerr.SetCallStack(env.Runtime.Stack.Copy())
 			}
 			return lerr
 		default:
@@ -560,8 +565,8 @@ eval:
 			if res.Source == nil {
 				res.Source = env.Loc
 			}
-			if res.Stack == nil {
-				res.Stack = env.Runtime.Stack.Copy()
+			if res.CallStack() == nil {
+				res.SetCallStack(env.Runtime.Stack.Copy())
 			}
 		}
 		return res
@@ -584,8 +589,8 @@ func (env *LEnv) EvalSExpr(s *LVal) *LVal {
 	}
 	call := env.evalSExprCells(s)
 	if call.Type == LError {
-		if call.Stack == nil {
-			call.Stack = env.Runtime.Stack.Copy()
+		if call.CallStack() == nil {
+			call.SetCallStack(env.Runtime.Stack.Copy())
 		}
 		return call
 	}
@@ -615,7 +620,7 @@ func (env *LEnv) MacroCall(fun, args *LVal) *LVal {
 	}
 
 	// Push a frame onto the stack to represent the function's execution.
-	env.Runtime.Stack.PushFID(env.Loc, fun.FID, fun.Package, env.GetFunName(fun))
+	env.Runtime.Stack.PushFID(env.Loc, fun.FID(), fun.Package(), env.GetFunName(fun))
 	defer env.Runtime.Stack.Pop()
 	// Macros can't participate in tail-recursion optimization at all.  Enable
 	// the TROBlock on the stack fram so TerminalFID never seeks past the
@@ -654,7 +659,7 @@ func (env *LEnv) SpecialOpCall(fun, args *LVal) *LVal {
 	}
 
 	// Push a frame onto the stack to represent the function's execution.
-	env.Runtime.Stack.PushFID(env.Loc, fun.FID, fun.Package, env.GetFunName(fun))
+	env.Runtime.Stack.PushFID(env.Loc, fun.FID(), fun.Package(), env.GetFunName(fun))
 	defer env.Runtime.Stack.Pop()
 
 	// Special functions in general cannot be candidates for tail-recursion
@@ -704,10 +709,10 @@ func (env *LEnv) funCall(fun, args *LVal, curry bool) *LVal {
 	// checking.  But push FID onto the stack before popping to simplify
 	// book-keeping.
 	var npop int
-	npop = env.Runtime.Stack.TerminalFID(fun.FID)
+	npop = env.Runtime.Stack.TerminalFID(fun.FID())
 
 	// Push a frame onto the stack to represent the function's execution.
-	env.Runtime.Stack.PushFID(env.Loc, fun.FID, fun.Package, env.GetFunName(fun))
+	env.Runtime.Stack.PushFID(env.Loc, fun.FID(), fun.Package(), env.GetFunName(fun))
 	defer env.Runtime.Stack.Pop()
 
 	if npop > 0 {
@@ -838,7 +843,8 @@ func (env *LEnv) call(fun *LVal, args *LVal, curry bool) *LVal {
 	// NOTE:  The book's suggestion of chaining env here seems like dynamic
 	// scoping.
 
-	if fun.Builtin != nil {
+	fn := fun.Builtin()
+	if fn != nil {
 		// TODO:  It might be cool to implement a special value (like
 		// LTerminal) which a builtin could return.  If the LEnv encounters
 		// LTerminal values returned from functions then they immediately mark
@@ -847,7 +853,7 @@ func (env *LEnv) call(fun *LVal, args *LVal, curry bool) *LVal {
 
 		// FIXME:  I think fun.Env is probably correct here.  But it wouldn't
 		// surprise me if at least one builtin breaks when it switches.
-		return fun.Builtin(env, QExpr(fun.Cells[1:]))
+		return fn(env, QExpr(fun.Cells[1:]))
 	}
 
 	// With formal arguments bound, we can switch into the function's package
@@ -858,8 +864,9 @@ func (env *LEnv) call(fun *LVal, args *LVal, curry bool) *LVal {
 	// to modify the *package* namespace and not the "lisp" namespace.  Dynamic
 	// variables may be required in order to work through this completely.
 	outer := env.Runtime.Package
-	if outer.Name != fun.Package {
-		inner := env.Runtime.Registry.Packages[fun.Package]
+	pkg := fun.Package()
+	if outer.Name != pkg {
+		inner := env.Runtime.Registry.Packages[pkg]
 		if inner != nil {
 			env.Runtime.Package = inner
 			defer func() {
@@ -876,8 +883,9 @@ func (env *LEnv) call(fun *LVal, args *LVal, curry bool) *LVal {
 		body[len(body)-1].Terminal = true
 	}
 	var ret *LVal
+	funenv := fun.Env()
 	for i := range body {
-		ret = fun.Env.Eval(body[i])
+		ret = funenv.Eval(body[i])
 		if ret.Type == LError {
 			return ret
 		}
@@ -896,14 +904,15 @@ func (env *LEnv) call(fun *LVal, args *LVal, curry bool) *LVal {
 // modifies fun.  Typically, before calling bindFormals fun should be copied to
 // ensure that the function may be called again in the future.
 func (env *LEnv) bindFormals(fun, args *LVal, curry bool) *LVal {
+	funenv := fun.Env()
 	narg := len(args.Cells)
 	putArg := func(k, v *LVal) {
-		fun.Env.Put(k, v)
+		funenv.Put(k, v)
 	}
 	putVarArg := func(k *LVal, v *LVal) {
-		fun.Env.Put(k, v)
+		funenv.Put(k, v)
 	}
-	if fun.Env == nil {
+	if funenv == nil {
 		// FIXME?: Builtins don't have lexical envs.  We just store the args in
 		// the cells for builtin functions.  A side effect of this is that
 		// bindFormalNext is required to make put() calls in the order args are

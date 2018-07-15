@@ -179,8 +179,8 @@ func builtinLoadString(env *LEnv, args *LVal) *LVal {
 	// optimization from unwinding the stack to/beyond this point.
 	env.Runtime.Stack.Top().TROBlock = true
 	v := env.root().LoadString(_name, source.Str)
-	if v.Type == LError && v.Stack == nil {
-		v.Stack = env.Runtime.Stack.Copy()
+	if v.Type == LError && v.CallStack() == nil {
+		v.SetCallStack(env.Runtime.Stack.Copy())
 	}
 	return v
 }
@@ -204,8 +204,8 @@ func builtinLoadBytes(env *LEnv, args *LVal) *LVal {
 	// optimization from unwinding the stack to/beyond this point.
 	env.Runtime.Stack.Top().TROBlock = true
 	v := env.root().Load(_name, bytes.NewReader(source.Bytes()))
-	if v.Type == LError && v.Stack == nil {
-		v.Stack = env.Runtime.Stack.Copy()
+	if v.Type == LError && v.CallStack() == nil {
+		v.SetCallStack(env.Runtime.Stack.Copy())
 	}
 	return v
 }
@@ -738,7 +738,6 @@ func builtinCompose(env *LEnv, args *LVal) *LVal {
 		gcall.Cells = append(gcall.Cells, Nil())
 	}
 	newfun := env.Lambda(formals, []*LVal{body})
-	newfun.Package = env.Runtime.Package.Name
 	return newfun
 }
 
@@ -776,7 +775,7 @@ func builtinAssoc(env *LEnv, args *LVal) *LVal {
 		return env.Errorf("first argument is not a map: %s", m.Type)
 	} else {
 		m = m.Copy()
-		m.Map = m.copyMap()
+		m.Native = m.copyMap()
 	}
 	err := mapSet(m, k, v, true)
 	if !err.IsNil() {
@@ -824,7 +823,7 @@ func builtinIsKey(env *LEnv, args *LVal) *LVal {
 	}
 	ok := mapHasKey(m, k)
 	if ok.Type == LError {
-		ok.Stack = env.Runtime.Stack.Copy()
+		ok.SetCallStack(env.Runtime.Stack.Copy())
 	}
 	return ok
 }

@@ -130,7 +130,7 @@ func opLambda(env *LEnv, args *LVal) *LVal {
 	// (I think... -bmatsuo)
 	lval := env.Lambda(formals, body)
 	if lval.Type == LError {
-		lval.Stack = env.Runtime.Stack.Copy()
+		lval.SetCallStack(env.Runtime.Stack.Copy())
 	}
 	return lval
 }
