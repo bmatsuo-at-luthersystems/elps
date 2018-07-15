@@ -125,6 +125,7 @@ string"""`, `"\"\"a raw\nstring"`, ""},
 			{"((lambda (&rest x) (reverse 'list x)) 1 2 3)", "'(3 2 1)", ""},
 		}},
 		{"concat", elpstest.TestSequence{
+			{`(concat 'vector () ())`, `(vector)`, ""},
 			{`(concat 'string "a" (to-bytes "b") '(99))`, `"abc"`, ""},
 			{`(to-string (concat 'bytes "a" (to-bytes "b") (vector 99)))`, `"abc"`, ""},
 		}},

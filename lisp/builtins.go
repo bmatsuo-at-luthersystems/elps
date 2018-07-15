@@ -954,7 +954,12 @@ func builtinConcatSeq(env *LEnv, args *LVal) *LVal {
 		size += v.Len()
 	}
 	if size == 0 {
-		return Nil()
+		switch typespec.Str {
+		case "vector":
+			return Array(QExpr([]*LVal{Int(0)}), nil)
+		case "list":
+			return Nil()
+		}
 	}
 	var ret *LVal
 	var cells []*LVal
