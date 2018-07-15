@@ -28,7 +28,9 @@ func LoadPackage(env *lisp.LEnv) *lisp.LVal {
 }
 
 var builtins = []*libutil.Builtin{
-	libutil.Function("getenv", lisp.Formals("key"), BuiltinGetenv),
+	libutil.Function("args", lisp.Formals(), BuiltinArgs),
+	libutil.Function("set-args", lisp.Formals("args"), BuiltinSetArgs),
+	libutil.Function("get-env", lisp.Formals("key"), BuiltinGetenv),
 	libutil.Function("rename", lisp.Formals("source-path", "destination-path"), BuiltinMove),
 	libutil.Function("remove", lisp.Formals("path", lisp.KeyArgSymbol, "recursive"), BuiltinRemove),
 	libutil.Function("mkdir", lisp.Formals("path", lisp.KeyArgSymbol, "recursive", "mode"), BuiltinMkdir),
@@ -36,6 +38,30 @@ var builtins = []*libutil.Builtin{
 	libutil.Function("work-dir", lisp.Formals(), BuiltinWorkDir),
 	libutil.Function("exists?", lisp.Formals("path"), BuiltinExists),
 	libutil.Function("dir?", lisp.Formals("path"), BuiltinIsDir),
+}
+
+func BuiltinArgs(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
+	cells := make([]*lisp.LVal, len(os.Args))
+	for i, arg := range os.Args {
+		cells[i] = lisp.String(arg)
+	}
+	return lisp.QExpr(cells)
+}
+
+func BuiltinSetArgs(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
+	list := args.Cells[0]
+	if list.Type != lisp.LSExpr {
+		return env.Errorf("argument is not a list: %v", list.Type)
+	}
+	osargs := make([]string, list.Len())
+	for i, v := range list.Cells {
+		if v.Type != lisp.LString {
+			return env.Errorf("argument is not a list of strings: %v", v.Type)
+		}
+		osargs[i] = v.Str
+	}
+	os.Args = osargs
+	return lisp.Nil()
 }
 
 func BuiltinGetenv(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
