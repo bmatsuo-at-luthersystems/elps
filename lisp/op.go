@@ -259,7 +259,7 @@ func opThreadLast(env *LEnv, args *LVal) *LVal {
 	for i, expr := range exprs {
 		cells := make([]*LVal, 0, len(expr.Cells)+1)
 		cells = append(cells, expr.Cells...)
-		cells = append(expr.Cells, val)
+		cells = append(cells, val)
 		if i == len(exprs)-1 {
 			return env.Terminal(SExpr(cells))
 		}

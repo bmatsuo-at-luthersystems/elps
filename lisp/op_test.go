@@ -81,6 +81,8 @@ func TestSpecialOp(t *testing.T) {
 			{`(thread-last 1 (+ 2) (> 2))`, `false`, ""},
 			{`(thread-first 1 (+   2) (<   2))`, `false`, ""},
 			{`(thread-first 1 (+   2) (>   2))`, `true`, ""},
+			{`(map 'list (lambda (x) (thread-last x (+ 2) (< 2))) '(1 -1))`, `'(true false)`, ""},
+			{`(map 'list (lambda (x) (thread-first x (+ 2) (< 2))) '(1 -1))`, `'(false true)`, ""},
 		}},
 	}
 	elpstest.RunTestSuite(t, tests)
