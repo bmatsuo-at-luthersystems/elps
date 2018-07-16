@@ -72,20 +72,20 @@ func mapGet(m, key, def *LVal) *LVal {
 	case string:
 		v := mmap[k]
 		if v != nil {
-			return v.Copy()
+			return v
 		}
 		v = mmap[mapSymbol(k)]
 		if v != nil {
-			return v.Copy()
+			return v
 		}
 	case mapSymbol:
 		v := mmap[k]
 		if v != nil {
-			return v.Copy()
+			return v
 		}
 		v = mmap[string(k)]
 		if v != nil {
-			return v.Copy()
+			return v
 		}
 	}
 	if def == nil {
