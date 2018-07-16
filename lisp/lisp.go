@@ -11,7 +11,7 @@ import (
 )
 
 // LType is the type of an LVal
-type LType uint8
+type LType uint
 
 // Possible LValType values
 const (
@@ -152,11 +152,6 @@ func (fd *LFunData) Copy() *LFunData {
 type LVal struct {
 	// Type is the native type for a value in lisp.
 	Type LType
-	// FunType used to further classify LFun values
-	FunType LFunType
-
-	Quoted  bool // flag indicating a single level of quoting
-	Spliced bool // denote the value as needing to be spliced into a parent value
 
 	// Source is the values originating location in source code.
 	Source *token.Location
@@ -177,6 +172,12 @@ type LVal struct {
 	// Native is generic storage for data which cannot be represented as an
 	// LVal (and thus can't be stored in Cells).
 	Native interface{}
+
+	// FunType used to further classify LFun values
+	FunType LFunType
+
+	Quoted  bool // flag indicating a single level of quoting
+	Spliced bool // denote the value as needing to be spliced into a parent value
 }
 
 // Value conveniently converts v to an LVal.  Types which can be represented
