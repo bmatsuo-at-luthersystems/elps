@@ -87,6 +87,7 @@ const (
 	// data in their Cells, are passed back from functions.  Typically the
 	// environment is solely responsible for managing mark values and
 	// applications should never see them during calls to builtin functions.
+	LMarkTerminal  // LEnv marks the frame as terminal and evaluates tho contained expr
 	LMarkTailRec   // LEnv resumes a call a set number of frames down the stack.
 	LMarkMacExpand // LEnv will evaluate the returned LVal a subsequent time.
 )
@@ -154,9 +155,8 @@ type LVal struct {
 	// FunType used to further classify LFun values
 	FunType LFunType
 
-	Quoted   bool // flag indicating a single level of quoting
-	Spliced  bool // denote the value as needing to be spliced into a parent value
-	Terminal bool // LVal is the terminal expression in a function body
+	Quoted  bool // flag indicating a single level of quoting
+	Spliced bool // denote the value as needing to be spliced into a parent value
 
 	// Source is the values originating location in source code.
 	Source *token.Location
@@ -455,8 +455,10 @@ func ErrorConditionf(condition string, format string, v ...interface{}) *LVal {
 // Quote quotes v and returns the quoted value.  The LVal v is modified.
 func Quote(v *LVal) *LVal {
 	if !v.Quoted {
-		v.Quoted = true
-		return v
+		cp := &LVal{}
+		*cp = *v
+		cp.Quoted = true
+		return cp
 	}
 	quote := &LVal{
 		Source: nativeSource(),
@@ -465,6 +467,24 @@ func Quote(v *LVal) *LVal {
 		Cells:  []*LVal{v},
 	}
 	return quote
+}
+
+// Splice is used in the implementation of quasiquote to insert a list into an
+// outer slist.
+func Splice(v *LVal) *LVal {
+	cp := &LVal{}
+	*cp = *v
+	cp.Spliced = true
+	return cp
+}
+
+// shallowUnquote is an artifact from when functions could freely modify LVals
+// It may be worth trying to unify all quoting under the LQuote type.
+func shallowUnquote(v *LVal) *LVal {
+	cp := &LVal{}
+	*cp = *v
+	cp.Quoted = false
+	return cp
 }
 
 // Formals returns an LVal reprsenting a function's formal argument list
@@ -882,6 +902,8 @@ func (v *LVal) str(onTheRecord bool) string {
 		return fmt.Sprintf("#<array dims=%s>", v.Cells[0])
 	case LNative:
 		return fmt.Sprintf("#<native value: %T>", v.Native)
+	case LMarkTerminal:
+		return quote + fmt.Sprintf("#<terminal-expression %s>", v.Cells[0])
 	case LMarkTailRec:
 		return quote + fmt.Sprintf("#<tail-recursion frames=%d (%s %s)>", v.Cells[0].Int, v.Cells[1], v.Cells[2])
 	case LMarkMacExpand:
@@ -903,7 +925,7 @@ func bodyStr(exprs []*LVal) string {
 func lambdaVars(formals *LVal, bound *LVal) *LVal {
 	s := SExpr([]*LVal{Quote(Symbol("list")), formals, bound})
 	s = builtinConcat(nil, s)
-	s.Quoted = false
+	s.Quoted = false // This is fine because builtinConcat returns a new list
 	return s
 }
 

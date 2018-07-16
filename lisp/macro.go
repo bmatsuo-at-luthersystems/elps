@@ -161,8 +161,7 @@ func findAndUnquote(env *LEnv, v *LVal, depth int) *LVal {
 		if unquote.Type == LQuote {
 			x = unquote.Cells[0]
 		} else if unquote.Quoted {
-			unquote.Quoted = false
-			x = unquote
+			x = shallowUnquote(unquote)
 		} else {
 			x = env.Eval(unquote)
 		}
@@ -170,7 +169,7 @@ func findAndUnquote(env *LEnv, v *LVal, depth int) *LVal {
 			if depth == 0 {
 				return env.Errorf("unquote-splicing used in an invalid context")
 			}
-			x.Spliced = true
+			x = Splice(x)
 		}
 		return x
 	}

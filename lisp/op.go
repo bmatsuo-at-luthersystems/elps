@@ -113,8 +113,8 @@ func opQuasiquote(env *LEnv, args *LVal) *LVal {
 	// findAndUnquote, but it is less disruptive here than in CallSpecialOp.
 	// And I'm not sure that I'm going to fix findAndUnquote soon -- it may
 	// just be rewritten if another problem is found.
-	if result.Type == LSExpr && !result.IsNil() {
-		result.Quoted = true
+	if result.Type == LSExpr && !result.IsNil() && !result.Quoted {
+		result = Quote(result)
 	}
 	return result
 }
@@ -140,7 +140,6 @@ func opExpr(env *LEnv, args *LVal) *LVal {
 		return env.Errorf("one argument expected (got %d)", args.Len())
 	}
 	body := args.Cells[0]
-	body.Terminal = true
 	n, short, nopt, vargs, err := countExprArgs(body)
 	if err != nil {
 		return env.Errorf("%s", err)
@@ -255,13 +254,16 @@ func opThreadLast(env *LEnv, args *LVal) *LVal {
 		}
 	}
 	if len(exprs) == 0 {
-		val.Terminal = true
-		return env.Eval(val)
+		return env.Terminal(val)
 	}
-	exprs[len(exprs)-1].Terminal = true
-	for _, expr := range exprs {
-		expr.Cells = append(expr.Cells, val)
-		val = env.Eval(expr)
+	for i, expr := range exprs {
+		cells := make([]*LVal, 0, len(expr.Cells)+1)
+		cells = append(cells, expr.Cells...)
+		cells = append(expr.Cells, val)
+		if i == len(exprs)-1 {
+			return env.Terminal(SExpr(cells))
+		}
+		val = env.Eval(SExpr(cells))
 		if val.Type == LError {
 			return val
 		}
@@ -280,15 +282,16 @@ func opThreadFirst(env *LEnv, args *LVal) *LVal {
 		}
 	}
 	if len(exprs) == 0 {
-		val.Terminal = true
-		return env.Eval(val)
+		return env.Terminal(val)
 	}
-	exprs[len(exprs)-1].Terminal = true
-	for _, expr := range exprs {
-		cells := make([]*LVal, len(expr.Cells)+1)
-		cells[0] = expr.Cells[0]
-		cells[1] = val
-		copy(cells[2:], expr.Cells[1:])
+	for i, expr := range exprs {
+		cells := make([]*LVal, 0, len(expr.Cells)+1)
+		cells = append(cells, expr.Cells[0])
+		cells = append(cells, val)
+		cells = append(cells, expr.Cells[1:]...)
+		if i == len(exprs)-1 {
+			return env.Terminal(SExpr(cells))
+		}
 		val = env.Eval(SExpr(cells))
 		if val.Type == LError {
 			return val
@@ -350,15 +353,15 @@ func opProgn(env *LEnv, args *LVal) *LVal {
 	if len(args.Cells) == 0 {
 		return Nil()
 	}
-	args.Cells[len(args.Cells)-1].Terminal = true
+	term := args.Cells[len(args.Cells)-1]
 	var val *LVal
-	for _, c := range args.Cells {
+	for _, c := range args.Cells[:len(args.Cells)-1] {
 		val = env.Eval(c)
 		if val.Type == LError {
 			return val
 		}
 	}
-	return val
+	return env.Terminal(term)
 }
 
 func opHandlerBind(env *LEnv, args *LVal) *LVal {
@@ -475,22 +478,19 @@ func opIf(env *LEnv, s *LVal) *LVal {
 	}
 	if Not(r) {
 		// test-form evaluated to nil (false)
-		s.Cells[2].Terminal = true
-		return env.Eval(s.Cells[2])
+		return env.Terminal(s.Cells[2])
 	}
 	// test-form evaluated to something non-nil (true)
-	s.Cells[1].Terminal = true
-	return env.Eval(s.Cells[1])
+	return env.Terminal(s.Cells[1])
 }
 
 func opOr(env *LEnv, s *LVal) *LVal {
 	if len(s.Cells) == 0 {
 		return Nil()
 	}
-	s.Cells[len(s.Cells)-1].Terminal = true
-	var r *LVal
-	for _, c := range s.Cells {
-		r = env.Eval(c)
+	term := s.Cells[len(s.Cells)-1]
+	for _, c := range s.Cells[:len(s.Cells)-1] {
+		r := env.Eval(c)
 		if r.Type == LError {
 			return r
 		}
@@ -503,7 +503,7 @@ func opOr(env *LEnv, s *LVal) *LVal {
 	//		(or) == nil
 	//		(or x) == x
 	//		(or x1 x2 ... xn) == (cond (x1 x1) (x2 x2) ... (t xn))
-	return r
+	return env.Terminal(term)
 }
 
 func opAnd(env *LEnv, s *LVal) *LVal {
@@ -511,7 +511,9 @@ func opAnd(env *LEnv, s *LVal) *LVal {
 		// The identity for and is a true value.
 		return Bool(true)
 	}
-	s.Cells[len(s.Cells)-1].Terminal = true
+	// NOTE:  Because the value of the last evaluation may not be returned
+	// directly (unlike ``or'').  The and operation cannot use a Terminal
+	// expression.
 	var r *LVal
 	for _, c := range s.Cells {
 		r = env.Eval(c)

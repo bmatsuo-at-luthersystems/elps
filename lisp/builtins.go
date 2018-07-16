@@ -469,8 +469,7 @@ func builtinEval(env *LEnv, args *LVal) *LVal {
 	if v.Type == LQuote {
 		return v.Cells[0]
 	}
-	v.Quoted = false
-	return env.Eval(v)
+	return env.Eval(shallowUnquote(v))
 }
 
 func builtinError(env *LEnv, args *LVal) *LVal {
@@ -1598,12 +1597,14 @@ func builtinIsEmpty(env *LEnv, args *LVal) *LVal {
 }
 
 func builtinCons(env *LEnv, args *LVal) *LVal {
-	if args.Cells[1].Type != LSExpr {
-		return env.Errorf("second argument is not a list: %s", args.Cells[1].Type)
+	head, tail := args.Cells[0], args.Cells[1]
+	if tail.Type != LSExpr {
+		return env.Errorf("second argument is not a list: %s", tail.Type)
 	}
-	args.Cells = append(args.Cells[:1], args.Cells[1].Cells...)
-	args.Quoted = true
-	return args
+	cells := make([]*LVal, 0, 1+args.Len())
+	cells = append(cells, head)
+	cells = append(cells, tail.Cells...)
+	return QExpr(cells)
 }
 
 func builtinNot(env *LEnv, args *LVal) *LVal {

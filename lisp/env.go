@@ -346,6 +346,14 @@ func (env *LEnv) Lambda(formals *LVal, body []*LVal) *LVal {
 	return fun
 }
 
+func (env *LEnv) Terminal(expr *LVal) *LVal {
+	return &LVal{
+		Type:   LMarkTerminal,
+		Native: env,
+		Cells:  []*LVal{expr},
+	}
+}
+
 func (env *LEnv) root() *LEnv {
 	for env.Parent != nil {
 		env = env.Parent
@@ -501,7 +509,7 @@ func (env *LEnv) ErrorConditionf(condition string, format string, v ...interface
 }
 
 // Eval evaluates v in the context (scope) of env and returns the resulting
-// LVal.
+// LVal.  Eval does not modify v.
 //
 // NOTE:  Eval shouldn't unquote v during evaluation -- a difference between
 // Eval and the ``eval'' builtin function, but it does.  For some reason macros
@@ -512,22 +520,6 @@ eval:
 		return env.Errorf("spliced value used as expression")
 	}
 	env.Loc = v.Source
-	// Builtins signal that they are executing their final expression (which
-	// will be returned verbatim) by evaluating an LVal marked as terminal.
-	// When this happens we want to mark the stack as terminal so tail
-	// recursion optimization may seek past the frame at top of the stack (and
-	// clear the LVal's terminal field for good measure).  We don't clear the
-	// frame's Terminal flag when v.Terminal is false because a terminal
-	// expression likely needs to have args evaluated (for which a TROBlock
-	// prevents recursion optimization).  And the arguments to the terminal
-	// expression will not themselves be terminal expressions.
-	if v.Terminal {
-		v.Terminal = false
-		top := env.Runtime.Stack.Top()
-		if top != nil {
-			top.Terminal = true
-		}
-	}
 	if v.Quoted {
 		return v
 	}
@@ -645,7 +637,7 @@ func (env *LEnv) MacroCall(fun, args *LVal) *LVal {
 	// massaged to return a proper value.  I'm sure there is a bug where
 	// something is unintentionally unquoted.  I will deal with
 	// implementing a proper system for special operators at that point.
-	r.Quoted = false
+	r = shallowUnquote(r)
 	return markMacExpand(r)
 }
 
@@ -836,15 +828,14 @@ func (env *LEnv) call(fun *LVal, args *LVal) *LVal {
 
 	fn := fun.Builtin()
 	if fn != nil {
-		// TODO:  It might be cool to implement a special value (like
-		// LTerminal) which a builtin could return.  If the LEnv encounters
-		// LTerminal values returned from functions then they immediately mark
-		// the top terminal and evaluate before popping the stack (but saving a
-		// Go stack frame).
-
 		// FIXME:  I think fun.Env is probably correct here.  But it wouldn't
 		// surprise me if at least one builtin breaks when it switches.
-		return fn(env, list)
+		val := fn(env, list)
+		if val.Type == LMarkTerminal {
+			env.Runtime.Stack.Top().Terminal = true
+			return val.Native.(*LEnv).Eval(val.Cells[0])
+		}
+		return val
 	}
 
 	// With formal arguments bound, we can switch into the function's package
@@ -869,18 +860,18 @@ func (env *LEnv) call(fun *LVal, args *LVal) *LVal {
 	if list.Len() == 0 {
 		return Nil()
 	}
-	body := list.Copy().Cells
-	if !fun.IsMacro() {
-		body[len(body)-1].Terminal = true
-	}
+	body := list.Cells
 	var ret *LVal
-	for i := range body {
+	for i := 0; i < len(body)-1; i++ {
 		ret = fenv.Eval(body[i])
 		if ret.Type == LError {
 			return ret
 		}
 	}
-	return ret
+	if !fun.IsMacro() {
+		env.Runtime.Stack.Top().Terminal = true
+	}
+	return fenv.Eval(body[len(body)-1])
 }
 
 // If fun is a builtin bind returns an LEnv for executing fun and a list of
