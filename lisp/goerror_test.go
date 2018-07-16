@@ -84,7 +84,7 @@ func TestLoadErrors(t *testing.T) {
 	})
 	lerr = env.Eval(testsrc)
 	msg = lisp.GoError(lerr).Error()
-	assert.Equal(t, "<native code>: lisp:load-string: test.lisp:1: unexpected-token: unexpected )", msg)
+	assert.Equal(t, "<native code>: lisp:load-string: test.lisp:1: parse-error: unexpected token: )", msg)
 
 	testsrc = lisp.SExpr([]*lisp.LVal{
 		lisp.Symbol("load-string"),
@@ -94,7 +94,7 @@ func TestLoadErrors(t *testing.T) {
 	})
 	lerr = env.Eval(testsrc)
 	msg = lisp.GoError(lerr).Error()
-	assert.Equal(t, "<native code>: lisp:load-string: test.lisp:1: unexpected-token: unexpected )", msg)
+	assert.Equal(t, "<native code>: lisp:load-string: test.lisp:1: parse-error: unexpected token: )", msg)
 
 	testsrc = lisp.SExpr([]*lisp.LVal{
 		lisp.Symbol("load-string"),

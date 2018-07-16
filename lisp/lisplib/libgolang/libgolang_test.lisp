@@ -3,7 +3,7 @@
 
 (test-let* "struct"
           ((struct (make-test-struct))
-           (field (golang:struct-field struct)))  ; partially bind function args
+           (field (curry-function 'golang:struct-field struct)))  ; partially bind function args
           (assert (string= (golang:string (field "StringField"))
                            "test-string"))
           (assert (= (golang:int (field "IntField"))

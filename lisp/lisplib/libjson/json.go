@@ -151,7 +151,7 @@ func (s *Serializer) attachStack(env *lisp.LEnv, lerr *lisp.LVal) *lisp.LVal {
 	if lerr.Type != lisp.LError {
 		return lerr
 	}
-	lerr.Stack = env.Runtime.Stack.Copy()
+	lerr.SetCallStack(env.Runtime.Stack.Copy())
 	return lerr
 }
 
@@ -403,8 +403,9 @@ func (s *Serializer) GoMap(v *lisp.LVal, stringNums bool) (SortedMap, bool) {
 	if v.Type != lisp.LSortMap {
 		return nil, false
 	}
-	m := make(SortedMap, len(v.Map))
-	for k, vlisp := range v.Map {
+	lmap := v.Map()
+	m := make(SortedMap, len(lmap))
+	for k, vlisp := range lmap {
 		vgo := s.GoValue(vlisp, stringNums)
 		kreflect := reflect.ValueOf(k)
 		// This is really shitty

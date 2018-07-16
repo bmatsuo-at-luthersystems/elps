@@ -30,9 +30,15 @@ const (
 	ERROR
 	EOF
 
+	HASH_BANG
+
 	// Atomic expressions & literals
 	SYMBOL
 	INT
+	INT_OCTAL_MACRO
+	INT_OCTAL
+	INT_HEX_MACRO
+	INT_HEX
 	FLOAT
 	STRING
 	STRING_RAW
@@ -55,22 +61,27 @@ const (
 
 func (typ Type) String() string {
 	typeStrings := [numTokenTypes]string{
-		INVALID:    "invalid",
-		ERROR:      "error",
-		EOF:        "EOF",
-		SYMBOL:     "symbol",
-		INT:        "int",
-		FLOAT:      "float",
-		STRING:     "string",
-		STRING_RAW: "raw-string",
-		COMMENT:    ";",
-		NEGATIVE:   "-",
-		QUOTE:      "'",
-		UNBOUND:    "#^",
-		PAREN_L:    "(",
-		PAREN_R:    ")",
-		BRACE_L:    "[",
-		BRACE_R:    "]",
+		INVALID:         "invalid",
+		ERROR:           "error",
+		EOF:             "EOF",
+		HASH_BANG:       "#!",
+		SYMBOL:          "symbol",
+		INT:             "int",
+		INT_OCTAL_MACRO: "#o",
+		INT_OCTAL:       "octal",
+		INT_HEX_MACRO:   "#x",
+		INT_HEX:         "hex",
+		FLOAT:           "float",
+		STRING:          "string",
+		STRING_RAW:      "raw-string",
+		COMMENT:         ";",
+		NEGATIVE:        "-",
+		QUOTE:           "'",
+		UNBOUND:         "#^",
+		PAREN_L:         "(",
+		PAREN_R:         ")",
+		BRACE_L:         "[",
+		BRACE_R:         "]",
 	}
 	if typ >= numTokenTypes {
 		return typeStrings[INVALID]

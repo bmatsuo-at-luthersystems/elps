@@ -139,8 +139,9 @@ func GoMap(v *LVal) (map[interface{}]interface{}, bool) {
 	if v.Type != LSortMap {
 		return nil, false
 	}
-	m := make(map[interface{}]interface{}, len(v.Map))
-	for k, vlisp := range v.Map {
+	lmap := v.Map()
+	m := make(map[interface{}]interface{}, len(lmap))
+	for k, vlisp := range lmap {
 		vgo := GoValue(vlisp)
 		switch k.(type) {
 		case mapSymbol:

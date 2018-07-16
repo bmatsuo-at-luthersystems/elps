@@ -33,42 +33,23 @@ Lisp code can be 'loaded' (parsed and evaluated) using the `env.Load` family of
 functions.
 
 ```go
-ret := env.LoadString(lispcode)
+ret := env.LoadString("code.lisp", lispcode)
 if ret.Type == lisp.LError {
     // handle an error
 }
 ```
 
-Instead of repeatedly parsing code, an expression can be parsed and evaluated
-separately.
+Instead of repeatedly parsing code, the TextLoader function can return a
+function that efficiently loads parsed expressions multiple times.
 
 ```go
-exprs, err := env.Reader.Read(r)
+fn, err := lisp.TextLoader(parser.NewReader(), "code.lisp", strings.NewReader(lispcode))
 if err != nil {
-    // handle io error
+    // handle parse error
 }
-for _, expr := range exprs {
-    ret := env.Eval(expr)
-    if ret.Type == lisp.LError {
-        // handle an error
-        break
-    }
-}
-```
-
-To evaluate the same code repeatedly it is important not to pass the same LVal
-to env.Eval multiple times.  Instead, make a copy of the expression each time
-it is evaluated.
-
-```go
-for _, expr := range exprs {
-    // a copy of each expression is passed so that exprs can be evaluated
-    // again at a later time.
-    ret := env.Eval(expr.Copy())
-    if ret.Type == lisp.LError {
-        // handle an error
-        break
-    }
+lerr := fn(env)
+if lerr.Type != LError {
+    // handle execution error
 }
 ```
 
@@ -89,6 +70,21 @@ TODO -- example
 
 All lisp values are represented in Go as the LVal type.  The lisp type of a
 value can determined by checking the LType value stored in the LVal.Type field.
+
+In general, a function **MUST NOT** modify fields of an LVal.  There are cases
+where functions are "destructive" and modify storage referenced by certain data
+types.  However even these functions **MUST NOT** modify top-level top level
+LVal fields in order to maintain soundness of computation.  For example, a
+destructive function may be defined that modifies LVal.Cells[0] by re-assigning
+it to a new value.
+
+```go
+v.Cells[0] = Int(-v.Cells[0].Int)
+```
+
+On the other hand, it would be invalid behavior to instead set the value of
+`v.Cells[0].Int` to a new value.  Such a modification may cause side effects in
+unexpected places.
 
 ### Primitive types
 

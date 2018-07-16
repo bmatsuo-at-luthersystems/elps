@@ -179,8 +179,8 @@ func builtinLoadString(env *LEnv, args *LVal) *LVal {
 	// optimization from unwinding the stack to/beyond this point.
 	env.Runtime.Stack.Top().TROBlock = true
 	v := env.root().LoadString(_name, source.Str)
-	if v.Type == LError && v.Stack == nil {
-		v.Stack = env.Runtime.Stack.Copy()
+	if v.Type == LError && v.CallStack() == nil {
+		v.SetCallStack(env.Runtime.Stack.Copy())
 	}
 	return v
 }
@@ -204,8 +204,8 @@ func builtinLoadBytes(env *LEnv, args *LVal) *LVal {
 	// optimization from unwinding the stack to/beyond this point.
 	env.Runtime.Stack.Top().TROBlock = true
 	v := env.root().Load(_name, bytes.NewReader(source.Bytes()))
-	if v.Type == LError && v.Stack == nil {
-		v.Stack = env.Runtime.Stack.Copy()
+	if v.Type == LError && v.CallStack() == nil {
+		v.SetCallStack(env.Runtime.Stack.Copy())
 	}
 	return v
 }
@@ -352,7 +352,7 @@ func builtinFunCall(env *LEnv, args *LVal) *LVal {
 	// the standard method of signaling a terminal expression to the LEnv.  We
 	// need to set the flag explicitly before env.funCall is invoked
 	env.Runtime.Stack.Top().Terminal = true
-	return env.funCall(fun, SExpr(fargs), false)
+	return env.funCall(fun, SExpr(fargs))
 }
 
 func builtinApply(env *LEnv, args *LVal) *LVal {
@@ -385,7 +385,7 @@ func builtinApply(env *LEnv, args *LVal) *LVal {
 	argcells := make([]*LVal, 0, len(fargs)+argtail.Len())
 	argcells = append(argcells, fargs...)
 	argcells = append(argcells, argtail.Cells...)
-	return env.funCall(fun, SExpr(argcells), false)
+	return env.funCall(fun, SExpr(argcells))
 }
 
 func builtinToString(env *LEnv, args *LVal) *LVal {
@@ -469,8 +469,7 @@ func builtinEval(env *LEnv, args *LVal) *LVal {
 	if v.Type == LQuote {
 		return v.Cells[0]
 	}
-	v.Quoted = false
-	return env.Eval(v)
+	return env.Eval(shallowUnquote(v))
 }
 
 func builtinError(env *LEnv, args *LVal) *LVal {
@@ -738,7 +737,6 @@ func builtinCompose(env *LEnv, args *LVal) *LVal {
 		gcall.Cells = append(gcall.Cells, Nil())
 	}
 	newfun := env.Lambda(formals, []*LVal{body})
-	newfun.Package = env.Runtime.Package.Name
 	return newfun
 }
 
@@ -776,7 +774,7 @@ func builtinAssoc(env *LEnv, args *LVal) *LVal {
 		return env.Errorf("first argument is not a map: %s", m.Type)
 	} else {
 		m = m.Copy()
-		m.Map = m.copyMap()
+		m.Native = m.copyMap()
 	}
 	err := mapSet(m, k, v, true)
 	if !err.IsNil() {
@@ -824,7 +822,7 @@ func builtinIsKey(env *LEnv, args *LVal) *LVal {
 	}
 	ok := mapHasKey(m, k)
 	if ok.Type == LError {
-		ok.Stack = env.Runtime.Stack.Copy()
+		ok.SetCallStack(env.Runtime.Stack.Copy())
 	}
 	return ok
 }
@@ -955,7 +953,12 @@ func builtinConcatSeq(env *LEnv, args *LVal) *LVal {
 		size += v.Len()
 	}
 	if size == 0 {
-		return Nil()
+		switch typespec.Str {
+		case "vector":
+			return Array(QExpr([]*LVal{Int(0)}), nil)
+		case "list":
+			return Nil()
+		}
 	}
 	var ret *LVal
 	var cells []*LVal
@@ -1594,12 +1597,14 @@ func builtinIsEmpty(env *LEnv, args *LVal) *LVal {
 }
 
 func builtinCons(env *LEnv, args *LVal) *LVal {
-	if args.Cells[1].Type != LSExpr {
-		return env.Errorf("second argument is not a list: %s", args.Cells[1].Type)
+	head, tail := args.Cells[0], args.Cells[1]
+	if tail.Type != LSExpr {
+		return env.Errorf("second argument is not a list: %s", tail.Type)
 	}
-	args.Cells = append(args.Cells[:1], args.Cells[1].Cells...)
-	args.Quoted = true
-	return args
+	cells := make([]*LVal, 0, 1+args.Len())
+	cells = append(cells, head)
+	cells = append(cells, tail.Cells...)
+	return QExpr(cells)
 }
 
 func builtinNot(env *LEnv, args *LVal) *LVal {

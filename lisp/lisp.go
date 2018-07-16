@@ -26,7 +26,10 @@ const (
 	//		[1:] error data (of any type)
 	//
 	// In addition, LError values store a copy of the function call stack at
-	// the time of their creation in the LVal.Stack field.
+	// the time of their creation in the LVal.Native field.
+	//
+	// TODO:  Make the stack a first class type (or some composite type) so
+	// that it could be inspected during a condition handler.
 	LError
 	// LSymbol values store a string representation of the symbol in the
 	// LVal.Str field.
@@ -36,17 +39,23 @@ const (
 	// LVal.Cells.
 	LSExpr
 	// LFun values use the following fields in an LVal:
-	// 		LVal.FID      a string containing a unique function identifier
-	// 		LVal.Env      a lexical environment
-	// 		LVal.Builtin  a reference to a native go function
+	// 		LVal.Str      a string containing a unique function identifier.
+	// 		LVal.Native   a reference to a native go function (LBuiltin) or a
+	// 				      lexical environment for a lisp-defined function.
 	// 		LVal.FunType  an enumerated value describing function evaluation
-	// 		              semantics (e.g. macro, special op, regular function)
+	// 		              semantics (e.g. macro, special op, regular function).
+	//		LVal.Package  the package the function is defined in.
 	//
 	// In addition to these fields, a function defined in lisp (with defun,
 	// lambda, defmacro, etc) use the LVal.Cells field to store the following
 	// items:
 	//		[0]  a list describing the function's arguments
 	//		[1:] body expressions of the function (potentially no expressions)
+	//
+	// NOTE:  Native go functions (LBuiltin) don't have a lexical environment
+	// by default.  If a native function needs a lexical environment in order
+	// to evaluate further expressions it is expected to create one.  See the
+	// implementation of the builtin ``let''.
 	LFun
 	// LQuote values are special values only used to represents two or more
 	// levels of quoting (e.g. ''3 or '''''''()).  The first level of quoting
@@ -61,12 +70,16 @@ const (
 	// pointed to may be nil though).
 	LBytes
 	// LSortMap value uses the LVal.Map field to store a map.
+	//
+	// TODO:  Use a tree-based map (that is potentially stored in Cells).  A
+	// tree based map would be capable of supporting integer keys.
 	LSortMap
 	// LArray values use the LVal.Cells slice to store the following items:
 	//		[0] a list containing dimension cardinalities in index 0
 	//  	[1] a list containing row-major ordered array values
 	LArray
-	// LNative values store a Go value in the LVal.Native field.
+	// LNative values store a Go value in the LVal.Native field and can be used
+	// by builtin functions store references to values of any type.
 	LNative
 	// Mark LVals are used to trasmit information down the stack through return
 	// values.  Because the LEnv does not evaluate expressions using a stack
@@ -74,6 +87,7 @@ const (
 	// data in their Cells, are passed back from functions.  Typically the
 	// environment is solely responsible for managing mark values and
 	// applications should never see them during calls to builtin functions.
+	LMarkTerminal  // LEnv marks the frame as terminal and evaluates tho contained expr
 	LMarkTailRec   // LEnv resumes a call a set number of frames down the stack.
 	LMarkMacExpand // LEnv will evaluate the returned LVal a subsequent time.
 )
@@ -120,6 +134,20 @@ var lfunTypeStrings = []string{
 	LFunSpecialOp: "operator",
 }
 
+type LFunData struct {
+	FID     string
+	Package string
+	Builtin LBuiltin
+	Env     *LEnv
+}
+
+func (fd *LFunData) Copy() *LFunData {
+	cp := &LFunData{}
+	*cp = *fd
+	cp.Env = fd.Env.Copy()
+	return cp
+}
+
 // LVal is a lisp value
 type LVal struct {
 	// Type is the native type for a value in lisp.
@@ -135,41 +163,21 @@ type LVal struct {
 	// Str used by LSymbol and LString values
 	Str string
 
-	// Package name for symbols and functions.
-	Package string
-
 	// Cells used by many values as a storage space for lisp objects.
 	//
 	// TODO: Consider making Cells' type []LVal instead of []*LVal to reduce
 	// the burden on the allocator/gc.
 	Cells []*LVal
 
-	// Native value for language embedding and writing custom DSLs.
+	// Native is generic storage for data which cannot be represented as an
+	// LVal (and thus can't be stored in Cells).
 	Native interface{}
 
-	// Map used for LSortMap values.
-	//
-	// TODO:  Use a tree-based map (that is potentially stored in Cells).  A
-	// tree based map would be capable of supporting integer keys.
-	Map map[interface{}]*LVal
-
-	// Stack set for LError values.
-	//
-	// TODO:  Make the stack a first class type (or some composite type) so
-	// that it could be inspected during a condition handler.
-	Stack *CallStack
-
-	// Variables needed for LFun values
-	// NOTE:  Cells are used to store the list of formal function arguments in
-	// index 0 and the body of non-builtin functions in the remaining cells.
-	FID     string
-	Env     *LEnv
-	Builtin LBuiltin
+	// FunType used to further classify LFun values
 	FunType LFunType
 
-	Quoted   bool // flag indicating a single level of quoting
-	Spliced  bool // denote the value as needing to be spliced into a parent value
-	Terminal bool // LVal is the terminal expression in a function body
+	Quoted  bool // flag indicating a single level of quoting
+	Spliced bool // denote the value as needing to be spliced into a parent value
 }
 
 // Value conveniently converts v to an LVal.  Types which can be represented
@@ -339,18 +347,20 @@ func SortedMap() *LVal {
 	return &LVal{
 		Source: nativeSource(),
 		Type:   LSortMap,
-		Map:    make(map[interface{}]*LVal),
+		Native: make(map[interface{}]*LVal),
 	}
 }
 
 // Fun returns an LVal representing a function
 func Fun(fid string, formals *LVal, fn LBuiltin) *LVal {
 	return &LVal{
-		Source:  nativeSource(),
-		Type:    LFun,
-		Builtin: fn,
-		FID:     fid,
-		Cells:   []*LVal{formals},
+		Source: nativeSource(),
+		Type:   LFun,
+		Native: &LFunData{
+			FID:     fid,
+			Builtin: fn,
+		},
+		Cells: []*LVal{formals},
 	}
 }
 
@@ -360,9 +370,11 @@ func Macro(fid string, formals *LVal, fn LBuiltin) *LVal {
 		Source:  nativeSource(),
 		Type:    LFun,
 		FunType: LFunMacro,
-		Builtin: fn,
-		FID:     fid,
-		Cells:   []*LVal{formals},
+		Native: &LFunData{
+			FID:     fid,
+			Builtin: fn,
+		},
+		Cells: []*LVal{formals},
 	}
 }
 
@@ -375,9 +387,11 @@ func SpecialOp(fid string, formals *LVal, fn LBuiltin) *LVal {
 		Source:  nativeSource(),
 		Type:    LFun,
 		FunType: LFunSpecialOp,
-		Builtin: fn,
-		FID:     fid,
-		Cells:   []*LVal{formals},
+		Native: &LFunData{
+			FID:     fid,
+			Builtin: fn,
+		},
+		Cells: []*LVal{formals},
 	}
 }
 
@@ -442,8 +456,10 @@ func ErrorConditionf(condition string, format string, v ...interface{}) *LVal {
 // Quote quotes v and returns the quoted value.  The LVal v is modified.
 func Quote(v *LVal) *LVal {
 	if !v.Quoted {
-		v.Quoted = true
-		return v
+		cp := &LVal{}
+		*cp = *v
+		cp.Quoted = true
+		return cp
 	}
 	quote := &LVal{
 		Source: nativeSource(),
@@ -452,6 +468,24 @@ func Quote(v *LVal) *LVal {
 		Cells:  []*LVal{v},
 	}
 	return quote
+}
+
+// Splice is used in the implementation of quasiquote to insert a list into an
+// outer slist.
+func Splice(v *LVal) *LVal {
+	cp := &LVal{}
+	*cp = *v
+	cp.Spliced = true
+	return cp
+}
+
+// shallowUnquote is an artifact from when functions could freely modify LVals
+// It may be worth trying to unify all quoting under the LQuote type.
+func shallowUnquote(v *LVal) *LVal {
+	cp := &LVal{}
+	*cp = *v
+	cp.Quoted = false
+	return cp
 }
 
 // Formals returns an LVal reprsenting a function's formal argument list
@@ -483,6 +517,47 @@ func markMacExpand(expr *LVal) *LVal {
 	}
 }
 
+func (v *LVal) CallStack() *CallStack {
+	if v.Type != LError {
+		panic("not an error: " + v.Type.String())
+	}
+	stack, ok := v.Native.(*CallStack)
+	if !ok {
+		return nil
+	}
+	return stack
+}
+
+func (v *LVal) SetCallStack(stack *CallStack) {
+	if v.Type != LError {
+		panic("not an error: " + v.Type.String())
+	}
+	v.Native = stack
+}
+
+func (v *LVal) FunData() *LFunData {
+	if v.Type != LFun {
+		panic("not a function: " + v.Type.String())
+	}
+	return v.Native.(*LFunData)
+}
+
+func (v *LVal) Package() string {
+	return v.FunData().Package
+}
+
+func (v *LVal) Builtin() LBuiltin {
+	return v.FunData().Builtin
+}
+
+func (v *LVal) FID() string {
+	return v.FunData().FID
+}
+
+func (v *LVal) Env() *LEnv {
+	return v.FunData().Env
+}
+
 // Len returns the length of the list v.
 func (v *LVal) Len() int {
 	switch v.Type {
@@ -493,7 +568,7 @@ func (v *LVal) Len() int {
 	case LSExpr:
 		return len(v.Cells)
 	case LSortMap:
-		return len(v.Map)
+		return len(v.Map())
 	case LArray:
 		if v.Cells[0].Len() == 1 {
 			return v.Cells[0].Cells[0].Int
@@ -512,6 +587,13 @@ func (v *LVal) Bytes() []byte {
 	// NOTE:  Bytes are stored as a pointer to a slice to allow for effecient
 	// appending in the same style as normal vectors.
 	return *v.Native.(*[]byte)
+}
+
+func (v *LVal) Map() map[interface{}]*LVal {
+	if v.Type != LSortMap {
+		panic("not sorted-map: " + v.Type.String())
+	}
+	return v.Native.(map[interface{}]*LVal)
 }
 
 // MapKeys returns a list of keys in the map.  MapKeys panics if v.Type is not
@@ -683,7 +765,7 @@ func (v *LVal) Equal(other *LVal) *LVal {
 		}
 		return Bool(true)
 	case LSortMap:
-		if len(v.Map) != len(other.Map) {
+		if len(v.Map()) != len(other.Map()) {
 			return Bool(false)
 		}
 
@@ -717,8 +799,7 @@ func (v *LVal) Copy() *LVal {
 		return nil
 	}
 	cp := &LVal{}
-	*cp = *v              // shallow copy of all fields including Map and Bytes
-	cp.Env = v.Env.Copy() // deepish copy of v.Env
+	*cp = *v // shallow copy of all fields including Map and Bytes
 	if v.Type != LArray {
 		// Arrays are memory references but use Cells as backing storage.  So
 		// we can only copy the cells when the type is not an array.
@@ -728,11 +809,12 @@ func (v *LVal) Copy() *LVal {
 }
 
 func (v *LVal) copyMap() map[interface{}]*LVal {
-	if v.Map == nil {
+	m0 := v.Map()
+	if m0 == nil {
 		return nil
 	}
-	m := make(map[interface{}]*LVal, len(v.Map))
-	for k, v := range v.Map {
+	m := make(map[interface{}]*LVal, len(m0))
+	for k, v := range m0 {
 		// Is v.Copy() really necessary here? It seems like things get copied
 		// on mapGet anyway..
 		m[k] = v.Copy()
@@ -800,7 +882,7 @@ func (v *LVal) str(onTheRecord bool) string {
 		if v.Quoted {
 			quote = QUOTE
 		}
-		if v.Builtin != nil {
+		if v.Builtin() != nil {
 			return fmt.Sprintf("%s#<builtin>", quote)
 		}
 		vars := lambdaVars(v.Cells[0], boundVars(v))
@@ -821,6 +903,8 @@ func (v *LVal) str(onTheRecord bool) string {
 		return fmt.Sprintf("#<array dims=%s>", v.Cells[0])
 	case LNative:
 		return fmt.Sprintf("#<native value: %T>", v.Native)
+	case LMarkTerminal:
+		return quote + fmt.Sprintf("#<terminal-expression %s>", v.Cells[0])
 	case LMarkTailRec:
 		return quote + fmt.Sprintf("#<tail-recursion frames=%d (%s %s)>", v.Cells[0].Int, v.Cells[1], v.Cells[2])
 	case LMarkMacExpand:
@@ -842,16 +926,17 @@ func bodyStr(exprs []*LVal) string {
 func lambdaVars(formals *LVal, bound *LVal) *LVal {
 	s := SExpr([]*LVal{Quote(Symbol("list")), formals, bound})
 	s = builtinConcat(nil, s)
-	s.Quoted = false
+	s.Quoted = false // This is fine because builtinConcat returns a new list
 	return s
 }
 
 func boundVars(v *LVal) *LVal {
-	if v.Env == nil {
+	env := v.Env()
+	if env == nil {
 		return Nil()
 	}
-	keys := make([]string, 0, len(v.Env.Scope))
-	for k := range v.Env.Scope {
+	keys := make([]string, 0, len(env.Scope))
+	for k := range env.Scope {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
@@ -859,7 +944,7 @@ func boundVars(v *LVal) *LVal {
 	for i := range keys {
 		q := SExpr([]*LVal{
 			Symbol(keys[i]),
-			v.Env.Get(Symbol(keys[i])),
+			env.Get(Symbol(keys[i])),
 		})
 		bound.Cells = append(bound.Cells, q)
 	}

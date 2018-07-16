@@ -22,7 +22,7 @@ func sortedMapString(m *LVal) string {
 
 func sortedMapKeys(m *LVal) []*LVal {
 	var ks mapKeys
-	for k := range m.Map {
+	for k := range m.Map() {
 		key := sortedMapKey(k)
 		if key == nil {
 			panic("unable to serialize hashmap key")
@@ -38,22 +38,23 @@ func mapHasKey(m *LVal, key *LVal) *LVal {
 	if k == nil {
 		return Errorf("unhashable type: %v", key.Type)
 	}
+	mmap := m.Map()
 	switch k := k.(type) {
 	case string:
-		v := m.Map[k]
+		v := mmap[k]
 		if v != nil {
 			return Bool(true)
 		}
-		v = m.Map[mapSymbol(k)]
+		v = mmap[mapSymbol(k)]
 		if v != nil {
 			return Bool(true)
 		}
 	case mapSymbol:
-		v := m.Map[k]
+		v := mmap[k]
 		if v != nil {
 			return Bool(true)
 		}
-		v = m.Map[string(k)]
+		v = mmap[string(k)]
 		if v != nil {
 			return Bool(true)
 		}
@@ -66,24 +67,25 @@ func mapGet(m, key, def *LVal) *LVal {
 	if k == nil {
 		return Errorf("unhashable type: %s", key.Type)
 	}
+	mmap := m.Map()
 	switch k := k.(type) {
 	case string:
-		v := m.Map[k]
+		v := mmap[k]
 		if v != nil {
-			return v.Copy()
+			return v
 		}
-		v = m.Map[mapSymbol(k)]
+		v = mmap[mapSymbol(k)]
 		if v != nil {
-			return v.Copy()
+			return v
 		}
 	case mapSymbol:
-		v := m.Map[k]
+		v := mmap[k]
 		if v != nil {
-			return v.Copy()
+			return v
 		}
-		v = m.Map[string(k)]
+		v = mmap[string(k)]
 		if v != nil {
-			return v.Copy()
+			return v
 		}
 	}
 	if def == nil {
@@ -97,9 +99,10 @@ func mapSet(m *LVal, key *LVal, val *LVal, coerce bool) *LVal {
 	if k == nil {
 		return Errorf("unhashable type: %s", key.Type)
 	}
+	mmap := m.Map()
 	switch _k := k.(type) {
 	case string:
-		_, ok := m.Map[mapSymbol(_k)]
+		_, ok := mmap[mapSymbol(_k)]
 		if ok {
 			if coerce {
 				k = mapSymbol(_k)
@@ -108,7 +111,7 @@ func mapSet(m *LVal, key *LVal, val *LVal, coerce bool) *LVal {
 			}
 		}
 	case mapSymbol:
-		_, ok := m.Map[string(_k)]
+		_, ok := mmap[string(_k)]
 		if ok {
 			if coerce {
 				k = string(_k)
@@ -117,7 +120,7 @@ func mapSet(m *LVal, key *LVal, val *LVal, coerce bool) *LVal {
 			}
 		}
 	}
-	m.Map[k] = val
+	mmap[k] = val
 	return Nil()
 }
 

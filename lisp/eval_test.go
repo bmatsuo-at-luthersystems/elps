@@ -125,6 +125,7 @@ string"""`, `"\"\"a raw\nstring"`, ""},
 			{"((lambda (&rest x) (reverse 'list x)) 1 2 3)", "'(3 2 1)", ""},
 		}},
 		{"concat", elpstest.TestSequence{
+			{`(concat 'vector () ())`, `(vector)`, ""},
 			{`(concat 'string "a" (to-bytes "b") '(99))`, `"abc"`, ""},
 			{`(to-string (concat 'bytes "a" (to-bytes "b") (vector 99)))`, `"abc"`, ""},
 		}},
@@ -184,10 +185,10 @@ string"""`, `"\"\"a raw\nstring"`, ""},
 			{"((lambda (r &key x) (cons (or x 1) (reverse 'list r))) '(2 3) :x 4)", "'(4 3 2)", ""},
 			{"((lambda (r &key x y) (cons r (cons (or x 1) y))) 0 :y '(2))", "'(0 1 2)", ""},
 		}},
-		{"partial evaluation", elpstest.TestSequence{
-			{"((lambda (x y) (+ x y)) 1)", "(lambda (y (x 1)) (+ x y))", ""},
-			{"(((lambda (x y) (+ x y)) 1) 2)", "3", ""},
-		}},
+		//{"partial evaluation", elpstest.TestSequence{
+		//	{"((lambda (x y) (+ x y)) 1)", "(lambda (y (x 1)) (+ x y))", ""},
+		//	{"(((lambda (x y) (+ x y)) 1) 2)", "3", ""},
+		//}},
 		{"lists", elpstest.TestSequence{
 			{"(cons 1 (cons 2 (cons 3 ())))", "'(1 2 3)", ""},
 			{"(list 1 2 3)", "'(1 2 3)", ""},

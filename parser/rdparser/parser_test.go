@@ -122,11 +122,29 @@ func TestErrors(t *testing.T) {
 		{`(1 2 3`, `test0:1: unmatched-syntax: unmatched (`},
 		{`(1 2 3)
 		0
-		0134
-`, `test1:3: invalid-integer-literal: integer literal starts with 0: 0134`},
+		#xABC
+		#xabc
+		#o123
+		#o9
+`, `test1:6: invalid-octal-literal: invalid octal literal character: '9'`},
+		{`(1 2 3)
+		0
+		#xABC
+		#xDEADBEEG
+		#o123
+		#o9
+`, `test2:4: invalid-hex-literal: invalid hexidecimal literal character: 'G'`},
 		{`(1 2 3)
 		134.
-		"abc"`, `test2:2: scan-error: invalid floating point literal starting: 134.`},
+		"abc"`, `test3:2: scan-error: invalid floating point literal starting: 134.`},
+		{`#!/usr/bin/env elps
+		(1 2 3)
+		0
+		#xABC
+		#!/usr/bin/env foo
+		#o123
+		#o9
+`, `test4:5: parse-error: unexpected token: #!`},
 	}
 
 	for i, test := range tests {

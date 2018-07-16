@@ -38,13 +38,14 @@ func (e *ErrorVal) baseMessage() string {
 // FunName returns the qualified name of function on the top of the call stack
 // when the error occurred.
 func (e *ErrorVal) FunName() string {
-	if e.Stack == nil {
+	stack := (*LVal)(e).CallStack()
+	if stack == nil {
 		return ""
 	}
-	if e.Stack.Top() == nil {
+	if stack.Top() == nil {
 		return ""
 	}
-	return e.Stack.Top().QualifiedFunName(DefaultUserPackage)
+	return stack.Top().QualifiedFunName(DefaultUserPackage)
 }
 
 // ErrorMessage returns the underlying message in the error.
@@ -73,8 +74,9 @@ func (e *ErrorVal) WriteTrace(w io.Writer) (int, error) {
 	if !wrote(bw.WriteString("\n")) {
 		return n, err
 	}
-	if e.Stack != nil {
-		if !wrote(e.Stack.DebugPrint(bw)) {
+	stack := (*LVal)(e).CallStack()
+	if stack != nil {
+		if !wrote(stack.DebugPrint(bw)) {
 			return n, err
 		}
 	}
