@@ -149,22 +149,11 @@ func findAndUnquote(env *LEnv, v *LVal, depth int) *LVal {
 	}
 	if isUnquote(v) {
 		spliceType := v.Cells[0].Str
-		v.Cells = v.Cells[1:]
-		if len(v.Cells) != 1 {
-			return env.Errorf("%v: one argument expected (got %d)", v.Cells[0].Str, len(v.Cells))
+		if len(v.Cells) != 2 {
+			return env.Errorf("%v: one argument expected (got %d)", v.Cells[0].Str, len(v.Cells)-1)
 		}
 		// The v looks like ``(unquote EXPR)'' or ``(unquote-splicing expr)''
-		var x *LVal
-		unquote := v.Cells[0]
-		// Try to unwrap a quoted expression into x.  If x is not quoted
-		// then we have to evaluate unquote
-		if unquote.Type == LQuote {
-			x = unquote.Cells[0]
-		} else if unquote.Quoted {
-			x = shallowUnquote(unquote)
-		} else {
-			x = env.Eval(unquote)
-		}
+		x := env.Eval(v.Cells[1])
 		if spliceType == "unquote-splicing" {
 			if depth == 0 {
 				return env.Errorf("unquote-splicing used in an invalid context")
@@ -174,31 +163,34 @@ func findAndUnquote(env *LEnv, v *LVal, depth int) *LVal {
 		return x
 	}
 	// findAndUnquote all child expressions
+	cells := make([]*LVal, v.Len())
 	for i := range v.Cells {
-		v.Cells[i] = findAndUnquote(env, v.Cells[i], depth+1)
-		if v.Cells[i].Type == LError {
-			return v.Cells[i]
+		cells[i] = findAndUnquote(env, v.Cells[i], depth+1)
+		if cells[i].Type == LError {
+			return cells[i]
 		}
 	}
 	// splice in grandchildren of children that were unquoted with
 	// ``unquote-splicing''
-	for i := len(v.Cells) - 1; i >= 0; i-- {
-		if v.Cells[i].Spliced {
-			splice := v.Cells[i]
+	for i := len(cells) - 1; i >= 0; i-- {
+		if cells[i].Spliced {
+			splice := cells[i]
 			if splice.Type != LSExpr {
 				// TODO:  I believe it is incorrect to error out here.  But
 				// splicing non-lists is not a major concern at the moment.
 				return env.Errorf("%s: cannot splice non-list: %s", "unquote-splicing", splice.Type)
 			}
 			// TODO:  Be clever and don't force allocation here.  Grow newcells and shift v.Cells[i+1:]
-			newcells := make([]*LVal, 0, len(v.Cells)+len(splice.Cells))
-			newcells = append(newcells, v.Cells[:i]...)
+			newcells := make([]*LVal, 0, len(v.Cells)+len(splice.Cells)-1)
+			newcells = append(newcells, cells[:i]...)
 			newcells = append(newcells, splice.Cells...)
-			newcells = append(newcells, v.Cells[i+1:]...)
-			v.Cells = newcells
+			newcells = append(newcells, cells[i+1:]...)
+			cells = newcells
 		}
 	}
-	return v
+	expr := SExpr(cells)
+	expr.Quoted = v.Quoted
+	return expr
 }
 
 func macroTrace(env *LEnv, args *LVal) *LVal {

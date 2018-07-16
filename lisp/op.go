@@ -108,8 +108,8 @@ func opQuasiquote(env *LEnv, args *LVal) *LVal {
 	if quote {
 		return Quote(result)
 	}
-	// The below check used to be in CallSpecialOp but interfered with other.
-	// It doesn't feel right and probably points to unsound behavior in
+	// The below check used to be in CallSpecialOp but interfered with other
+	// ops.  It doesn't feel right and probably points to unsound behavior in
 	// findAndUnquote, but it is less disruptive here than in CallSpecialOp.
 	// And I'm not sure that I'm going to fix findAndUnquote soon -- it may
 	// just be rewritten if another problem is found.

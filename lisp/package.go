@@ -74,7 +74,7 @@ func (pkg *Package) get(k *LVal) *LVal {
 			// the programmer used.
 			pkg.FunNames[v.FID()] = k.Str
 		}
-		return v.Copy()
+		return v
 	}
 	lerr := Errorf("unbound symbol: %v", k)
 	lerr.Source = k.Source
@@ -126,5 +126,5 @@ func (pkg *Package) Put(k, v *LVal) {
 	if v.Type == LFun {
 		pkg.FunNames[v.FID()] = k.Str
 	}
-	pkg.Symbols[k.Str] = v.Copy()
+	pkg.Symbols[k.Str] = v
 }

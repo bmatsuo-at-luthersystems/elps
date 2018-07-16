@@ -237,7 +237,7 @@ func (env *LEnv) get(k *LVal) *LVal {
 	case 2:
 		if pieces[0] == "" {
 			// keyword
-			return k.Copy()
+			return k
 		}
 		pkg := env.Runtime.Registry.Packages[pieces[0]]
 		if pkg == nil {
@@ -259,7 +259,7 @@ func (env *LEnv) get(k *LVal) *LVal {
 			// the programmer used.
 			env.FunName[v.FID()] = k.Str
 		}
-		return v.Copy()
+		return v
 	}
 	if env.Parent != nil {
 		return env.Parent.Get(k)
@@ -311,7 +311,7 @@ func (env *LEnv) Put(k, v *LVal) {
 	if v.Type == LFun {
 		env.FunName[v.FID()] = k.Str
 	}
-	env.Scope[k.Str] = v.Copy()
+	env.Scope[k.Str] = v
 }
 
 // GetGlobal takes LSymbol k and returns the value it is bound to in the
