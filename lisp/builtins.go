@@ -71,6 +71,8 @@ var langBuiltins = []*langBuiltin{
 	{"flip", Formals("binary-function"), builtinFlip},
 	{"assoc", Formals("map", "key", "value"), builtinAssoc},
 	{"assoc!", Formals("map", "key", "value"), builtinAssocMutate},
+	{"dissoc", Formals("map", "key"), builtinDissoc},
+	{"dissoc!", Formals("map", "key"), builtinDissocMutate},
 	{"get", Formals("map", "key"), builtinGet},
 	{"keys", Formals("map"), builtinKeys},
 	{"key?", Formals("map", "key"), builtinIsKey},
@@ -793,6 +795,39 @@ func builtinAssocMutate(env *LEnv, args *LVal) *LVal {
 		return env.Errorf("first argument is not a map: %s", m.Type)
 	}
 	err := mapSet(m, k, v, true)
+	if !err.IsNil() {
+		return env.Error(err.String())
+	}
+	return m
+}
+
+func builtinDissoc(env *LEnv, args *LVal) *LVal {
+	m := args.Cells[0]
+	k := args.Cells[1]
+	if m.IsNil() {
+		m = SortedMap()
+	} else if m.Type != LSortMap {
+		return env.Errorf("first argument is not a map: %s", m.Type)
+	} else {
+		m = m.Copy()
+		m.Native = m.copyMap()
+	}
+	err := mapDel(m, k, true)
+	if !err.IsNil() {
+		return env.Errorf("%s", err)
+	}
+	return m
+}
+
+func builtinDissocMutate(env *LEnv, args *LVal) *LVal {
+	m := args.Cells[0]
+	k := args.Cells[1]
+	if m.IsNil() {
+		return env.Errorf("first argument is nil", m.Type)
+	} else if m.Type != LSortMap {
+		return env.Errorf("first argument is not a map: %s", m.Type)
+	}
+	err := mapDel(m, k, true)
 	if !err.IsNil() {
 		return env.Error(err.String())
 	}
