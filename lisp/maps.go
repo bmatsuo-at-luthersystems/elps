@@ -124,6 +124,36 @@ func mapSet(m *LVal, key *LVal, val *LVal, coerce bool) *LVal {
 	return Nil()
 }
 
+func mapDel(m *LVal, key *LVal, coerce bool) *LVal {
+	k := toSortedMapKey(key)
+	if k == nil {
+		return Errorf("unhashable type: %s", key.Type)
+	}
+	mmap := m.Map()
+	switch _k := k.(type) {
+	case string:
+		_, ok := mmap[mapSymbol(_k)]
+		if ok {
+			if coerce {
+				k = mapSymbol(_k)
+			} else {
+				return Errorf("map contains both symbol and string key: %s", k)
+			}
+		}
+	case mapSymbol:
+		_, ok := mmap[string(_k)]
+		if ok {
+			if coerce {
+				k = string(_k)
+			} else {
+				return Errorf("map contains both symbol and string key: %s", k)
+			}
+		}
+	}
+	delete(mmap, k)
+	return Nil()
+}
+
 // BUG:  Numbers cannot be used as map keys because there is no simple way to
 // retain their input type while also checking for equality using a builtin
 // (golang) map.  This is not considered a limitation for now because it
