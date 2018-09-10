@@ -147,7 +147,9 @@ symbols are bound to the value nil.
 (add 2 0) ; evaluates to 2
 ```
 
-There is no limit to the number of optional arguments a function can have. But if the number of optional arguments is too large it may be better to use keyward arguments instead.
+There is no limit to the number of optional arguments a function can have. But 
+if the number of optional arguments is too large it may be better to use 
+keyward arguments instead.
 
 ###Variable argument functions
 
@@ -206,7 +208,8 @@ normal, required arguments.
 ```
 
 This unavoidable property of keyword arguments can lead to confusing runtime
-errors when accidentally omitting required arguments or mixing keyword arguments and optional arguments.
+errors when accidentally omitting required arguments or mixing keyword arguments 
+and optional arguments.
 
 **NOTE**: Due to the properties of keyword arguments it follows that a
 function utilizing both optional and keyword arguments may only have values
@@ -502,7 +505,7 @@ expression inside handler-bind calls double, it raises an error condition.  The
 error inside double terminates the function call as it unwinds the stack until
 it hits the handler-bind.  The list of condition handlers in handler-bind
 specifies a function to call when a 'double-not-number error is found.  That
-handler function receives the argument spassed to the `error` builtin and
+handler function receives the arguments passed to the `error` builtin and
 returns them in this scenario, producing the result `'('double-not-number
 "value to double is not a number")` which is returned by handler-bind.
 

@@ -71,6 +71,8 @@ var langBuiltins = []*langBuiltin{
 	{"flip", Formals("binary-function"), builtinFlip},
 	{"assoc", Formals("map", "key", "value"), builtinAssoc},
 	{"assoc!", Formals("map", "key", "value"), builtinAssocMutate},
+	{"dissoc", Formals("map", "key"), builtinDissoc},
+	{"dissoc!", Formals("map", "key"), builtinDissocMutate},
 	{"get", Formals("map", "key"), builtinGet},
 	{"keys", Formals("map"), builtinKeys},
 	{"key?", Formals("map", "key"), builtinIsKey},
@@ -374,7 +376,7 @@ func builtinApply(env *LEnv, args *LVal) *LVal {
 		return env.Errorf("first argument is not a function: %v", fun.Type)
 	}
 	if fun.IsSpecialFun() {
-		return env.Errorf("first argument is not a regular function: %s", fun.FunType)
+		return env.Errorf("first argument is not a regular function: %v", fun.FunType)
 	}
 
 	// Because funcall and apply do not actually call env.Eval they cannot use
@@ -580,7 +582,7 @@ func builtinMap(env *LEnv, args *LVal) *LVal {
 		return env.Errorf("second argument is not a function: %s", f.Type)
 	}
 	if f.IsSpecialFun() {
-		return env.Errorf("first argument is not a regular function: %s", f.FunType)
+		return env.Errorf("first argument is not a regular function: %v", f.FunType)
 	}
 	if !isSeq(lis) {
 		return env.Errorf("third argument is not a proper sequence: %s", lis.Type)
@@ -624,7 +626,7 @@ func builtinFoldLeft(env *LEnv, args *LVal) *LVal {
 		return env.Errorf("first argument is not a function: %s", f.Type)
 	}
 	if f.IsSpecialFun() {
-		return env.Errorf("first argument is not a regular function: %s", f.FunType)
+		return env.Errorf("first argument is not a regular function: %v", f.FunType)
 	}
 	acc := args.Cells[1]
 	lis := args.Cells[2]
@@ -656,7 +658,7 @@ func builtinFoldRight(env *LEnv, args *LVal) *LVal {
 		return env.Errorf("first argument is not a function: %s", f.Type)
 	}
 	if f.IsSpecialFun() {
-		return env.Errorf("first argument is not a regular function: %s", f.FunType)
+		return env.Errorf("first argument is not a regular function: %v", f.FunType)
 	}
 	acc := args.Cells[1]
 	lis := args.Cells[2]
@@ -691,7 +693,7 @@ func builtinCompose(env *LEnv, args *LVal) *LVal {
 		return env.Errorf("first argument is not a function: %s", f.Type)
 	}
 	if f.IsSpecialFun() {
-		return env.Errorf("first argument is not a regular function: %s", f.FunType)
+		return env.Errorf("first argument is not a regular function: %v", f.FunType)
 	}
 	g = env.GetFun(g)
 	if g.Type == LError {
@@ -701,7 +703,7 @@ func builtinCompose(env *LEnv, args *LVal) *LVal {
 		return env.Errorf("second argument is not a function: %s", g.Type)
 	}
 	if g.IsSpecialFun() {
-		return env.Errorf("first argument is not a regular function: %s", g.FunType)
+		return env.Errorf("first argument is not a regular function: %v", g.FunType)
 	}
 	formals := g.Cells[0].Copy()
 	gcall := SExpr(make([]*LVal, 0, len(formals.Cells)+1))
@@ -754,7 +756,7 @@ func builtinFlip(env *LEnv, args *LVal) *LVal {
 		return env.Errorf("argument is not a function: %s", fun.Type)
 	}
 	if fun.IsSpecialFun() {
-		return env.Errorf("first argument is not a regular function: %s", fun.FunType)
+		return env.Errorf("first argument is not a regular function: %v", fun.FunType)
 	}
 	formals := fun.Cells[0]
 	if len(formals.Cells) < 2 {
@@ -788,11 +790,44 @@ func builtinAssocMutate(env *LEnv, args *LVal) *LVal {
 	k := args.Cells[1]
 	v := args.Cells[2]
 	if m.IsNil() {
-		return env.Errorf("first argument is nil", m.Type)
+		return env.Errorf("first argument is nil: %v", m.Type)
 	} else if m.Type != LSortMap {
 		return env.Errorf("first argument is not a map: %s", m.Type)
 	}
 	err := mapSet(m, k, v, true)
+	if !err.IsNil() {
+		return env.Error(err.String())
+	}
+	return m
+}
+
+func builtinDissoc(env *LEnv, args *LVal) *LVal {
+	m := args.Cells[0]
+	k := args.Cells[1]
+	if m.IsNil() {
+		m = SortedMap()
+	} else if m.Type != LSortMap {
+		return env.Errorf("first argument is not a map: %s", m.Type)
+	} else {
+		m = m.Copy()
+		m.Native = m.copyMap()
+	}
+	err := mapDel(m, k, true)
+	if !err.IsNil() {
+		return env.Errorf("%s", err)
+	}
+	return m
+}
+
+func builtinDissocMutate(env *LEnv, args *LVal) *LVal {
+	m := args.Cells[0]
+	k := args.Cells[1]
+	if m.IsNil() {
+		return env.Errorf("first argument is nil: %v", m.Type)
+	} else if m.Type != LSortMap {
+		return env.Errorf("first argument is not a map: %s", m.Type)
+	}
+	err := mapDel(m, k, true)
 	if !err.IsNil() {
 		return env.Error(err.String())
 	}

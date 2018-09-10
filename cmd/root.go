@@ -1,6 +1,5 @@
 // Copyright © 2018 NAME HERE <EMAIL ADDRESS>
 
-
 package cmd
 
 import (
@@ -17,7 +16,7 @@ var cfgFile string
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:   "elps",
-	Short: "A brief description of your application",
+	Short: "It's \"ellipse\" ;)",
 	Long: `A longer description that spans multiple lines and likely contains
 examples and usage of using your application. For example:
 

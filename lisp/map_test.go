@@ -22,6 +22,16 @@ func TestMaps(t *testing.T) {
 			{`(get m 'abc)`, "2", ""},
 			{`(get m 'b)`, "1", ""},
 		}},
+		{"value dissociation", elpstest.TestSequence{
+			// Test that maps dissociate values property.  Furthermore, it must
+			// be ensured that ``dissoc!'' mutates its argument while ``dissoc''
+			// returns a copy.
+			{"(set 'm (sorted-map 'b 1 'a 2))", "(sorted-map 'a 2 'b 1)", ""},
+			{"(dissoc! m 'a)", "(sorted-map 'b 1)", ""},
+			{"(dissoc! m 'a)", "(sorted-map 'b 1)", ""},
+			{"(dissoc m 'b)", "(sorted-map)", ""},
+			{`(get m 'b)`, "1", ""},
+        }},
 		{"order", elpstest.TestSequence{
 			// Test that the default representation of a map always has sorted
 			// keys and that the ``keys'' builtin returns a properly sorted
@@ -36,6 +46,8 @@ func TestMaps(t *testing.T) {
 			{"(keys m)", `'('a "abc" 'b)`, ""},
 			{`(assoc! m "a" 3)`, `(sorted-map 'a 3 "abc" 2 'b 1)`, ""},
 			{"(keys m)", `'('a "abc" 'b)`, ""},
+			{`(dissoc! m "a")`, `(sorted-map "abc" 2 'b 1)`, ""},
+			{"(keys m)", `'("abc" 'b)`, ""},
 		}},
 		{"key?", elpstest.TestSequence{
 			// Test map membership.
