@@ -1972,10 +1972,13 @@ func powInt(a, b int) *LVal {
 func builtinMod(env *LEnv, args *LVal) *LVal {
 	a, b := args.Cells[0], args.Cells[1]
 	if a.Type != LInt {
-		env.Errorf("first argument is not an int: %s", a.Type)
+		return env.Errorf("first argument is not an int: %s", a.Type)
 	}
 	if b.Type != LInt {
-		env.Errorf("second argument is not an int: %s", b.Type)
+		return env.Errorf("second argument is not an int: %s", b.Type)
+	}
+	if b.Int == 0 {
+		return env.Errorf("second argument is zero")
 	}
 	return Int(a.Int % b.Int)
 }
@@ -2020,9 +2023,16 @@ func builtinSub(env *LEnv, v *LVal) *LVal {
 	}
 
 	if len(v.Cells) == 1 {
-		v.Cells[0].Int = -v.Cells[0].Int
-		v.Cells[0].Float = -v.Cells[0].Float
-		return v.Cells[0]
+		x := v.Cells[0]
+		switch v.Cells[0].Type {
+		case LInt:
+			return Int(-x.Int)
+		case LFloat:
+			return Float(-x.Float)
+		default:
+			// indicates some bug in IsNumeric or this switch statement
+			return env.Errorf("invalid numeric type: %v", x.Type)
+		}
 	}
 
 	elemt := numericListType(v.Cells)
@@ -2059,8 +2069,7 @@ func builtinDiv(env *LEnv, v *LVal) *LVal {
 		if v.Cells[0].Type == LInt {
 			return Float(1 / float64(v.Cells[0].Int))
 		}
-		v.Cells[0].Float = 1 / v.Cells[0].Float
-		return v.Cells[0]
+		return Float(1 / v.Cells[0].Float)
 	}
 
 	// Never perform integer division with the function ``/''.  Integer

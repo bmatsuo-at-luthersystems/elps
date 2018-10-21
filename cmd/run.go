@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"bitbucket.org/luthersystems/elps/lisp"
+	"bitbucket.org/luthersystems/elps/lisp/lisplib"
 	"bitbucket.org/luthersystems/elps/parser"
 	"github.com/spf13/cobra"
 )
@@ -30,6 +31,21 @@ var runCmd = &cobra.Command{
 
 		env := lisp.NewEnv(nil)
 		reader := parser.NewReader()
+		rc := lisp.InitializeUserEnv(env)
+		if !rc.IsNil() {
+			fmt.Fprintln(os.Stderr, rc)
+			os.Exit(1)
+		}
+		rc = lisplib.LoadLibrary(env)
+		if !rc.IsNil() {
+			fmt.Fprintln(os.Stderr, rc)
+			os.Exit(1)
+		}
+		rc = env.InPackage(lisp.String(lisp.DefaultUserPackage))
+		if !rc.IsNil() {
+			fmt.Fprintln(os.Stderr, rc)
+			os.Exit(1)
+		}
 		for i := range exprs {
 			vals, err := reader.Read("run", bytes.NewReader(exprs[i]))
 			if err != nil {
@@ -37,9 +53,9 @@ var runCmd = &cobra.Command{
 				os.Exit(1)
 			}
 			for _, val := range vals {
-				err := lisp.GoError(env.Eval(val))
-				if err != nil {
-					fmt.Fprintln(os.Stderr, err)
+				res := env.Eval(val)
+				if res.Type == lisp.LError {
+					(*lisp.ErrorVal)(res).WriteTrace(os.Stderr)
 					os.Exit(1)
 				}
 			}
