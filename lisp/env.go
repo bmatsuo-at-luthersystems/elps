@@ -1,6 +1,7 @@
 package lisp
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"log"
@@ -145,20 +146,83 @@ func (env *LEnv) LoadString(name, exprs string) *LVal {
 	return env.Load(name, strings.NewReader(exprs))
 }
 
+// LoadFile attempts to use env.Runtime.Library to read a lisp source file and
+// evaluate expressions it contains.  Any error encountered will prevent
+// execution of loaded source and be returned.  After evaluating expressions
+// the current package is restored to the current package at the time Load was
+// called, in case loaded source made calls to ``in-package''.  If
+// env.Runtime.Reader has not been set then an error will be returned by Load.
+func (env *LEnv) LoadFile(loc string) *LVal {
+	if env.Runtime.Library == nil {
+		return env.Errorf("no source library in environment runtime")
+	}
+	ctx := env.Runtime.sourceContext()
+	name, src, err := env.Runtime.Library.LoadSource(ctx, loc)
+	if err != nil {
+		return env.Errorf("library error: %v", err)
+	}
+	return env.LoadLocation(name, loc, bytes.NewReader(src))
+}
+
 // Load reads LVals from r and evaluates them as if in a progn.  The value
-// returned by the last evaluated LVal will be retured.  If env.Reader has not
-// been set then an error will be returned.
+// returned by the last evaluated LVal will be retured.  After evaluating
+// expressions the current package is restored to the current package at the
+// time Load was called, in case loaded source made calls to ``in-package''.
+// If env.Runtime.Reader has not been set then an error will be returned by Load.
 func (env *LEnv) Load(name string, r io.Reader) *LVal {
 	if env.Runtime.Reader == nil {
 		return env.Errorf("no reader for environment runtime")
 	}
+
 	exprs, err := env.Runtime.Reader.Read(name, r)
 	if err != nil {
 		return env.Error(err)
 	}
+
+	return env.load(exprs)
+}
+
+// LoadLocation attempts to use env.Runtime.Library to read a lisp source file,
+// specifying its name and location explicity, and evaluate the expressions it
+// contains.  Because the name and location of the stream are specfied
+// explicitly LoadLocation does not depend explicity on an env.Runtime.Library
+// implementation.
+// Any error encountered will prevent execution of loaded source and
+// be returned.  After evaluating expressions the current package is restored
+// to the current package at the time Load was called, in case loaded source
+// made calls to ``in-package''.  If env.Runtime.Reader has not been set then
+// an error will be returned by Load.
+func (env *LEnv) LoadLocation(name string, loc string, r io.Reader) *LVal {
+	if env.Runtime.Reader == nil {
+		return env.Errorf("no reader for environment runtime")
+	}
+
+	reader, ok := env.Runtime.Reader.(LocationReader)
+	if !ok {
+		return env.Load(name, r)
+	}
+	exprs, err := reader.ReadLocation(name, loc, r)
+	if err != nil {
+		return env.Error(err)
+	}
+
+	return env.load(exprs)
+}
+
+func (env *LEnv) load(exprs []*LVal) *LVal {
 	if len(exprs) == 0 {
 		return Nil()
 	}
+
+	// Remember the current package and restore it for the caller after
+	// evaluation completes.
+	currPkg := env.Runtime.Package
+	defer func() {
+		// This should be fine as packages can't be deleted.  The runtime
+		// registry should definitely still contain currPkg.
+		env.Runtime.Package = currPkg
+	}()
+
 	ret := Nil()
 	for _, expr := range exprs {
 		ret = env.Eval(expr)

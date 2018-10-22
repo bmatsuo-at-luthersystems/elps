@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"bytes"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -23,14 +22,10 @@ var runCmd = &cobra.Command{
 	Short: "Run lisp code",
 	Long:  `Run lisp code provided supplied via the command line or a file.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		exprs, err := runReadExpressions(args)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
-		}
-
 		env := lisp.NewEnv(nil)
 		reader := parser.NewReader()
+		env.Runtime.Reader = reader
+		env.Runtime.Library = &lisp.RelativeFileSystemLibrary{}
 		rc := lisp.InitializeUserEnv(env)
 		if !rc.IsNil() {
 			fmt.Fprintln(os.Stderr, rc)
@@ -46,18 +41,11 @@ var runCmd = &cobra.Command{
 			fmt.Fprintln(os.Stderr, rc)
 			os.Exit(1)
 		}
-		for i := range exprs {
-			vals, err := reader.Read("run", bytes.NewReader(exprs[i]))
-			if err != nil {
-				fmt.Fprintln(os.Stderr, err)
+		for i := range args {
+			res := env.LoadFile(args[i])
+			if res.Type == lisp.LError {
+				(*lisp.ErrorVal)(res).WriteTrace(os.Stderr)
 				os.Exit(1)
-			}
-			for _, val := range vals {
-				res := env.Eval(val)
-				if res.Type == lisp.LError {
-					(*lisp.ErrorVal)(res).WriteTrace(os.Stderr)
-					os.Exit(1)
-				}
 			}
 		}
 	},

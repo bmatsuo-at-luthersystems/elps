@@ -41,6 +41,7 @@ var userBuiltins []*langBuiltin
 var langBuiltins = []*langBuiltin{
 	{"load-string", Formals("source-code", KeyArgSymbol, "name"), builtinLoadString},
 	{"load-bytes", Formals("source-code", KeyArgSymbol, "name"), builtinLoadBytes},
+	{"load-file", Formals("source-location"), builtinLoadFile},
 	{"in-package", Formals("package-name"), builtinInPackage},
 	{"use-package", Formals(VarArgSymbol, "package-name"), builtinUsePackage},
 	{"export", Formals(VarArgSymbol, "symbol"), builtinExport},
@@ -206,6 +207,24 @@ func builtinLoadBytes(env *LEnv, args *LVal) *LVal {
 	// optimization from unwinding the stack to/beyond this point.
 	env.Runtime.Stack.Top().TROBlock = true
 	v := env.root().Load(_name, bytes.NewReader(source.Bytes()))
+	if v.Type == LError && v.CallStack() == nil {
+		v.SetCallStack(env.Runtime.Stack.Copy())
+	}
+	return v
+}
+
+func builtinLoadFile(env *LEnv, args *LVal) *LVal {
+	loc := args.Cells[0]
+	if loc.Type != LString {
+		return env.Errorf("first argument is not a string: %v", loc.Type)
+	}
+
+	// Load the source in the root environment so the loaded code does not
+	// share the current lexical environment.  The loaded source will share a
+	// stack but the stack frame TROBlock will prevent tail recursion
+	// optimization from unwinding the stack to/beyond this point.
+	env.Runtime.Stack.Top().TROBlock = true
+	v := env.root().LoadFile(loc.Str)
 	if v.Type == LError && v.CallStack() == nil {
 		v.SetCallStack(env.Runtime.Stack.Copy())
 	}

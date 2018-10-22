@@ -16,6 +16,7 @@ type Runtime struct {
 	Stderr   io.Writer
 	Stack    *CallStack
 	Reader   Reader
+	Library  SourceLibrary
 	numenv   atomicCounter
 	numsym   atomicCounter
 }
@@ -44,6 +45,23 @@ func (r *Runtime) getEnvID() uint {
 
 func (r *Runtime) gensym() uint {
 	return r.numsym.Add(1)
+}
+
+// sourceContext uses the CallStack to determine the location/name of the
+// currently executing file (i.e. the file containing the function call
+// `(load-file ...)` that is being evaluated).
+func (r *Runtime) sourceContext() SourceContext {
+	top := r.Stack.Top()
+	if top != nil {
+		return &sourceContext{
+			name: top.Source.File,
+			loc:  top.Source.Path,
+		}
+	}
+	return &sourceContext{
+		name: "",
+		loc:  "",
+	}
 }
 
 type atomicCounter uint64

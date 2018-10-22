@@ -25,6 +25,14 @@ func (_ *reader) Read(name string, r io.Reader) ([]*lisp.LVal, error) {
 	return p.ParseProgram()
 }
 
+// ReadLocation implements lisp.LocationReader.
+func (_ *reader) ReadLocation(name string, loc string, r io.Reader) ([]*lisp.LVal, error) {
+	s := token.NewScanner(name, r)
+	s.SetPath(loc)
+	p := New(s)
+	return p.ParseProgram()
+}
+
 // Parser is a lisp parser.
 type Parser struct {
 	parsing bool

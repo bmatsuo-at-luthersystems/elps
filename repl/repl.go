@@ -19,6 +19,7 @@ import (
 func RunRepl(prompt string) {
 	env := lisp.NewEnv(nil)
 	env.Runtime.Reader = parser.NewReader()
+	env.Runtime.Library = &lisp.RelativeFileSystemLibrary{}
 	rc := lisp.InitializeUserEnv(env)
 	if !rc.IsNil() {
 		errlnf("Language initialization failure: %v", rc)

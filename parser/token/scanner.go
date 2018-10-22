@@ -11,6 +11,7 @@ import (
 // Scanner facilitates construction of tokens from a byte stream (io.Reader).
 type Scanner struct {
 	file         string
+	path         string
 	totalPos     int
 	linePos      int // totalPos at the first byte of the line
 	line         int // line number at linePos
@@ -44,6 +45,12 @@ func newScannerBuf(file string, r io.Reader, buf []byte) *Scanner {
 func NewScanner(file string, r io.Reader) *Scanner {
 	buf := make([]byte, 8<<10)
 	return newScannerBuf(file, r, buf)
+}
+
+// SetPath associates a physical location (e.g. filesystem path) with s to aid
+// in debugging projects which scan many ungrouped files.
+func (s *Scanner) SetPath(path string) {
+	s.path = path
 }
 
 // EmitToken returns a token containing the text scanned since the last call to
@@ -330,6 +337,7 @@ func (s *Scanner) LocStart() *Location {
 	}
 	return &Location{
 		File: s.file,
+		Path: s.path,
 		Line: s.line,
 		Pos:  startPos,
 	}
@@ -340,6 +348,7 @@ func (s *Scanner) LocStart() *Location {
 func (s *Scanner) Loc() *Location {
 	return &Location{
 		File: s.file,
+		Path: s.path,
 		Line: s.line,
 		Pos:  s.totalPos,
 	}

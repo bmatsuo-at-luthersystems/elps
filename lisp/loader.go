@@ -15,6 +15,15 @@ type Reader interface {
 	Read(name string, r io.Reader) ([]*LVal, error)
 }
 
+// LocationReader is like Reader but assigns physical locations to the tokens
+// from r.
+type LocationReader interface {
+	// ReadLocation the contents of r, associated with physical location loc,
+	// and return the sequence of LVals that it contains.  The returned LVals
+	// should be executed as if inside a progn.
+	ReadLocation(name string, loc string, r io.Reader) ([]*LVal, error)
+}
+
 // LoaderMust returns its first argument when err is nil.  If err is nil
 // LoaderMust panics.
 func LoaderMust(fn Loader, err error) Loader {
