@@ -95,7 +95,11 @@ func RunRepl(prompt string) {
 			continue
 		}
 		val := env.Eval(expr)
-		fmt.Fprintln(env.Runtime.Stderr, val)
+		if val.Type == lisp.LError {
+			(*lisp.ErrorVal)(val).WriteTrace(os.Stderr)
+		} else {
+			fmt.Fprintln(env.Runtime.Stderr, val)
+		}
 	}
 
 	errln("done")
