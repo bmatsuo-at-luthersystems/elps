@@ -43,6 +43,21 @@ func TestSpecialOp(t *testing.T) {
 			{`(let* ([x 1] [y 2]) (+ x y))`, "3", ""},
 			{`(let* ([x 0]) (let* ([x 1] [y (+ x 1)]) (+ x y)))`, "3", ""},
 		}},
+		{"flet", elpstest.TestSequence{
+			{`(flet [])`, "()", ""},
+			{`(flet ([f (x) x]) (f 2))`, "2", ""},
+			{`(flet ([f (x y) (if (= x 0) y (f (- x 1) (+ y 1)))]) (f 3 2))`, "5", ""},
+			{`(defun orig () 1)`, "()", ""},
+			{`(flet ([orig () 2] [f () (orig)]) (f))`, "1", ""},
+		}},
+		{"labels", elpstest.TestSequence{
+			{`(labels [])`, "()", ""},
+			{`(labels ([f (x) x]) (f 2))`, "2", ""},
+			{`(labels ([f (x y) (if (= x 0) y (f (- x 1) (+ y 1)))]) (f 3 2))`, "5", ""},
+			{`(defun orig () 1)`, "()", ""},
+			{`(labels ([orig () 2] [f () (orig)]) (f))`, "2", ""},
+			{`(labels ([f () (orig)] [orig () 2]) (f))`, "2", ""},
+		}},
 		{"cond", elpstest.TestSequence{
 			{`(cond)`, "()", ""},
 			{`(cond (else 1))`, "1", ""},
