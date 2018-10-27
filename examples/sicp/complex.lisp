@@ -2,20 +2,24 @@
 (use-package 'math)
 (use-package 'testing)
 
+(export 'square)
 (defun square (x)
   (* x x))
 
 (defun pair? (value)
   (and (list? value) (= 2 (length value))))
 
+(export 'attach-tag)
 (defun attach-tag (type-tag contents)
   (list type-tag contents))
 
+(export 'type-tag)
 (defun type-tag (datum)
   (if (pair? datum)
     (first datum)
     (error 'argument-error "bad tagged datum" datum)))
 
+(export 'contents)
 (defun contents (datum)
   (if (pair? datum)
     (second datum)
@@ -38,10 +42,8 @@
            (square (rectangular-imag-part z)))))
 
 (defun rectangular-angle (z)
-  (if (and (= 0 (rectangular-real-part z))
-           (= 0 (rectangular-imag-part z)))
-    0  ; I guess?
-    (atan (/ (rectangular-imag-part z) (rectangular-real-part z)))))
+  (atan (rectangular-imag-part z)
+        (rectangular-real-part z)))
 
 (defun make-rectangular-from-real-imag (x y)
   (attach-tag 'rectangular (list x y)))

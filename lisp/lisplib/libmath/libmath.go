@@ -49,7 +49,7 @@ var builtins = []*libutil.Builtin{
 	libutil.Function("acosh", lisp.Formals("radians"), builtinAcosh),
 	libutil.Function("tan", lisp.Formals("radians"), builtinTan),
 	libutil.Function("tanh", lisp.Formals("radians"), builtinTanh),
-	libutil.Function("atan", lisp.Formals("radians"), builtinAtan),
+	libutil.Function("atan", lisp.Formals("radians", lisp.OptArgSymbol, "quotient"), builtinAtan),
 	libutil.Function("atanh", lisp.Formals("radians"), builtinAtanh),
 }
 
@@ -119,19 +119,47 @@ func builtinLog(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
 }
 
 var builtinSqrt = realFunc(math.Sqrt).builtin
+
 var builtinExp = realFunc(math.Exp).builtin
+
 var builtinLn = realFunc(math.Log).builtin
+
 var builtinSin = realFunc(math.Sin).builtin
+
 var builtinSinh = realFunc(math.Sinh).builtin
+
 var builtinAsin = realFunc(math.Asin).builtin
+
 var builtinAsinh = realFunc(math.Asinh).builtin
+
 var builtinCos = realFunc(math.Cos).builtin
+
 var builtinCosh = realFunc(math.Cosh).builtin
+
 var builtinAcos = realFunc(math.Acos).builtin
+
 var builtinAcosh = realFunc(math.Acosh).builtin
+
 var builtinTan = realFunc(math.Tan).builtin
+
 var builtinTanh = realFunc(math.Tanh).builtin
-var builtinAtan = realFunc(math.Atan).builtin
+
+// builtinAtan does not have the same signature as other trigonometric
+// functions and must be implemented specially.
+func builtinAtan(env *lisp.LEnv, args *lisp.LVal) *lisp.LVal {
+	x, q := args.Cells[0], args.Cells[1]
+	if !x.IsNumeric() {
+		return env.Errorf("argument is not a number: %v", x.Type)
+	}
+	if q.IsNil() {
+		return lisp.Float(math.Atan(toFloat(x)))
+	}
+	if !q.IsNumeric() {
+		return env.Errorf("second argument is not a number: %v", q.Type)
+	}
+	return lisp.Float(math.Atan2(toFloat(x), toFloat(q)))
+}
+
 var builtinAtanh = realFunc(math.Atanh).builtin
 
 // realFunc is a function of the real number line (potentially with special
