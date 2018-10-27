@@ -51,19 +51,30 @@ func New(scanner *token.Scanner) *Parser {
 	return NewFromSource(NewTokenSource(scanner))
 }
 
+func (p *Parser) Parse() (*lisp.LVal, error) {
+	p.ignoreComments()
+	if p.src.IsEOF() {
+		return nil, io.EOF
+	}
+	expr := p.ParseExpression()
+	if expr.Type == lisp.LError {
+		return nil, lisp.GoError(expr)
+	}
+	return expr, nil
+}
+
 func (p *Parser) ParseProgram() ([]*lisp.LVal, error) {
 	var exprs []*lisp.LVal
 
 	p.ignoreHashBang()
 
 	for {
-		p.ignoreComments()
-		if p.src.IsEOF() {
+		expr, err := p.Parse()
+		if err == io.EOF {
 			break
 		}
-		expr := p.ParseExpression()
-		if expr.Type == lisp.LError {
-			return nil, lisp.GoError(expr)
+		if err != nil {
+			return nil, err
 		}
 		exprs = append(exprs, expr)
 	}
@@ -129,7 +140,7 @@ func (p *Parser) parseExpression() func(p *Parser) *lisp.LVal {
 	default:
 		return func(p *Parser) *lisp.LVal {
 			p.ReadToken()
-			return p.errorf("parse-error", "unexpected token: %v", p.TokenType())
+			return p.errorf("parse-error", "unexpected expression token: %v", p.TokenType())
 		}
 	}
 }
