@@ -8,6 +8,12 @@ default: all
 .PHONY: all
 all: ${EXAMPLES}
 
+.PHONY: wasm
+all: wasm
+wasm:
+	$(MAKE) -C wasm
+
+
 .PHONY: ${EXAMPLES}
 ${EXAMPLES}: ${BIN}
 	${BIN} run $@
