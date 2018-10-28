@@ -510,7 +510,7 @@ func markTailRec(npop int, fun *LVal, args *LVal) *LVal {
 	}
 }
 
-func (v *LVal) tailRecEllided() int {
+func (v *LVal) tailRecElided() int {
 	if v.Type != LMarkTailRec {
 		panic("not marker-tail-recursion")
 	}

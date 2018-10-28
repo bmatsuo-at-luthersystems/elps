@@ -751,7 +751,7 @@ callf:
 	if r.Type == LMarkTailRec {
 		// Tail recursion optimization is occurring.
 		if decrementMarkTailRec(r) {
-			env.Runtime.Stack.Top().HeightEffective += r.tailRecEllided()
+			env.Runtime.Stack.Top().HeightLogical += r.tailRecElided()
 			err := env.Runtime.Stack.CheckHeight()
 			if err != nil {
 				return env.Error(err)
@@ -809,7 +809,7 @@ callf:
 		// Tail recursion optimization is occurring.
 		done := decrementMarkTailRec(r)
 		if done {
-			env.Runtime.Stack.Top().HeightEffective += r.tailRecEllided()
+			env.Runtime.Stack.Top().HeightLogical += r.tailRecElided()
 			err := env.Runtime.Stack.CheckHeight()
 			if err != nil {
 				return env.Error(err)

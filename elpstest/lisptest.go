@@ -196,7 +196,8 @@ func RunTestSuite(t *testing.T, tests TestSuite) {
 		env := lisp.NewEnv(nil)
 		var exprBuf bytes.Buffer
 		lisp.InitializeUserEnv(env,
-			lisp.WithMaximumEffectiveStackHeight(50000),
+			lisp.WithMaximumLogicalStackHeight(50000),
+			lisp.WithMaximumPhysicalStackHeight(25000),
 			lisp.WithReader(parser.NewReader()),
 			lisp.WithStderr(io.MultiWriter(os.Stderr, &exprBuf)),
 		)

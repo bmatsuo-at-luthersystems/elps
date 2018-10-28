@@ -52,8 +52,12 @@ func TestStack(t *testing.T) {
 		{"effective stack height", elpstest.TestSequence{
 			{`(defun recursive () (+ 1 (recursive)))`, `()`, ``},
 			{`(defun tail-recursive (n) (if (> n 0) (tail-recursive (- n 1)) ()))`, `()`, ``},
-			{`(recursive)`, `test:1: recursive: effective stack height exceeded maximum: 50001`, ``},
-			{`(tail-recursive 100000)`, `test:1: tail-recursive: effective stack height exceeded maximum: 50001`, ``},
+			{`(recursive)`, `test:1: recursive: physical stack height exceeded maximum: 25001`, ``},
+			// NOTE:  It's a little hard to control the function reported in
+			// the following error message.  It may change if there is a change
+			// in the function definition or to the maximum logical stack
+			// height.
+			{`(tail-recursive 100000)`, `test:1: lisp:if: logical stack height exceeded maximum: 50001`, ``},
 		}},
 	}
 	elpstest.RunTestSuite(t, tests)

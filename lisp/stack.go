@@ -12,19 +12,20 @@ import (
 
 // CallStack is a function call stack.
 type CallStack struct {
-	MaxHeightEffective int
-	Frames             []CallFrame
+	MaxHeightLogical  int
+	MaxHeightPhysical int
+	Frames            []CallFrame
 }
 
 // CallFrame is one frame in the CallStack
 type CallFrame struct {
-	Source          *token.Location
-	FID             string
-	Package         string
-	Name            string
-	HeightEffective int
-	Terminal        bool
-	TROBlock        bool // Stop tail-recursion optimization from collapsing this frame
+	Source        *token.Location
+	FID           string
+	Package       string
+	Name          string
+	HeightLogical int
+	Terminal      bool
+	TROBlock      bool // Stop tail-recursion optimization from collapsing this frame
 }
 
 // QualifiedFunName returns the qualified name for the function on the top of
@@ -84,8 +85,8 @@ func (s *CallStack) Copy() *CallStack {
 	frames := make([]CallFrame, len(s.Frames))
 	copy(frames, s.Frames)
 	return &CallStack{
-		MaxHeightEffective: s.MaxHeightEffective,
-		Frames:             frames,
+		MaxHeightLogical: s.MaxHeightLogical,
+		Frames:           frames,
 	}
 }
 
@@ -145,30 +146,53 @@ func (s *CallStack) TerminalFID(fid string) int {
 func (s *CallStack) PushFID(src *token.Location, fid string, pkg string, name string) error {
 	heff := 0
 	if len(s.Frames) > 0 {
-		heff = s.Top().HeightEffective + 1
+		heff = s.Top().HeightLogical + 1
 	}
-	if s.MaxHeightEffective > 0 && s.MaxHeightEffective < heff {
-		return &StackOverflowError{heff}
+	err := s.checkHeightPush()
+	if err != nil {
+		return err
 	}
 	s.Frames = append(s.Frames, CallFrame{
-		Source:          src,
-		FID:             fid,
-		Package:         pkg,
-		Name:            name,
-		HeightEffective: heff,
+		Source:        src,
+		FID:           fid,
+		Package:       pkg,
+		Name:          name,
+		HeightLogical: heff,
 	})
 	return nil
 }
 
+func (s *CallStack) checkHeightPush() error {
+	err := s.checkHeightPhysical()
+	if err != nil {
+		return err
+	}
+	return s.CheckHeight()
+}
+
+// checkHeightPhysical performs an inclusive check against s.MaxHeightPhysical
+// because it is assumed to be called preemptively, before a new frame is
+// pushed onto the stack.  To account for this checkHeightPhysical adds one to
+// the current physical height in any error produced.
+func (s *CallStack) checkHeightPhysical() error {
+	if s.MaxHeightPhysical <= 0 {
+		return nil
+	}
+	if s.MaxHeightPhysical <= len(s.Frames) {
+		return &PhysicalStackOverflowError{len(s.Frames) + 1}
+	}
+	return nil
+}
+
 func (s *CallStack) CheckHeight() error {
-	if s.MaxHeightEffective <= 0 {
+	if s.MaxHeightLogical <= 0 {
 		return nil
 	}
 	if len(s.Frames) == 0 {
 		return nil
 	}
-	if s.MaxHeightEffective < s.Top().HeightEffective {
-		return &StackOverflowError{s.Top().HeightEffective}
+	if s.MaxHeightLogical < s.Top().HeightLogical {
+		return &LogicalStackOverflowError{s.Top().HeightLogical}
 	}
 	return nil
 }
@@ -203,10 +227,18 @@ func (s *CallStack) DebugPrint(w io.Writer) (int, error) {
 	return n, nil
 }
 
-type StackOverflowError struct {
-	HeightEffective int
+type LogicalStackOverflowError struct {
+	Height int
 }
 
-func (e *StackOverflowError) Error() string {
-	return fmt.Sprintf("effective stack height exceeded maximum: %v", e.HeightEffective)
+func (e *LogicalStackOverflowError) Error() string {
+	return fmt.Sprintf("logical stack height exceeded maximum: %v", e.Height)
+}
+
+type PhysicalStackOverflowError struct {
+	Height int
+}
+
+func (e *PhysicalStackOverflowError) Error() string {
+	return fmt.Sprintf("physical stack height exceeded maximum: %v", e.Height)
 }

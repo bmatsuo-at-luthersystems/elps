@@ -5,14 +5,26 @@ import "io"
 // Config is a function that configures a root environment or its runtime.
 type Config func(env *LEnv) *LVal
 
-// WithMaximumEffectiveStackHeight returns a Config that will prevent an
-// execution environment from allowing the effective stack height to exceed n.
-// The effective height of the stack is the stacks physical height plus any the
-// number of stack frames which have been ellided due to tail recursive call
+// WithMaximumLogicalStackHeight returns a Config that will prevent an
+// execution environment from allowing the logical stack height to exceed n.
+// The logical height of the stack is the stack's physical height plus the
+// number of stack frames which have been elided due to tail recursive call
 // optimizations.
-func WithMaximumEffectiveStackHeight(n int) Config {
+func WithMaximumLogicalStackHeight(n int) Config {
 	return func(env *LEnv) *LVal {
-		env.Runtime.Stack.MaxHeightEffective = n
+		env.Runtime.Stack.MaxHeightLogical = n
+		return Nil()
+	}
+}
+
+// WithMaximumPhysicalStackHeight returns a Config that will prevent an
+// execution environment from allowing the logical stack height to exceed n.
+// The physical height of the literal number of frames in the call stack and
+// does not account for stack frames elided due to tail recursive call
+// optimizations.
+func WithMaximumPhysicalStackHeight(n int) Config {
+	return func(env *LEnv) *LVal {
+		env.Runtime.Stack.MaxHeightPhysical = n
 		return Nil()
 	}
 }
