@@ -31,6 +31,11 @@ clean:
 run: ${WASM_RUNTIME} ${WASM_OUT}
 	node ${WASM_RUNTIME} ${WASM_OUT}
 
+.PHONY: test
+test:
+	${WASM_ENV} go test ./app/...
+	go test ./server/...
+
 .PHONY: serve
 serve: ${WASM_OUT}
 	$(MAKE) -C server

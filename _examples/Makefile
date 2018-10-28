@@ -5,16 +5,21 @@ EXAMPLES=$(shell find . -name '*.lisp')
 .PHONY: default
 default: all
 
-.PHONY: all
-all: ${EXAMPLES}
+.PHONY: all test
 
 .PHONY: wasm
 all: wasm
 wasm:
 	$(MAKE) -C wasm
 
+.PHONY: wasm-test
+test: wasm-test
+wasm-test:
+	$(MAKE) -C wasm test
 
 .PHONY: ${EXAMPLES}
+all: ${EXAMPLES}
+test: ${EXAMPLES}
 ${EXAMPLES}: ${BIN}
 	${BIN} run $@
 

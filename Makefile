@@ -10,13 +10,28 @@ repl: build
 	${BIN} repl
 
 .PHONY: test
-test:
+
+.PHONY: citest
+citest: go-test
+
+.PHONY: go-test
+test: go-test
+go-test:
 	GOCACHE=off go test -cover ./...
-	$(MAKE) examples
 
 .PHONY: examples
 examples:
-	$(MAKE) -C examples
+	$(MAKE) -C _examples
+
+.PHONY: test-examples
+test: test-examples
+test-examples:
+	$(MAKE) -C _examples test
+
+.PHONY: clean-examples
+clean: clean-examples
+clean-examples:
+	$(MAKE) -C _examples clean
 
 .PHONY: install
 install:
