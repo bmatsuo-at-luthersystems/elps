@@ -43,6 +43,32 @@ func TestMath(t *testing.T) {
 	elpstest.RunTestSuite(t, tests)
 }
 
+func TestNumbers(t *testing.T) {
+	tests := elpstest.TestSuite{
+		{"numeric types", elpstest.TestSequence{
+			// arithmetic functions w/o args
+			{"(int? 1)", "true", ""},
+			{"(int? 0)", "true", ""},
+			{"(int? -1)", "true", ""},
+			{"(int? 1.0)", "false", ""},
+			{"(int? 0.0)", "false", ""},
+			{"(int? -1.0)", "false", ""},
+			{"(number? 1)", "true", ""},
+			{"(number? 0)", "true", ""},
+			{"(number? -1)", "true", ""},
+			{"(number? 1.0)", "true", ""},
+			{"(number? 0.0)", "true", ""},
+			{"(number? -1.0)", "true", ""},
+			{"(int? (/ 1))", "true", ""},
+			{"(int? (/ 10 5 2))", "true", ""},
+			{"(int? (* 2))", "true", ""},
+			{"(int? (* 2.0))", "false", ""},
+			{"(int? (/ 10 2.0))", "false", ""},
+		}},
+	}
+	elpstest.RunTestSuite(t, tests)
+}
+
 func TestLogic(t *testing.T) {
 	tests := elpstest.TestSuite{
 		{"logic", elpstest.TestSequence{

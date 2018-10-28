@@ -853,6 +853,9 @@ func (v *LVal) str(onTheRecord bool) string {
 	case LInt:
 		return quote + strconv.Itoa(v.Int)
 	case LFloat:
+		// NOTE:  The 'g' format can render a floating point number such that
+		// it appears as an integer (2.0 renders as 2) which can be confusing
+		// for those interested in the type of each numeric value.
 		return quote + strconv.FormatFloat(v.Float, 'g', -1, 64)
 	case LString:
 		return quote + fmt.Sprintf("%q", v.Str)

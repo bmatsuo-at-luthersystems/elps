@@ -69,7 +69,7 @@
            (= 0 y))
     (attach-tag 'polar (list 0 0))
     (attach-tag 'polar (list (sqrt (+ (square x) (square y)))
-                             (atan (/ y x))))))
+                             (atan y x)))))
 
 (defun make-polar-from-mag-ang (r a)
   (if (= 0 r)

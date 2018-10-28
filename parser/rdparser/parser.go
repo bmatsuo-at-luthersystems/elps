@@ -140,7 +140,7 @@ func (p *Parser) parseExpression() func(p *Parser) *lisp.LVal {
 	default:
 		return func(p *Parser) *lisp.LVal {
 			p.ReadToken()
-			return p.errorf("parse-error", "unexpected expression token: %v", p.TokenType())
+			return p.errorf("parse-error", "unexpected token: %v", p.TokenType())
 		}
 	}
 }

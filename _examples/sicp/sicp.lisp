@@ -3,18 +3,16 @@
 
 (use-package 'testing)
 
-(defun abs (x)
-  (if (< x 0)
-    (- x)
-    x))
-
+(export 'remainder)
 (defun remainder (a b)
   (mod a b))
 
+(export 'gcd)
 (defun gcd (a b)
   (cond
-    ((< a 0) (gcd (abs a) b))
-    ((< b 0) (gcd a (abs b)))
+    ((< a 0) (gcd (math:abs a) b))
+    ((< b 0) (gcd a (math:abs b)))
+    ((= a 0) b)
     ((= b 0) a)
     (:else (gcd b (remainder a b)))))
 
