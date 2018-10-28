@@ -1,6 +1,7 @@
 package lisp
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"log"
@@ -31,7 +32,7 @@ func gensym() uint {
 }
 
 // InitializeUserEnv creates the default user environment.
-func InitializeUserEnv(env *LEnv) *LVal {
+func InitializeUserEnv(env *LEnv, config ...Config) *LVal {
 	env.Runtime.Registry.DefinePackage(DefaultLangPackage)
 	env.Runtime.Registry.Lang = DefaultLangPackage
 	env.Runtime.Package = env.Runtime.Registry.Packages[env.Runtime.Registry.Lang]
@@ -42,6 +43,12 @@ func InitializeUserEnv(env *LEnv) *LVal {
 	rc := env.InPackage(Symbol(DefaultUserPackage))
 	if GoError(rc) != nil {
 		return rc
+	}
+	for _, fn := range config {
+		lerr := fn(env)
+		if lerr.Type == LError {
+			return lerr
+		}
 	}
 	return env.UsePackage(Symbol(env.Runtime.Registry.Lang))
 }
@@ -145,20 +152,83 @@ func (env *LEnv) LoadString(name, exprs string) *LVal {
 	return env.Load(name, strings.NewReader(exprs))
 }
 
+// LoadFile attempts to use env.Runtime.Library to read a lisp source file and
+// evaluate expressions it contains.  Any error encountered will prevent
+// execution of loaded source and be returned.  After evaluating expressions
+// the current package is restored to the current package at the time Load was
+// called, in case loaded source made calls to ``in-package''.  If
+// env.Runtime.Reader has not been set then an error will be returned by Load.
+func (env *LEnv) LoadFile(loc string) *LVal {
+	if env.Runtime.Library == nil {
+		return env.Errorf("no source library in environment runtime")
+	}
+	ctx := env.Runtime.sourceContext()
+	name, src, err := env.Runtime.Library.LoadSource(ctx, loc)
+	if err != nil {
+		return env.Errorf("library error: %v", err)
+	}
+	return env.LoadLocation(name, loc, bytes.NewReader(src))
+}
+
 // Load reads LVals from r and evaluates them as if in a progn.  The value
-// returned by the last evaluated LVal will be retured.  If env.Reader has not
-// been set then an error will be returned.
+// returned by the last evaluated LVal will be retured.  After evaluating
+// expressions the current package is restored to the current package at the
+// time Load was called, in case loaded source made calls to ``in-package''.
+// If env.Runtime.Reader has not been set then an error will be returned by Load.
 func (env *LEnv) Load(name string, r io.Reader) *LVal {
 	if env.Runtime.Reader == nil {
 		return env.Errorf("no reader for environment runtime")
 	}
+
 	exprs, err := env.Runtime.Reader.Read(name, r)
 	if err != nil {
 		return env.Error(err)
 	}
+
+	return env.load(exprs)
+}
+
+// LoadLocation attempts to use env.Runtime.Library to read a lisp source file,
+// specifying its name and location explicity, and evaluate the expressions it
+// contains.  Because the name and location of the stream are specfied
+// explicitly LoadLocation does not depend explicity on an env.Runtime.Library
+// implementation.
+// Any error encountered will prevent execution of loaded source and
+// be returned.  After evaluating expressions the current package is restored
+// to the current package at the time Load was called, in case loaded source
+// made calls to ``in-package''.  If env.Runtime.Reader has not been set then
+// an error will be returned by Load.
+func (env *LEnv) LoadLocation(name string, loc string, r io.Reader) *LVal {
+	if env.Runtime.Reader == nil {
+		return env.Errorf("no reader for environment runtime")
+	}
+
+	reader, ok := env.Runtime.Reader.(LocationReader)
+	if !ok {
+		return env.Load(name, r)
+	}
+	exprs, err := reader.ReadLocation(name, loc, r)
+	if err != nil {
+		return env.Error(err)
+	}
+
+	return env.load(exprs)
+}
+
+func (env *LEnv) load(exprs []*LVal) *LVal {
 	if len(exprs) == 0 {
 		return Nil()
 	}
+
+	// Remember the current package and restore it for the caller after
+	// evaluation completes.
+	currPkg := env.Runtime.Package
+	defer func() {
+		// This should be fine as packages can't be deleted.  The runtime
+		// registry should definitely still contain currPkg.
+		env.Runtime.Package = currPkg
+	}()
+
 	ret := Nil()
 	for _, expr := range exprs {
 		ret = env.Eval(expr)
@@ -612,7 +682,10 @@ func (env *LEnv) MacroCall(fun, args *LVal) *LVal {
 	}
 
 	// Push a frame onto the stack to represent the function's execution.
-	env.Runtime.Stack.PushFID(env.Loc, fun.FID(), fun.Package(), env.GetFunName(fun))
+	err := env.Runtime.Stack.PushFID(env.Loc, fun.FID(), fun.Package(), env.GetFunName(fun))
+	if err != nil {
+		return env.Error(err)
+	}
 	defer env.Runtime.Stack.Pop()
 	// Macros can't participate in tail-recursion optimization at all.  Enable
 	// the TROBlock on the stack fram so TerminalFID never seeks past the
@@ -651,7 +724,10 @@ func (env *LEnv) SpecialOpCall(fun, args *LVal) *LVal {
 	}
 
 	// Push a frame onto the stack to represent the function's execution.
-	env.Runtime.Stack.PushFID(env.Loc, fun.FID(), fun.Package(), env.GetFunName(fun))
+	err := env.Runtime.Stack.PushFID(env.Loc, fun.FID(), fun.Package(), env.GetFunName(fun))
+	if err != nil {
+		return env.Error(err)
+	}
 	defer env.Runtime.Stack.Pop()
 
 	// Special functions in general cannot be candidates for tail-recursion
@@ -675,6 +751,11 @@ callf:
 	if r.Type == LMarkTailRec {
 		// Tail recursion optimization is occurring.
 		if decrementMarkTailRec(r) {
+			env.Runtime.Stack.Top().HeightLogical += r.tailRecElided()
+			err := env.Runtime.Stack.CheckHeight()
+			if err != nil {
+				return env.Error(err)
+			}
 			fun, args = extractMarkTailRec(r)
 			goto callf
 		}
@@ -704,7 +785,10 @@ func (env *LEnv) funCall(fun, args *LVal) *LVal {
 	npop = env.Runtime.Stack.TerminalFID(fun.FID())
 
 	// Push a frame onto the stack to represent the function's execution.
-	env.Runtime.Stack.PushFID(env.Loc, fun.FID(), fun.Package(), env.GetFunName(fun))
+	err := env.Runtime.Stack.PushFID(env.Loc, fun.FID(), fun.Package(), env.GetFunName(fun))
+	if err != nil {
+		return env.Error(err)
+	}
 	defer env.Runtime.Stack.Pop()
 
 	if npop > 0 {
@@ -725,6 +809,11 @@ callf:
 		// Tail recursion optimization is occurring.
 		done := decrementMarkTailRec(r)
 		if done {
+			env.Runtime.Stack.Top().HeightLogical += r.tailRecElided()
+			err := env.Runtime.Stack.CheckHeight()
+			if err != nil {
+				return env.Error(err)
+			}
 			fun, args = extractMarkTailRec(r)
 			goto callf
 		}
@@ -734,7 +823,7 @@ callf:
 }
 
 func extractMarkTailRec(mark *LVal) (fun, args *LVal) {
-	return mark.Cells[1], mark.Cells[2]
+	return mark.tailRecFun(), mark.tailRecArgs()
 }
 
 // Decrement the tail recursion counter until it indicates 0 additional
@@ -743,7 +832,7 @@ func extractMarkTailRec(mark *LVal) (fun, args *LVal) {
 //
 // mark must be LMarkTailRec
 func decrementMarkTailRec(mark *LVal) (done bool) {
-	if len(mark.Cells) != 3 {
+	if len(mark.Cells) != 4 {
 		panic("invalid mark")
 	}
 	mark.Cells[0].Int--

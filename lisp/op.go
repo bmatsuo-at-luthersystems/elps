@@ -16,6 +16,8 @@ var langSpecialOps = []*langBuiltin{
 	{"expr", Formals("pattern"), opExpr},
 	{"thread-first", Formals("value", VarArgSymbol, "exprs"), opThreadFirst},
 	{"thread-last", Formals("value", VarArgSymbol, "exprs"), opThreadLast},
+	{"labels", Formals("bindings", VarArgSymbol, "expr"), opLabels},
+	{"flet", Formals("bindings", VarArgSymbol, "expr"), opFlet},
 	{"let*", Formals("bindings", VarArgSymbol, "expr"), opLetSeq},
 	{"let", Formals("bindings", VarArgSymbol, "expr"), opLet},
 	{"progn", Formals(VarArgSymbol, "expr"), opProgn},
@@ -298,6 +300,68 @@ func opThreadFirst(env *LEnv, args *LVal) *LVal {
 		}
 	}
 	return val
+}
+
+func opFlet(env *LEnv, args *LVal) *LVal {
+	fletenv := NewEnv(env)
+	bindlist := args.Cells[0]
+	args.Cells = args.Cells[1:] // decap so we can call builtinProgn on args.
+	if bindlist.Type != LSExpr {
+		return env.Errorf("first argument is not a list: %s", bindlist.Type)
+	}
+	for _, bind := range bindlist.Cells {
+		if bind.Type != LSExpr {
+			return env.Errorf("first argument is not a list of function definitions")
+		}
+		if len(bind.Cells) < 2 {
+			return env.Errorf("first argument is not a list of function definitions")
+		}
+		fenv := NewEnv(env) // lambdas in a flet can't call each other -- recursion OK
+		name, formals, body := bind.Cells[0], bind.Cells[1], bind.Cells[2:]
+		lval := fenv.Lambda(formals, body)
+		if lval.Type == LError {
+			lval.SetCallStack(env.Runtime.Stack.Copy())
+			return lval
+		}
+		// bind name in fenv to allow recursion and fletenv for the flet body.
+		fenv.Put(name, lval)
+		fletenv.Put(name, lval)
+	}
+	return opProgn(fletenv, args)
+}
+
+// NOTE: Labels is similar to what you might image a flet* being but flet* is
+// not appropriate because the defined lambdas can have "forward references" in
+// labels.
+//		(labels [(f1 () (f2))
+//		         (f2 () (debug-print "f2"))])
+//		  (f1))
+func opLabels(env *LEnv, args *LVal) *LVal {
+	fletenv := NewEnv(env)
+	bindlist := args.Cells[0]
+	args.Cells = args.Cells[1:] // decap so we can call builtinProgn on args.
+	if bindlist.Type != LSExpr {
+		return env.Errorf("first argument is not a list: %s", bindlist.Type)
+	}
+	for _, bind := range bindlist.Cells {
+		if bind.Type != LSExpr {
+			return env.Errorf("first argument is not a list of function definitions")
+		}
+		if len(bind.Cells) < 2 {
+			return env.Errorf("first argument is not a list of function definitions")
+		}
+		name, formals, body := bind.Cells[0], bind.Cells[1], bind.Cells[2:]
+		// The lambda's lexical scope includes all lambdas that labels defines.
+		lval := fletenv.Lambda(formals, body)
+		if lval.Type == LError {
+			lval.SetCallStack(env.Runtime.Stack.Copy())
+			return lval
+		}
+		// Bind name for the function body and to allow cross-references
+		// between label lambdas.
+		fletenv.Put(name, lval)
+	}
+	return opProgn(fletenv, args)
 }
 
 func opLet(env *LEnv, args *LVal) *LVal {

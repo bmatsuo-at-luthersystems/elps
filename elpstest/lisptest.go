@@ -194,11 +194,13 @@ func RunTestSuite(t *testing.T, tests TestSuite) {
 	for i, test := range tests {
 		log.Printf("test %d -- %s", i, test.Name)
 		env := lisp.NewEnv(nil)
-		lisp.InitializeUserEnv(env)
 		var exprBuf bytes.Buffer
-		env.Runtime.Stderr = io.MultiWriter(os.Stderr, &exprBuf)
-		env.InPackage(lisp.String(lisp.DefaultUserPackage))
-		env.Runtime.Reader = parser.NewReader()
+		lisp.InitializeUserEnv(env,
+			lisp.WithMaximumLogicalStackHeight(50000),
+			lisp.WithMaximumPhysicalStackHeight(25000),
+			lisp.WithReader(parser.NewReader()),
+			lisp.WithStderr(io.MultiWriter(os.Stderr, &exprBuf)),
+		)
 		for j, expr := range test.TestSequence {
 			exprBuf.Reset()
 			v, err := env.Runtime.Reader.Read("test", strings.NewReader(expr.Expr))

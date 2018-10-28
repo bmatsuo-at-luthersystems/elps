@@ -3,6 +3,7 @@ package repl
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -15,10 +16,11 @@ import (
 	"github.com/chzyer/readline"
 )
 
-// RunRepl runs a simple repl
+// RunRepl runs a simple repl in a vanilla elps environment.
 func RunRepl(prompt string) {
 	env := lisp.NewEnv(nil)
 	env.Runtime.Reader = parser.NewReader()
+	env.Runtime.Library = &lisp.RelativeFileSystemLibrary{}
 	rc := lisp.InitializeUserEnv(env)
 	if !rc.IsNil() {
 		errlnf("Language initialization failure: %v", rc)
@@ -35,23 +37,32 @@ func RunRepl(prompt string) {
 		os.Exit(1)
 	}
 
-	rl, err := readline.New(prompt)
+	RunEnv(env, prompt, strings.Repeat(" ", len(prompt)))
+}
+
+// RunEnv runs a simple repl with env as a root environment.
+func RunEnv(env *lisp.LEnv, prompt, cont string) {
+	if env.Parent != nil {
+		errlnf("REPL environment is not a root environment.")
+		os.Exit(1)
+	}
+
+	p := rdparser.NewInteractive(nil)
+	p.SetPrompts(prompt, cont)
+	rl, err := readline.NewEx(&readline.Config{
+		Prompt: p.Prompt(),
+	})
 	if err != nil {
 		panic(err)
 	}
+	defer rl.Close()
 
-	var eof bool
-
-	p := rdparser.NewInteractive(nil)
 	p.Read = func() []*token.Token {
-		prompt := p.Prompt()
-		rl.SetPrompt(prompt)
+		rl.SetPrompt(p.Prompt())
 		for {
 			var line []byte
 			line, err = rl.ReadSlice()
 			if err != nil && err != readline.ErrInterrupt {
-				// Set eof so the parser breaks out of its loop.
-				eof = true
 				return []*token.Token{&token.Token{
 					Type: token.EOF,
 					Text: "",
@@ -86,12 +97,12 @@ func RunRepl(prompt string) {
 	}
 
 	for {
-		expr, err := p.ParseExpression()
+		expr, err := p.Parse()
+		if err == io.EOF {
+			break
+		}
 		if err != nil {
 			fmt.Fprintln(env.Runtime.Stderr, err)
-			if eof {
-				break
-			}
 			continue
 		}
 		val := env.Eval(expr)
@@ -101,8 +112,6 @@ func RunRepl(prompt string) {
 			fmt.Fprintln(env.Runtime.Stderr, val)
 		}
 	}
-
-	errln("done")
 }
 
 func errlnf(format string, v ...interface{}) {

@@ -25,6 +25,14 @@ func (_ *reader) Read(name string, r io.Reader) ([]*lisp.LVal, error) {
 	return p.ParseProgram()
 }
 
+// ReadLocation implements lisp.LocationReader.
+func (_ *reader) ReadLocation(name string, loc string, r io.Reader) ([]*lisp.LVal, error) {
+	s := token.NewScanner(name, r)
+	s.SetPath(loc)
+	p := New(s)
+	return p.ParseProgram()
+}
+
 // Parser is a lisp parser.
 type Parser struct {
 	parsing bool
@@ -43,19 +51,34 @@ func New(scanner *token.Scanner) *Parser {
 	return NewFromSource(NewTokenSource(scanner))
 }
 
+// Parse is a generic entry point that is similar to ParseExpression but is
+// capable of handling EOF before reading an expression.
+func (p *Parser) Parse() (*lisp.LVal, error) {
+	p.ignoreComments()
+	if p.src.IsEOF() {
+		return nil, io.EOF
+	}
+	expr := p.ParseExpression()
+	if expr.Type == lisp.LError {
+		return nil, lisp.GoError(expr)
+	}
+	return expr, nil
+}
+
+// ParseProgram parses a series of expressions potentially preceded by a
+// hash-bang, `#!`.
 func (p *Parser) ParseProgram() ([]*lisp.LVal, error) {
 	var exprs []*lisp.LVal
 
 	p.ignoreHashBang()
 
 	for {
-		p.ignoreComments()
-		if p.src.IsEOF() {
+		expr, err := p.Parse()
+		if err == io.EOF {
 			break
 		}
-		expr := p.ParseExpression()
-		if expr.Type == lisp.LError {
-			return nil, lisp.GoError(expr)
+		if err != nil {
+			return nil, err
 		}
 		exprs = append(exprs, expr)
 	}
@@ -63,6 +86,9 @@ func (p *Parser) ParseProgram() ([]*lisp.LVal, error) {
 	return exprs, nil
 }
 
+// ParseExpression parses a single expression.  Unlike Parse, ParseExpression
+// requires an expression to be present in the input stream and will report
+// unexpected EOF tokens encountered.
 func (p *Parser) ParseExpression() *lisp.LVal {
 	fn := p.parseExpression()
 

@@ -41,6 +41,7 @@ var userBuiltins []*langBuiltin
 var langBuiltins = []*langBuiltin{
 	{"load-string", Formals("source-code", KeyArgSymbol, "name"), builtinLoadString},
 	{"load-bytes", Formals("source-code", KeyArgSymbol, "name"), builtinLoadBytes},
+	{"load-file", Formals("source-location"), builtinLoadFile},
 	{"in-package", Formals("package-name"), builtinInPackage},
 	{"use-package", Formals(VarArgSymbol, "package-name"), builtinUsePackage},
 	{"export", Formals(VarArgSymbol, "symbol"), builtinExport},
@@ -206,6 +207,24 @@ func builtinLoadBytes(env *LEnv, args *LVal) *LVal {
 	// optimization from unwinding the stack to/beyond this point.
 	env.Runtime.Stack.Top().TROBlock = true
 	v := env.root().Load(_name, bytes.NewReader(source.Bytes()))
+	if v.Type == LError && v.CallStack() == nil {
+		v.SetCallStack(env.Runtime.Stack.Copy())
+	}
+	return v
+}
+
+func builtinLoadFile(env *LEnv, args *LVal) *LVal {
+	loc := args.Cells[0]
+	if loc.Type != LString {
+		return env.Errorf("first argument is not a string: %v", loc.Type)
+	}
+
+	// Load the source in the root environment so the loaded code does not
+	// share the current lexical environment.  The loaded source will share a
+	// stack but the stack frame TROBlock will prevent tail recursion
+	// optimization from unwinding the stack to/beyond this point.
+	env.Runtime.Stack.Top().TROBlock = true
+	v := env.root().LoadFile(loc.Str)
 	if v.Type == LError && v.CallStack() == nil {
 		v.SetCallStack(env.Runtime.Stack.Copy())
 	}
@@ -2066,20 +2085,54 @@ func builtinDiv(env *LEnv, v *LVal) *LVal {
 	}
 
 	if len(v.Cells) == 1 {
-		if v.Cells[0].Type == LInt {
-			return Float(1 / float64(v.Cells[0].Int))
-		}
-		return Float(1 / v.Cells[0].Float)
+		// This is kind of dumb but it catches the case 1/1 which should return
+		// an int.
+		return divInt(Int(1), v)
 	}
 
-	// Never perform integer division with the function ``/''.  Integer
-	// division needs to a separate function to reduce the number of bugs
-	// caused from people doing an integer division unintentionally.
-	div := v.Cells[0].Float
+	// Attempt to perform integer division when all operands are integers and
+	// division is exact.
 	if v.Cells[0].Type == LInt {
-		div = float64(v.Cells[0].Int)
+		return divInt(v.Cells[0], SExpr(v.Cells[1:]))
 	}
-	for _, c := range v.Cells[1:] {
+	return divFloat(v.Cells[0], SExpr(v.Cells[1:]))
+}
+
+// divInt tries to perform division as int if all quotients divide the previous
+// result.
+func divInt(x, args *LVal) *LVal {
+	if x.Type != LInt {
+		panic("non-integer first argument")
+	}
+	ys := args.Cells
+	for i := range ys {
+		y := ys[i]
+		switch {
+		case y.Type != LInt:
+			return divFloat(x, SExpr(ys[i:]))
+		case y.Int == 0:
+			// The result should be NaN, +Inf, or -Inf depending on the
+			// remaining ys.  These computations should be carried out in
+			// IEEE754 floating point for accuracy.
+			return divFloat(x, SExpr(ys[i:]))
+		case x.Int%y.Int != 0:
+			return divFloat(x, SExpr(ys[i:]))
+		default:
+			// y divides x
+			x = Int(x.Int / y.Int)
+		}
+	}
+	return x
+}
+
+// divFloat performs float point division (the default).  divFloat assumes that
+// there is at least one argument.
+func divFloat(x, args *LVal) *LVal {
+	div := x.Float
+	if x.Type == LInt {
+		div = float64(x.Int)
+	}
+	for _, c := range args.Cells {
 		if c.Type == LInt {
 			div /= float64(c.Int)
 		} else {
@@ -2098,16 +2151,38 @@ func builtinMul(env *LEnv, v *LVal) *LVal {
 			return env.Errorf("argument is not a number: %v", c.Type)
 		}
 	}
-	elemt := numericListType(v.Cells)
-	if elemt == LInt {
-		prod := 1
-		for _, c := range v.Cells {
-			prod *= c.Int
-		}
-		return Int(prod)
+	return mulInt(Int(1), v)
+}
+
+// mulInt tries to perform multiplication as int if all arguments are int.
+func mulInt(x, args *LVal) *LVal {
+	if x.Type != LInt {
+		panic("non-integer first argument")
 	}
-	prod := 1.0
-	for _, c := range v.Cells {
+	ys := args.Cells
+	for i := range ys {
+		y := ys[i]
+		switch {
+		case y.Type != LInt:
+			return mulFloat(x, SExpr(ys[i:]))
+		default:
+			x = Int(x.Int * y.Int)
+		}
+	}
+	return x
+}
+
+// mulFloat performs floating point multiplication.
+func mulFloat(x, args *LVal) *LVal {
+	// NOTE:  We can't short-circuit upon seeing the value 0 because of
+	// interactions when multplying 0 by Inf.  It is possible that
+	// short-circuiting on NaN is viable, though this is probably not common
+	// and the benefits are unclear.
+	prod := x.Float
+	if x.Type == LInt {
+		prod = float64(x.Int)
+	}
+	for _, c := range args.Cells {
 		if c.Type == LInt {
 			prod *= float64(c.Int)
 		} else {

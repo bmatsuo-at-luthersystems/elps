@@ -90,7 +90,8 @@ func (typ Type) String() string {
 }
 
 type Location struct {
-	File string
+	File string // a name representing the source stream
+	Path string // a physical location which may differ from File
 	Pos  int
 	Line int // line number (starting at 1 when tracked)
 	Col  int // line column number (starting at 1 when tracked)
