@@ -506,8 +506,29 @@ func Formals(argSymbols ...string) *LVal {
 func markTailRec(npop int, fun *LVal, args *LVal) *LVal {
 	return &LVal{
 		Type:  LMarkTailRec,
-		Cells: []*LVal{Int(npop), fun, args},
+		Cells: []*LVal{Int(npop), Int(npop), fun, args},
 	}
+}
+
+func (v *LVal) tailRecEllided() int {
+	if v.Type != LMarkTailRec {
+		panic("not marker-tail-recursion")
+	}
+	return v.Cells[1].Int
+}
+
+func (v *LVal) tailRecFun() *LVal {
+	if v.Type != LMarkTailRec {
+		panic("not marker-tail-recursion")
+	}
+	return v.Cells[2]
+}
+
+func (v *LVal) tailRecArgs() *LVal {
+	if v.Type != LMarkTailRec {
+		panic("not marker-tail-recursion")
+	}
+	return v.Cells[3]
 }
 
 func markMacExpand(expr *LVal) *LVal {

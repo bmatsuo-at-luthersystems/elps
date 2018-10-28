@@ -49,6 +49,12 @@ func TestStack(t *testing.T) {
   height 0: test:1: lisp:let [terminal]
 `},
 		}},
+		{"effective stack height", elpstest.TestSequence{
+			{`(defun recursive () (+ 1 (recursive)))`, `()`, ``},
+			{`(defun tail-recursive (n) (if (> n 0) (tail-recursive (- n 1)) ()))`, `()`, ``},
+			{`(recursive)`, `test:1: recursive: effective stack height exceeded maximum: 50001`, ``},
+			{`(tail-recursive 100000)`, `test:1: tail-recursive: effective stack height exceeded maximum: 50001`, ``},
+		}},
 	}
 	elpstest.RunTestSuite(t, tests)
 }

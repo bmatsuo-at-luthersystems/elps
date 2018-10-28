@@ -12,17 +12,19 @@ import (
 
 // CallStack is a function call stack.
 type CallStack struct {
-	Frames []CallFrame
+	MaxHeightEffective int
+	Frames             []CallFrame
 }
 
 // CallFrame is one frame in the CallStack
 type CallFrame struct {
-	Source   *token.Location
-	FID      string
-	Package  string
-	Name     string
-	Terminal bool
-	TROBlock bool // Stop tail-recursion optimization from collapsing this frame
+	Source          *token.Location
+	FID             string
+	Package         string
+	Name            string
+	HeightEffective int
+	Terminal        bool
+	TROBlock        bool // Stop tail-recursion optimization from collapsing this frame
 }
 
 // QualifiedFunName returns the qualified name for the function on the top of
@@ -81,7 +83,10 @@ func (f *CallFrame) desc() string {
 func (s *CallStack) Copy() *CallStack {
 	frames := make([]CallFrame, len(s.Frames))
 	copy(frames, s.Frames)
-	return &CallStack{frames}
+	return &CallStack{
+		MaxHeightEffective: s.MaxHeightEffective,
+		Frames:             frames,
+	}
 }
 
 // Top returns the CallFrame at the top of the stack or nil if none exists.
@@ -137,13 +142,35 @@ func (s *CallStack) TerminalFID(fid string) int {
 }
 
 // PushFID pushes a new stack frame with the given FID onto s.
-func (s *CallStack) PushFID(src *token.Location, fid, pkg, name string) {
+func (s *CallStack) PushFID(src *token.Location, fid string, pkg string, name string) error {
+	heff := 0
+	if len(s.Frames) > 0 {
+		heff = s.Top().HeightEffective + 1
+	}
+	if s.MaxHeightEffective > 0 && s.MaxHeightEffective < heff {
+		return &StackOverflowError{heff}
+	}
 	s.Frames = append(s.Frames, CallFrame{
-		Source:  src,
-		FID:     fid,
-		Package: pkg,
-		Name:    name,
+		Source:          src,
+		FID:             fid,
+		Package:         pkg,
+		Name:            name,
+		HeightEffective: heff,
 	})
+	return nil
+}
+
+func (s *CallStack) CheckHeight() error {
+	if s.MaxHeightEffective <= 0 {
+		return nil
+	}
+	if len(s.Frames) == 0 {
+		return nil
+	}
+	if s.MaxHeightEffective < s.Top().HeightEffective {
+		return &StackOverflowError{s.Top().HeightEffective}
+	}
+	return nil
 }
 
 // Pop removes the top CallFrame from the stack and returns it.  If the stack
@@ -174,4 +201,12 @@ func (s *CallStack) DebugPrint(w io.Writer) (int, error) {
 		}
 	}
 	return n, nil
+}
+
+type StackOverflowError struct {
+	HeightEffective int
+}
+
+func (e *StackOverflowError) Error() string {
+	return fmt.Sprintf("effective stack height exceeded maximum: %v", e.HeightEffective)
 }

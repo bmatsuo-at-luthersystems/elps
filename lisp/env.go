@@ -32,7 +32,7 @@ func gensym() uint {
 }
 
 // InitializeUserEnv creates the default user environment.
-func InitializeUserEnv(env *LEnv) *LVal {
+func InitializeUserEnv(env *LEnv, config ...Config) *LVal {
 	env.Runtime.Registry.DefinePackage(DefaultLangPackage)
 	env.Runtime.Registry.Lang = DefaultLangPackage
 	env.Runtime.Package = env.Runtime.Registry.Packages[env.Runtime.Registry.Lang]
@@ -43,6 +43,12 @@ func InitializeUserEnv(env *LEnv) *LVal {
 	rc := env.InPackage(Symbol(DefaultUserPackage))
 	if GoError(rc) != nil {
 		return rc
+	}
+	for _, fn := range config {
+		lerr := fn(env)
+		if lerr.Type == LError {
+			return lerr
+		}
 	}
 	return env.UsePackage(Symbol(env.Runtime.Registry.Lang))
 }
@@ -676,7 +682,10 @@ func (env *LEnv) MacroCall(fun, args *LVal) *LVal {
 	}
 
 	// Push a frame onto the stack to represent the function's execution.
-	env.Runtime.Stack.PushFID(env.Loc, fun.FID(), fun.Package(), env.GetFunName(fun))
+	err := env.Runtime.Stack.PushFID(env.Loc, fun.FID(), fun.Package(), env.GetFunName(fun))
+	if err != nil {
+		return env.Error(err)
+	}
 	defer env.Runtime.Stack.Pop()
 	// Macros can't participate in tail-recursion optimization at all.  Enable
 	// the TROBlock on the stack fram so TerminalFID never seeks past the
@@ -715,7 +724,10 @@ func (env *LEnv) SpecialOpCall(fun, args *LVal) *LVal {
 	}
 
 	// Push a frame onto the stack to represent the function's execution.
-	env.Runtime.Stack.PushFID(env.Loc, fun.FID(), fun.Package(), env.GetFunName(fun))
+	err := env.Runtime.Stack.PushFID(env.Loc, fun.FID(), fun.Package(), env.GetFunName(fun))
+	if err != nil {
+		return env.Error(err)
+	}
 	defer env.Runtime.Stack.Pop()
 
 	// Special functions in general cannot be candidates for tail-recursion
@@ -739,6 +751,11 @@ callf:
 	if r.Type == LMarkTailRec {
 		// Tail recursion optimization is occurring.
 		if decrementMarkTailRec(r) {
+			env.Runtime.Stack.Top().HeightEffective += r.tailRecEllided()
+			err := env.Runtime.Stack.CheckHeight()
+			if err != nil {
+				return env.Error(err)
+			}
 			fun, args = extractMarkTailRec(r)
 			goto callf
 		}
@@ -768,7 +785,10 @@ func (env *LEnv) funCall(fun, args *LVal) *LVal {
 	npop = env.Runtime.Stack.TerminalFID(fun.FID())
 
 	// Push a frame onto the stack to represent the function's execution.
-	env.Runtime.Stack.PushFID(env.Loc, fun.FID(), fun.Package(), env.GetFunName(fun))
+	err := env.Runtime.Stack.PushFID(env.Loc, fun.FID(), fun.Package(), env.GetFunName(fun))
+	if err != nil {
+		return env.Error(err)
+	}
 	defer env.Runtime.Stack.Pop()
 
 	if npop > 0 {
@@ -789,6 +809,11 @@ callf:
 		// Tail recursion optimization is occurring.
 		done := decrementMarkTailRec(r)
 		if done {
+			env.Runtime.Stack.Top().HeightEffective += r.tailRecEllided()
+			err := env.Runtime.Stack.CheckHeight()
+			if err != nil {
+				return env.Error(err)
+			}
 			fun, args = extractMarkTailRec(r)
 			goto callf
 		}
@@ -798,7 +823,7 @@ callf:
 }
 
 func extractMarkTailRec(mark *LVal) (fun, args *LVal) {
-	return mark.Cells[1], mark.Cells[2]
+	return mark.tailRecFun(), mark.tailRecArgs()
 }
 
 // Decrement the tail recursion counter until it indicates 0 additional
@@ -807,7 +832,7 @@ func extractMarkTailRec(mark *LVal) (fun, args *LVal) {
 //
 // mark must be LMarkTailRec
 func decrementMarkTailRec(mark *LVal) (done bool) {
-	if len(mark.Cells) != 3 {
+	if len(mark.Cells) != 4 {
 		panic("invalid mark")
 	}
 	mark.Cells[0].Int--
