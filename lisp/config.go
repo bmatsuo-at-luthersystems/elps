@@ -18,9 +18,9 @@ func WithMaximumLogicalStackHeight(n int) Config {
 }
 
 // WithMaximumPhysicalStackHeight returns a Config that will prevent an
-// execution environment from allowing the logical stack height to exceed n.
-// The physical height of the literal number of frames in the call stack and
-// does not account for stack frames elided due to tail recursive call
+// execution environment from allowing the physical stack height to exceed n.
+// The physical stack height is the literal number of frames in the call stack
+// and does not account for stack frames elided due to tail recursive call
 // optimizations.
 func WithMaximumPhysicalStackHeight(n int) Config {
 	return func(env *LEnv) *LVal {
