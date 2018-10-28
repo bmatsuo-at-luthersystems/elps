@@ -51,6 +51,8 @@ func New(scanner *token.Scanner) *Parser {
 	return NewFromSource(NewTokenSource(scanner))
 }
 
+// Parse is a generic entry point that is similar to ParseExpression but is
+// capable of handling EOF before reading an expression.
 func (p *Parser) Parse() (*lisp.LVal, error) {
 	p.ignoreComments()
 	if p.src.IsEOF() {
@@ -63,6 +65,8 @@ func (p *Parser) Parse() (*lisp.LVal, error) {
 	return expr, nil
 }
 
+// ParseProgram parses a series of expressions potentially preceded by a
+// hash-bang, `#!`.
 func (p *Parser) ParseProgram() ([]*lisp.LVal, error) {
 	var exprs []*lisp.LVal
 
@@ -82,6 +86,9 @@ func (p *Parser) ParseProgram() ([]*lisp.LVal, error) {
 	return exprs, nil
 }
 
+// ParseExpression parses a single expression.  Unlike Parse, ParseExpression
+// requires an expression to be present in the input stream and will report
+// unexpected EOF tokens encountered.
 func (p *Parser) ParseExpression() *lisp.LVal {
 	fn := p.parseExpression()
 
