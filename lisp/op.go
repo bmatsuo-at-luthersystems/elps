@@ -17,6 +17,7 @@ var langSpecialOps = []*langBuiltin{
 	{"thread-first", Formals("value", VarArgSymbol, "exprs"), opThreadFirst},
 	{"thread-last", Formals("value", VarArgSymbol, "exprs"), opThreadLast},
 	{"labels", Formals("bindings", VarArgSymbol, "expr"), opLabels},
+	{"macrolet", Formals("bindings", VarArgSymbol, "expr"), opMacrolet},
 	{"flet", Formals("bindings", VarArgSymbol, "expr"), opFlet},
 	{"let*", Formals("bindings", VarArgSymbol, "expr"), opLetSeq},
 	{"let", Formals("bindings", VarArgSymbol, "expr"), opLet},
@@ -359,6 +360,43 @@ func opLabels(env *LEnv, args *LVal) *LVal {
 		}
 		// Bind name for the function body and to allow cross-references
 		// between label lambdas.
+		fletenv.Put(name, lval)
+	}
+	return opProgn(fletenv, args)
+}
+
+// macrolet functions similar to flet -- there are no cross-refrences between
+// the set of macros defined in the local macrolet.
+//
+// NOTE:  macrolet functions will not be portable to other lisp implementations
+// if they attempt to reference lexically bound symbols outside of the macro
+// expansion.  That is, while the _expanded_ macro may reference local
+// variables and functions, _during_ its exansion the macro may only make use
+// of other macros and global symbols.
+func opMacrolet(env *LEnv, args *LVal) *LVal {
+	fletenv := NewEnv(env)
+	bindlist := args.Cells[0]
+	args.Cells = args.Cells[1:] // decap so we can call builtinProgn on args.
+	if bindlist.Type != LSExpr {
+		return env.Errorf("first argument is not a list: %s", bindlist.Type)
+	}
+	for _, bind := range bindlist.Cells {
+		if bind.Type != LSExpr {
+			return env.Errorf("first argument is not a list of function definitions")
+		}
+		if len(bind.Cells) < 2 {
+			return env.Errorf("first argument is not a list of function definitions")
+		}
+		fenv := NewEnv(env) // lambdas in a flet can't call each other -- recursion OK
+		name, formals, body := bind.Cells[0], bind.Cells[1], bind.Cells[2:]
+		lval := fenv.Lambda(formals, body)
+		if lval.Type == LError {
+			lval.SetCallStack(env.Runtime.Stack.Copy())
+			return lval
+		}
+		lval.FunType = LFunMacro // evaluate as a macro
+		// bind name in fenv to allow recursion and fletenv for the flet body.
+		fenv.Put(name, lval)
 		fletenv.Put(name, lval)
 	}
 	return opProgn(fletenv, args)

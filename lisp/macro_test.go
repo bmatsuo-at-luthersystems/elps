@@ -82,6 +82,19 @@ func TestMacros(t *testing.T) {
 			{"(test-fun 1 2)", "3", "1\n2\n"},
 			{"test-fun", "(lambda (x y) (debug-print x) (debug-print y) (+ x y))", ""},
 		}},
+		{"macrolet", elpstest.TestSequence{
+			{`(defun f (x y)
+				(macrolet ([test-x (z) (quasiquote (if (< x 10) y (unquote z)))])
+					(+ y (test-x (* y y)))))
+			`, `()`, ``},
+			{`(f 1 3)`, `6`, ``},
+			{`(f 11 3)`, `12`, ``},
+			{`(test-x 11 3)`, `test:1: unbound symbol: test-x`, ``},
+			{`(macrolet (
+				[m1 (y) (quasiquote (+ 1 (unquote y)))]
+				[m2 (y) (quasiquote (* (unquote (m1 y)) 2))])
+				(m2 3))`, `test:3: lisp:quasiquote: unbound symbol: m1`, ``},
+		}},
 	}
 	elpstest.RunTestSuite(t, tests)
 }
