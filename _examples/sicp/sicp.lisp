@@ -38,6 +38,7 @@
     ((divides? n test-divisor) test-divisor)
     (:else (find-divisor n (+ 1 test-divisor)))))
 
+(export 'prime?)
 (defun prime? (n)
   (= n (smallest-divisor n)))
 

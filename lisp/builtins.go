@@ -280,7 +280,10 @@ func builtinSet(env *LEnv, v *LVal) *LVal {
 		return env.Errorf("first argument is not a symbol: %v", v.Cells[0].Type)
 	}
 
-	env.PutGlobal(v.Cells[0], v.Cells[1])
+	lerr := env.PutGlobal(v.Cells[0], v.Cells[1])
+	if lerr.Type == LError {
+		return lerr
+	}
 	return env.GetGlobal(v.Cells[0])
 }
 

@@ -9,6 +9,8 @@ import (
 
 var userSpecialOps []*langBuiltin
 var langSpecialOps = []*langBuiltin{
+	{"define", Formals("name", VarArgSymbol, "value"), opDefine},
+	{"set!", Formals("name", "expr"), opSetUpdate},
 	{"assert", Formals("expr", VarArgSymbol, "message-format-args"), opAssert},
 	{"quote", Formals("expr"), opQuote},
 	{"quasiquote", Formals("expr"), opQuasiquote},
@@ -48,6 +50,65 @@ func DefaultSpecialOps() []LBuiltinDef {
 		ops[offset+i] = langSpecialOps[i]
 	}
 	return ops
+}
+
+func opDefine(env *LEnv, args *LVal) *LVal {
+	form, body := args.Cells[0], args.Cells[1:]
+	put := env.Put
+	if env.Parent == nil {
+		// BUG:  Before this function existed it was impossible to bind symbols
+		// in the top-level LEnv using language builtins.  The `set`, `defun`,
+		// and `defmacro` builtins work on the package namespace so it is only
+		// reasonable for `define` to do the same if called from the global
+		// environment.  The implementation of `set!` and `define` has
+		// illustrated that "packages" are probably supposed to be/contain
+		// isolated top-level LEnv objects.  Then the distinction being made
+		// here should not be necessary.
+		put = func(k, v *LVal) *LVal {
+			lerr := env.Runtime.Package.Put(k, v)
+			if lerr.Type == LError {
+				env.ErrorAssociate(lerr)
+			}
+			return lerr
+		}
+	}
+	switch form.Type {
+	case LSymbol:
+		if len(body) != 1 {
+			return env.Errorf("symbol definition not given a single value")
+		}
+		expr := body[0]
+		val := env.Eval(expr)
+		if val.Type == LError {
+			return val
+		}
+		return put(form, val)
+	case LSExpr:
+		if form.IsNil() {
+			return env.Errorf("invalid definition form: %v", form)
+		}
+		name := form.Cells[0]
+		formals := form.Cells[1:]
+		fun := env.Lambda(SExpr(formals), body)
+		if fun.Type == LError {
+			return fun
+		}
+		return put(name, fun)
+	default:
+		return env.Errorf("invalid definition form: %v", form.Type)
+	}
+}
+
+func opSetUpdate(env *LEnv, args *LVal) *LVal {
+	key, expr := args.Cells[0], args.Cells[1]
+	if key.Type != LSymbol {
+		return env.Errorf("first argument is not a symbol: %v", key.Type)
+	}
+	val := env.Eval(expr)
+	if val.Type == LError {
+		return val
+	}
+	return env.Update(key, val)
 }
 
 func opAssert(env *LEnv, args *LVal) *LVal {
@@ -321,12 +382,17 @@ func opFlet(env *LEnv, args *LVal) *LVal {
 		name, formals, body := bind.Cells[0], bind.Cells[1], bind.Cells[2:]
 		lval := fenv.Lambda(formals, body)
 		if lval.Type == LError {
-			lval.SetCallStack(env.Runtime.Stack.Copy())
 			return lval
 		}
 		// bind name in fenv to allow recursion and fletenv for the flet body.
-		fenv.Put(name, lval)
-		fletenv.Put(name, lval)
+		lerr := fenv.Put(name, lval)
+		if lerr.Type == LError {
+			return lerr
+		}
+		lerr = fletenv.Put(name, lval)
+		if lerr.Type == LError {
+			return lerr
+		}
 	}
 	return opProgn(fletenv, args)
 }
@@ -355,12 +421,14 @@ func opLabels(env *LEnv, args *LVal) *LVal {
 		// The lambda's lexical scope includes all lambdas that labels defines.
 		lval := fletenv.Lambda(formals, body)
 		if lval.Type == LError {
-			lval.SetCallStack(env.Runtime.Stack.Copy())
 			return lval
 		}
 		// Bind name for the function body and to allow cross-references
 		// between label lambdas.
-		fletenv.Put(name, lval)
+		lerr := fletenv.Put(name, lval)
+		if lerr.Type == LError {
+			return lerr
+		}
 	}
 	return opProgn(fletenv, args)
 }
@@ -391,13 +459,18 @@ func opMacrolet(env *LEnv, args *LVal) *LVal {
 		name, formals, body := bind.Cells[0], bind.Cells[1], bind.Cells[2:]
 		lval := fenv.Lambda(formals, body)
 		if lval.Type == LError {
-			lval.SetCallStack(env.Runtime.Stack.Copy())
 			return lval
 		}
 		lval.FunType = LFunMacro // evaluate as a macro
 		// bind name in fenv to allow recursion and fletenv for the flet body.
-		fenv.Put(name, lval)
-		fletenv.Put(name, lval)
+		lerr := fenv.Put(name, lval)
+		if lerr.Type == LError {
+			return lerr
+		}
+		lerr = fletenv.Put(name, lval)
+		if lerr.Type == LError {
+			return lerr
+		}
 	}
 	return opProgn(fletenv, args)
 }
@@ -423,7 +496,10 @@ func opLet(env *LEnv, args *LVal) *LVal {
 		}
 	}
 	for i, bind := range bindlist.Cells {
-		letenv.Put(bind.Cells[0], vals[i])
+		lerr := letenv.Put(bind.Cells[0], vals[i])
+		if lerr.Type == LError {
+			return lerr
+		}
 	}
 	return opProgn(letenv, args)
 }
@@ -446,7 +522,10 @@ func opLetSeq(env *LEnv, args *LVal) *LVal {
 		if val.Type == LError {
 			return val
 		}
-		letenv.Put(bind.Cells[0], val)
+		lerr := letenv.Put(bind.Cells[0], val)
+		if lerr.Type == LError {
+			return lerr
+		}
 	}
 	return opProgn(letenv, args)
 }

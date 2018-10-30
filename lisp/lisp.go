@@ -553,7 +553,7 @@ func (v *LVal) SetCallStack(stack *CallStack) {
 	if v.Type != LError {
 		panic("not an error: " + v.Type.String())
 	}
-	v.Native = stack
+	v.Native = stack.Copy()
 }
 
 func (v *LVal) FunData() *LFunData {

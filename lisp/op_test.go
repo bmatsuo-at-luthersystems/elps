@@ -36,6 +36,32 @@ func TestSpecialOp(t *testing.T) {
 						[y (+ (progn (debug-stack) x) 1)])
 					(+ x y)))`, "2", debugstack},
 		}},
+		{"define", elpstest.TestSequence{
+			{`(define x 1)`, `()`, ``},
+			{`x`, `1`, ``},
+			{`(define x 2)`, `()`, ``},
+			{`x`, `2`, ``},
+			{`(define (f x) (+ x x))`, `()`, ``},
+			{`(f 1)`, `2`, ``},
+			{`(define (f)
+				(define x 5)
+				(debug-print x))`, `()`, ``},
+			{`(f)`, `()`, "5\n"},
+			{`x`, `2`, ``},
+			{`(define (f &rest xs) (apply 'list 1 xs))`, `()`, ``},
+			{`(f 2 3 4)`, `'(1 2 3 4)`, ``},
+			{`(define false 0)`, `test:1: lisp:define: cannot rebind constant: false`, ``},
+			{`(define () (debug-print 2))`, `test:1: lisp:define: invalid definition form: ()`, ``},
+		}},
+		{"set!", elpstest.TestSequence{
+			{`(set 'x 1)`, `1`, ``},
+			{`(set! x 2)`, `()`, ``},
+			{`x`, `2`, ``},
+			{`(let ([x 'a]) (set! x 'b) x)`, `'b`, ``},
+			{`x`, `2`, ``},
+			{`(set! false x)`, `test:1: lisp:set!: cannot rebind constant: false`, ``},
+			{`(set! foo 3)`, `test:1: lisp:set!: symbol not bound: foo`, ``},
+		}},
 		{"let*", elpstest.TestSequence{
 			{`(let* ())`, "()", ""},
 			{`(let* ((x 1)) x)`, "1", ""},

@@ -407,17 +407,34 @@ function, which changes the environment's working package.  Symbols bound using
 (in-package 'my-new-package)
 (export 'my-special-function)
 (defun my-special-function () (debug-print "something special"))
-(defun my-other-function () (debug-print "something else"))
+(set 'thing "something else")
+(defun my-other-function () (debug-print thing))
 ```
 
 Outside of the `my-new-package` package, the symbol `my-special-function` may
-be bound to other values.  Value defined inside `my-new-package` may be
-accessed by qualifying the symbol using the package name.
+be bound to other values.  Symbols defined inside `my-new-package` may be
+explicitly accessed by qualifying the symbol using the package name.
 
 ```lisp
 (my-new-package:my-special-function)  ; prints "something special"
 (my-new-package:my-other-function)    ; prints "something else"
 ```
+
+Scheme-like symbol bindings and assignment are also possible using the `define`
+and `set!` operators.
+
+```lisp
+(define counter 0)  ; bind symbol 'counter to 0 initially
+(define (count)
+    (define old counter)
+    (set! counter (+ counter 1))  ; increment the counter
+    old)
+(count)  ; evaluates to 0
+(count)  ; evaluates to 1
+```
+
+NOTE:  While scheme-style function definitions are allowed using `define` the
+argument declaration syntax is the same for all function definitions.
 
 ### Importing symbols
 

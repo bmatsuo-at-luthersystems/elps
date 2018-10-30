@@ -110,19 +110,35 @@ func (pkg *Package) GetFunName(fid string) string {
 }
 
 // Put takes an LSymbol k and binds it to v in pkg.
-func (pkg *Package) Put(k, v *LVal) {
+func (pkg *Package) Put(k, v *LVal) *LVal {
 	if k.Type != LSymbol && k.Type != LQSymbol {
-		return
+		return Errorf("key is not a symbol: %v", k.Type)
 	}
-	if k.Str == TrueSymbol {
-		panic("constant value")
+	if k.Str == TrueSymbol || k.Str == FalseSymbol {
+		return Errorf("cannot rebind constant: %v", k.Str)
 	}
-	if k.Str == FalseSymbol {
-		panic("constant value")
+	pkg.put(k, v)
+	return Nil()
+}
+
+// Update takes an LSymbol k and updates the binding of k in pkg so that k is
+// bound v.  If k is not bound in package an error is returned.
+func (pkg *Package) Update(k, v *LVal) *LVal {
+	if k.Type != LSymbol && k.Type != LQSymbol {
+		return Errorf("key is not a symbol: %v", k.Type)
 	}
-	if v == nil {
-		panic("nil value")
+	if k.Str == TrueSymbol || k.Str == FalseSymbol {
+		return Errorf("cannot rebind constant: %v", k.Str)
 	}
+	_, ok := pkg.Symbols[k.Str]
+	if !ok {
+		return Errorf("symbol not bound: %v", k)
+	}
+	pkg.put(k, v)
+	return Nil()
+}
+
+func (pkg *Package) put(k, v *LVal) {
 	if v.Type == LFun {
 		pkg.FunNames[v.FID()] = k.Str
 	}
