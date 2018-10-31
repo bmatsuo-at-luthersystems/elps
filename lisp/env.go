@@ -163,7 +163,7 @@ func (env *LEnv) LoadFile(loc string) *LVal {
 		return env.Errorf("no source library in environment runtime")
 	}
 	ctx := env.Runtime.sourceContext()
-	name, src, err := env.Runtime.Library.LoadSource(ctx, loc)
+	name, loc, src, err := env.Runtime.Library.LoadSource(ctx, loc)
 	if err != nil {
 		return env.Errorf("library error: %v", err)
 	}

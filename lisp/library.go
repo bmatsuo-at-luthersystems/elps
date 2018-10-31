@@ -54,7 +54,18 @@ func (c *sourceContext) Location() string {
 // the LocationReader implementation should not need to depend on the
 // LocationReader implementation beyond that.
 type SourceLibrary interface {
-	LoadSource(ctx SourceContext, loc string) (name string, data []byte, err error)
+	// LoadSource returns the data contained in the source file specified by a
+	// location string obtained through a user call.  For example, the call
+	// `(load-file "foo.txt")` would pass loc "foo.txt" to LoadSource).
+	// LoadSource also receives a SourceContext object which may be used to
+	// determine the physical path to the target location (e.g. what file is
+	// loading "foo.txt"?).
+	//
+	// LoadSource returns four values: a name and true-location unambiguously
+	// identifying the file, the file data, and any error that occurred while
+	// retrieving data.  An interpreter must use trueloc as an identifier for
+	// the requested source file anywhere the SourceContext ctx is unavailable.
+	LoadSource(ctx SourceContext, loc string) (name, trueloc string, data []byte, err error)
 }
 
 // RelativeFileSystemLibrary implements SourceLibrary and reads lisp source
@@ -69,11 +80,11 @@ type RelativeFileSystemLibrary struct {
 var _ SourceLibrary = (*RelativeFileSystemLibrary)(nil)
 
 // LoadSource attempts to open loc as a filepath.
-func (lib *RelativeFileSystemLibrary) LoadSource(ctx SourceContext, loc string) (string, []byte, error) {
+func (lib *RelativeFileSystemLibrary) LoadSource(ctx SourceContext, loc string) (string, string, []byte, error) {
 	if !filepath.IsAbs(loc) && ctx.Location() != "" {
 		loc = filepath.Join(filepath.Dir(ctx.Location()), loc)
 	}
 	name := filepath.Base(loc)
 	data, err := ioutil.ReadFile(loc)
-	return name, data, err
+	return name, loc, data, err
 }
