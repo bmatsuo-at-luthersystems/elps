@@ -384,12 +384,33 @@ the value originally.
     (get m "carol"))    ; evaluates to 2
 ```
 
-Maps are mutable values and can be updated with the `assoc!` function.
+Maps are mutable values and can be updated with the `assoc!` function to
+add/update a key-value pair to the map.
 
 ```lisp
 (let ((m (sorted-map 'alice 0 'bob 1)))
     (assoc! m 'carol 2)
     (get m 'carol))     ; evaluates to 2
+```
+
+Analogously, the `dissoc!` function can be used to remove a key (and its
+associated value) from the map.
+
+```lisp
+(let ((m (sorted-map 'alice 0 'bob 1)))
+    (dissoc! m 'alice)
+    (dissoc! m 'gary)   ; no-op
+    m)      ; evaluates to (sorted-map 'bob 1)
+```
+
+There are also non-mutating versions of these functions, `assoc` and `dissoc`,
+which merely return new sorted-map objects without modifying their arguments.
+
+```lisp
+(let* ((m0 (sorted-map 'alice 0 'bob 1))
+       (m1 (dissoc m0 'alice))      ; does not change m0
+       (m2 (assoc m1 'carol 2)))    ; does not change m1
+    m2)      ; evaluates to (sorted-map 'bob 1 'carol 2)
 ```
 
 ##Packages
