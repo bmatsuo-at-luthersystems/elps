@@ -5,24 +5,24 @@
 (use-package 'sicp/stream)
 
 
-(define (sqrt-improve guess x)
+(defun sqrt-improve (guess x)
   ; average guess and x/guess
   (/ (+ guess (/ x guess)) 2))
 
-(define (sqrt-stream x)
-  (define guesses (stream-cons 1.0
+(defun sqrt-stream (x)
+  (let ([guesses (stream-cons 1.0
                                (stream-map #^(sqrt-improve % x)
-                                           guesses)))
-  guesses)
+                                           guesses))])
+    guesses))
 
 (debug-print '(sqrt-stream 2))
 (stream-debug (stream-take (sqrt-stream 2) 7))
 
-(define (pi-summands n)
+(defun pi-summands (n)
   (stream-cons (/ 1.0 n)
                (stream-map '- (pi-summands (+ n 2)))))
 
-(define (partial-sums s)
+(defun partial-sums (s)
   (if (stream-null? s)
     the-empty-stream
     (stream-cons (stream-car s)
@@ -30,13 +30,13 @@
                              (partial-sums (stream-cdr s))
                              (stream-repeat (stream-car s))))))
 
-(define pi-stream (stream-map #^(* 4 %) (partial-sums (pi-summands 1))))
+(set 'pi-stream (stream-map #^(* 4 %) (partial-sums (pi-summands 1))))
 
 (debug-print 'pi-stream)
 (stream-debug (stream-take pi-stream 7))
 
-(define (square x) (* x x))
-(define (euler-transform s)
+(defun square (x) (* x x))
+(defun euler-transform (s)
   (let ([s0 (stream-ref s 0)]
         [s1 (stream-ref s 1)]
         [s2 (stream-ref s 2)])
@@ -47,10 +47,10 @@
 (debug-print '(euler-transform pi-stream))
 (stream-debug (stream-take (euler-transform pi-stream) 7))
 
-(define (make-tableau transform s)
+(defun make-tableau (transform s)
   (stream-cons s (make-tableau transform (funcall transform s))))
 
-(define (accelerated-sequence transform s)
+(defun accelerated-sequence (transform s)
   (stream-map 'stream-car (make-tableau transform s)))
 
 (debug-print '(accelerated-sequence 'euler-transform pi-stream))
