@@ -627,12 +627,12 @@ func (env *LEnv) ErrorAssociate(lerr *LVal) {
 	}
 	if lerr.CallStack() == nil {
 		lerr.SetCallStack(env.Runtime.Stack.Copy())
-		// This check smells a little funny.  All objects are given a source
-		// which may be a nativeSource() value which does not correspond to a
-		// file an has an invalid position (-1).  When associating an error the
-		// env's current location is probably more accurate than native source
-		// (or it may also be native source).
 	}
+	// This check smells a little funny.  All objects are given a source
+	// which may be a nativeSource() value which does not correspond to a
+	// file and has an invalid position (-1).  When associating an error
+	// the env's current location is probably more accurate than native
+	// source (or it may also be native source).
 	if lerr.Source == nil || lerr.Source.Pos < 0 {
 		lerr.Source = env.Loc
 	}
