@@ -522,6 +522,21 @@ func opLetSeq(env *LEnv, args *LVal) *LVal {
 		if val.Type == LError {
 			return val
 		}
+		if val.Type == LFun {
+			// A function defined in a let* cannot reference itself
+			// (recursively) or any bindings defined following its entry in
+			// bindlist.  So we have to create a new environment to hold the
+			// actual function binding for this cell along with any following
+			// bindings (provided they don't also bind functions and cause
+			// further fracturing of the lexical scope)
+			//
+			// NOTE:  The function val may not have been created during the
+			// evaluation of bind.Cells[1], but it isn't clear how to detect a
+			// newly created lambda vs one that was merely the result of, say,
+			// symbol resolution inside the bind.Cells[1] expression.  So, we
+			// assume for now that this is a newly created function.
+			letenv = NewEnv(letenv)
+		}
 		lerr := letenv.Put(bind.Cells[0], val)
 		if lerr.Type == LError {
 			return lerr

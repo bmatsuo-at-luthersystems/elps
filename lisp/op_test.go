@@ -68,6 +68,10 @@ func TestSpecialOp(t *testing.T) {
 			{`(let* ([x 1]) x)`, "1", ""},
 			{`(let* ([x 1] [y 2]) (+ x y))`, "3", ""},
 			{`(let* ([x 0]) (let* ([x 1] [y (+ x 1)]) (+ x y)))`, "3", ""},
+			{`(let ((bar 0)) (let* ((foo (lambda () bar)) (bar 1)) (foo)))`, `0`, ``},
+			{`(let* ((f (lambda (x)
+						(if (= 0 x) 0 (f (- x 1))))))
+				(f 10))`, `test:2: lisp:if: unbound symbol: f`, ``},
 		}},
 		{"flet", elpstest.TestSequence{
 			{`(flet [])`, "()", ""},
