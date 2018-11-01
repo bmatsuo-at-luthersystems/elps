@@ -14,7 +14,7 @@
 (defun dispatch-put (op-symbol operand-types operator)
   (let ([op-table (or (get dispatch-table op-symbol) (sorted-map))])
     (assoc! dispatch-table op-symbol op-table)
-    (flet ([dig (table operand-types value)
+    (labels ([dig (table operand-types value)
               (cond
                 ((nil? operand-types)
                   (error 'nil-type-parameters "type parameters are nil"))
@@ -33,7 +33,7 @@
 ; among implementations for an op.
 (defun dispatch-get (op-symbol operand-types)
   (let ([op-table (get dispatch-table op-symbol)])
-    (flet ([dig (table operand-types)
+    (labels ([dig (table operand-types)
               (cond
                 ((nil? operand-types)
                   table)

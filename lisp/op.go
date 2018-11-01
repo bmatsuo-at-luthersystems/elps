@@ -378,18 +378,13 @@ func opFlet(env *LEnv, args *LVal) *LVal {
 		if len(bind.Cells) < 2 {
 			return env.Errorf("first argument is not a list of function definitions")
 		}
-		fenv := NewEnv(env) // lambdas in a flet can't call each other -- recursion OK
+		fenv := NewEnv(env) // lambdas in a flet get their own little environment
 		name, formals, body := bind.Cells[0], bind.Cells[1], bind.Cells[2:]
 		lval := fenv.Lambda(formals, body)
 		if lval.Type == LError {
 			return lval
 		}
-		// bind name in fenv to allow recursion and fletenv for the flet body.
-		lerr := fenv.Put(name, lval)
-		if lerr.Type == LError {
-			return lerr
-		}
-		lerr = fletenv.Put(name, lval)
+		lerr := fletenv.Put(name, lval)
 		if lerr.Type == LError {
 			return lerr
 		}
@@ -455,19 +450,14 @@ func opMacrolet(env *LEnv, args *LVal) *LVal {
 		if len(bind.Cells) < 2 {
 			return env.Errorf("first argument is not a list of function definitions")
 		}
-		fenv := NewEnv(env) // lambdas in a flet can't call each other -- recursion OK
+		fenv := NewEnv(env) // lambdas in a macrolet get their own little environment
 		name, formals, body := bind.Cells[0], bind.Cells[1], bind.Cells[2:]
 		lval := fenv.Lambda(formals, body)
 		if lval.Type == LError {
 			return lval
 		}
 		lval.FunType = LFunMacro // evaluate as a macro
-		// bind name in fenv to allow recursion and fletenv for the flet body.
-		lerr := fenv.Put(name, lval)
-		if lerr.Type == LError {
-			return lerr
-		}
-		lerr = fletenv.Put(name, lval)
+		lerr := fletenv.Put(name, lval)
 		if lerr.Type == LError {
 			return lerr
 		}
