@@ -290,8 +290,7 @@ func (env *LEnv) GetFun(fun *LVal) *LVal {
 }
 
 func (env *LEnv) get(k *LVal) *LVal {
-	// LQSymbols are allowed...
-	if k.Type != LSymbol && k.Type != LQSymbol {
+	if k.Type != LSymbol {
 		return Nil()
 	}
 	if k.Str == TrueSymbol {
@@ -367,7 +366,7 @@ func (env *LEnv) GetFunName(f *LVal) string {
 // Put takes an LSymbol k and binds it to v in env.  If k is already bound to a
 // value the binding is updated so that k is bound to v.
 func (env *LEnv) Put(k, v *LVal) *LVal {
-	if k.Type != LSymbol && k.Type != LQSymbol {
+	if k.Type != LSymbol {
 		return env.Errorf("key is not a symbol: %v", k.Type)
 	}
 	if k.Str == TrueSymbol || k.Str == FalseSymbol {
@@ -384,7 +383,7 @@ func (env *LEnv) Put(k, v *LVal) *LVal {
 // update either lexical or global bindings.  If k is not bound by env, an
 // enclosing LEnv, or the current package an error condition is signaled.
 func (env *LEnv) Update(k, v *LVal) *LVal {
-	if k.Type != LSymbol && k.Type != LQSymbol {
+	if k.Type != LSymbol {
 		return env.Errorf("key is not a symbol: %v", k.Type)
 	}
 	if k.Str == TrueSymbol || k.Str == FalseSymbol {
