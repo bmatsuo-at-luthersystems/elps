@@ -391,7 +391,7 @@ func builtinApply(env *LEnv, args *LVal) *LVal {
 	if fun.Type == LError {
 		return fun
 	}
-	if argtail.Type != LSExpr {
+	if argtail.Type != LSExpr && argtail.Type != LNil && argtail.Type != LCons {
 		return env.Errorf("last argument is not a list: %v", argtail.Type)
 	}
 	if fun.Type != LFun {
@@ -406,9 +406,12 @@ func builtinApply(env *LEnv, args *LVal) *LVal {
 	// need to set the flag explicitly before env.funCall is invoked
 	env.Runtime.Stack.Top().Terminal = true
 
-	argcells := make([]*LVal, 0, len(fargs)+argtail.Len())
+	argcells := make([]*LVal, 0, len(fargs))
 	argcells = append(argcells, fargs...)
-	argcells = append(argcells, argtail.Cells...)
+	iter := seqIter(argtail)
+	for v, ok := iter(); ok; v, ok = iter() {
+		argcells = append(argcells, v)
+	}
 	return env.funCall(fun, SExpr(argcells))
 }
 
@@ -511,26 +514,37 @@ func builtinError(env *LEnv, args *LVal) *LVal {
 
 func builtinCAR(env *LEnv, args *LVal) *LVal {
 	v := args.Cells[0]
-	if v.Type != LSExpr {
+	switch v.Type {
+	case LSExpr:
+		if len(v.Cells) == 0 {
+			return Nil()
+		}
+		return v.Cells[0]
+	case LCons:
+		return v.Cells[0]
+	case LNil:
+		return Nil()
+	default:
 		return env.Errorf("argument is not a list %v", v.Type)
 	}
-	if len(v.Cells) == 0 {
-		return Nil()
-	}
-
-	return v.Cells[0]
 }
 
 func builtinCDR(env *LEnv, args *LVal) *LVal {
 	v := args.Cells[0]
-	if v.Type != LSExpr {
+	switch v.Type {
+	case LSExpr:
+		if len(v.Cells) < 2 {
+			return Nil()
+		}
+		// TODO:  Copy cells into a new list of cells?
+		return QExpr(v.Cells[1:])
+	case LCons:
+		return v.Cells[1]
+	case LNil:
+		return Nil()
+	default:
 		return env.Errorf("argument is not a list %v", v.Type)
 	}
-	if len(v.Cells) < 2 {
-		return Nil()
-	}
-	// TODO:  Copy cells into a new list of cells?
-	return QExpr(v.Cells[1:])
 }
 
 func builtinRest(env *LEnv, args *LVal) *LVal {
@@ -538,12 +552,24 @@ func builtinRest(env *LEnv, args *LVal) *LVal {
 	if !isSeq(v) {
 		return env.Errorf("argument is not a proper sequence %v", v.Type)
 	}
-	cells := seqCells(v)
-	if len(cells) < 2 {
-		return Nil()
+	switch v.Type {
+	case LNil:
+		return v
+	case LCons:
+		// may not return an list
+		return v.Cells[0]
+	default:
+		var cells []*LVal
+		iter := seqIter(v)
+		iter()
+		for v, ok := iter(); ok; v, ok = iter() {
+			cells = append(cells, v)
+		}
+		if len(cells) == 0 {
+			return Nil()
+		}
+		return QExpr(cells)
 	}
-	// TODO:  Copy cells into a new list of cells?
-	return QExpr(cells[1:])
 }
 
 func builtinFirst(env *LEnv, args *LVal) *LVal {
@@ -551,11 +577,12 @@ func builtinFirst(env *LEnv, args *LVal) *LVal {
 	if !isSeq(list) {
 		return env.Errorf("argument is not a proper sequence: %v", list.Type)
 	}
-	cells := seqCells(list)
-	if len(cells) == 0 {
+	iter := seqIter(list)
+	v, ok := iter()
+	if !ok {
 		return Nil()
 	}
-	return cells[0]
+	return v
 }
 
 func builtinSecond(env *LEnv, args *LVal) *LVal {
@@ -563,11 +590,13 @@ func builtinSecond(env *LEnv, args *LVal) *LVal {
 	if !isSeq(list) {
 		return env.Errorf("argument is not a proper sequence: %v", list.Type)
 	}
-	cells := seqCells(list)
-	if len(cells) < 2 {
+	iter := seqIter(list)
+	iter()
+	v, ok := iter()
+	if !ok {
 		return Nil()
 	}
-	return cells[1]
+	return v
 }
 
 func builtinNth(env *LEnv, args *LVal) *LVal {
@@ -581,11 +610,16 @@ func builtinNth(env *LEnv, args *LVal) *LVal {
 	if n.Int < 0 {
 		return env.Errorf("index cannot be negative: %d", n.Int)
 	}
-	cells := seqCells(list)
-	if len(cells) <= n.Int {
-		return Nil()
+	iter := seqIter(list)
+	v := Nil()
+	var ok bool
+	for i := 0; i <= n.Int; i++ {
+		v, ok = iter()
+		if !ok {
+			return Nil()
+		}
 	}
-	return cells[n.Int]
+	return v
 }
 
 func builtinMap(env *LEnv, args *LVal) *LVal {
@@ -613,27 +647,28 @@ func builtinMap(env *LEnv, args *LVal) *LVal {
 	var cells []*LVal
 	if nilReturn {
 		v = Nil()
-	} else {
-		switch typespec.Str {
-		case "vector":
-			v = Array(QExpr([]*LVal{Int(lis.Len())}), nil)
-			cells = seqCells(v)
-		case "list":
-			cells = make([]*LVal, lis.Len())
-			v = QExpr(cells)
-		default:
-			return env.Errorf("type specifier is invalid: %v", typespec)
-		}
 	}
-	for i, c := range seqCells(lis) {
+	iter := seqIter(lis)
+	for c, ok := iter(); ok; c, ok = iter() {
 		fargs := QExpr([]*LVal{c})
 		fret := env.FunCall(f, fargs)
 		if fret.Type == LError {
 			return fret
 		}
 		if !nilReturn {
-			cells[i] = fret
+			cells = append(cells, fret)
 		}
+	}
+	if nilReturn {
+		return Nil()
+	}
+	switch typespec.Str {
+	case "vector":
+		v = Array(nil, cells)
+	case "list":
+		v = QExpr(cells)
+	default:
+		return env.Errorf("type specifier is invalid: %v", typespec)
 	}
 	return v
 }
@@ -655,7 +690,8 @@ func builtinFoldLeft(env *LEnv, args *LVal) *LVal {
 	if !isSeq(lis) {
 		return env.Errorf("third argument is not a proper sequence: %s", lis.Type)
 	}
-	for _, c := range seqCells(lis) {
+	iter := seqIter(lis)
+	for c, ok := iter(); ok; c, ok = iter() {
 		fargs := QExpr([]*LVal{
 			// args reversed from foldr function invocation
 			acc,
@@ -686,6 +722,23 @@ func builtinFoldRight(env *LEnv, args *LVal) *LVal {
 	lis := args.Cells[2]
 	if !isSeq(lis) {
 		return env.Errorf("third argument is not a proper sequence: %s", lis.Type)
+	}
+	switch lis.Type {
+	case LNil:
+		return acc
+	case LCons:
+		car := lis.Cells[0]
+		cdr := lis.Cells[1]
+		fargs := QExpr([]*LVal{
+			car,
+			SExpr([]*LVal{
+				Symbol("foldr"), // TODO: ensure the function here can resolve
+				f,
+				acc,
+				cdr,
+			}),
+		})
+		return env.FunCall(f, fargs)
 	}
 	cells := seqCells(lis)
 	for i := len(cells) - 1; i >= 0; i-- {
@@ -984,9 +1037,9 @@ func appendBytes(env *LEnv, seq *LVal, fn func(x byte)) error {
 	if !isSeq(seq) {
 		return fmt.Errorf("argument is not a sequence of bytes: %v", seq.Type)
 	}
-	cells := seqCells(seq)
+	iter := seqIter(seq)
 	// Check all cells before appending any bytes.
-	for _, v := range cells {
+	for v, ok := iter(); ok; v, ok = iter() {
 		if v.Type != LInt {
 			return fmt.Errorf("value not a byte: %v", v.Type)
 		}
@@ -994,7 +1047,8 @@ func appendBytes(env *LEnv, seq *LVal, fn func(x byte)) error {
 			return fmt.Errorf("value overflows byte: %v", v)
 		}
 	}
-	for _, v := range cells {
+	iter = seqIter(seq)
+	for v, ok := iter(); ok; v, ok = iter() {
 		fn(byte(v.Int))
 	}
 	return nil
@@ -1002,38 +1056,26 @@ func appendBytes(env *LEnv, seq *LVal, fn func(x byte)) error {
 
 func builtinConcatSeq(env *LEnv, args *LVal) *LVal {
 	typespec, rest := args.Cells[0], args.Cells[1:]
-	size := 0
 	for _, v := range rest {
 		if !isSeq(v) {
 			return env.Errorf("argument is not a proper sequence: %v", v.Type)
 		}
-		size += v.Len()
 	}
-	if size == 0 {
-		switch typespec.Str {
-		case "vector":
-			return Array(QExpr([]*LVal{Int(0)}), nil)
-		case "list":
-			return Nil()
+	var cells []*LVal
+	for _, seq := range rest {
+		iter := seqIter(seq)
+		for v, ok := iter(); ok; v, ok = iter() {
+			cells = append(cells, v)
 		}
 	}
-	var ret *LVal
-	var cells []*LVal
 	switch typespec.Str {
 	case "vector":
-		ret = Array(QExpr([]*LVal{Int(size)}), nil)
-		cells = seqCells(ret)
-		cells = cells[0:0:size]
+		return Array(nil, cells)
 	case "list":
-		ret = QExpr(make([]*LVal, size))
-		cells = ret.Cells[0:0:size]
+		return QExpr(cells)
 	default:
 		return env.Errorf("type specifier is not valid: %v", typespec)
 	}
-	for _, v := range rest {
-		cells = append(cells, seqCells(v)...)
-	}
-	return ret
 }
 
 func builtinSortStable(env *LEnv, args *LVal) *LVal {
@@ -1434,22 +1476,24 @@ func builtinReverse(env *LEnv, args *LVal) *LVal {
 	if !isSeq(list) {
 		return env.Errorf("first argument is not a proper sequence: %v", args.Cells[0].Type)
 	}
-	var v *LVal
+
 	var cells []*LVal
+	iter := seqIter(list)
+	for v, ok := iter(); ok; v, ok = iter() {
+		cells = append(cells, v)
+	}
+	n := len(cells)
+	for i := 0; i < n/2; i++ {
+		cells[i], cells[n-1-i] = cells[n-1-i], cells[i]
+	}
 	switch typespec.Str {
 	case "vector":
-		v = Array(QExpr([]*LVal{Int(list.Len())}), nil)
-		cells = seqCells(v)
+		return Array(nil, cells)
 	case "list":
-		cells = make([]*LVal, list.Len())
-		v = QExpr(cells)
+		return QExpr(cells)
 	default:
 		return env.Errorf("type specifier is invalid: %v", typespec)
 	}
-	for i, v := range seqCells(list) {
-		cells[len(cells)-1-i] = v
-	}
-	return v
 }
 
 func builtinSlice(env *LEnv, args *LVal) *LVal {
@@ -1564,22 +1608,33 @@ func builtinAppend(env *LEnv, args *LVal) *LVal {
 	if !isSeq(seq) {
 		return env.Errorf("second argument is not a proper sequence: %v", seq.Type)
 	}
-	cells := seqCells(seq)
 	switch typespec.Str {
 	case "list":
+		iter := seqIter(seq)
 		// The Cells of the returned list must not intersect with seqCells(seq)
 		// (in regards to slice memory regions, not referenced LVals).  This is
 		// particularly relevent if seq is a vector.  This makes the following
 		// code more verbose.
-		list := make([]*LVal, 0, len(cells)+len(vals))
-		list = append(list, cells...)
+		list := make([]*LVal, 0, len(vals))
+		for v, ok := iter(); ok; v, ok = iter() {
+			list = append(list, v)
+		}
 		list = append(list, vals...)
 		return QExpr(list)
 	case "vector":
 		// The Cells of the returned vector may intersect with seqCells(seq)
 		// when chaining calls to ``append'' so that vectors may be used in a
 		// manner akin to go slices.
-		return Array(nil, append(cells, vals...))
+		if seq.Type == LArray {
+			return Array(nil, append(seq.Cells[1].Cells, vals...))
+		}
+		iter := seqIter(seq)
+		cells := make([]*LVal, 0, len(vals))
+		for v, ok := iter(); ok; v, ok = iter() {
+			cells = append(cells, v)
+		}
+		cells = append(cells, vals...)
+		return Array(nil, cells)
 	default:
 		return env.Errorf("type specifier is invalid: %v", typespec)
 	}
@@ -1655,13 +1710,13 @@ func builtinIsEmpty(env *LEnv, args *LVal) *LVal {
 
 func builtinCons(env *LEnv, args *LVal) *LVal {
 	head, tail := args.Cells[0], args.Cells[1]
-	if tail.Type != LSExpr {
-		return env.Errorf("second argument is not a list: %s", tail.Type)
+	if tail.Type == LSExpr {
+		cells := make([]*LVal, 0, 1+args.Len())
+		cells = append(cells, head)
+		cells = append(cells, tail.Cells...)
+		return QExpr(cells)
 	}
-	cells := make([]*LVal, 0, 1+args.Len())
-	cells = append(cells, head)
-	cells = append(cells, tail.Cells...)
-	return QExpr(cells)
+	return Cons(head, tail)
 }
 
 func builtinNot(env *LEnv, args *LVal) *LVal {
@@ -1682,7 +1737,7 @@ func builtinIsNil(env *LEnv, args *LVal) *LVal {
 
 func builtinIsList(env *LEnv, args *LVal) *LVal {
 	v := args.Cells[0]
-	return Bool(v.Type == LSExpr)
+	return Bool(v.Type == LSExpr || v.Type == LNil || v.Type == LCons)
 }
 
 func builtinIsSortedMap(env *LEnv, args *LVal) *LVal {
@@ -1752,7 +1807,8 @@ func builtinAllP(env *LEnv, args *LVal) *LVal {
 	if !isSeq(list) {
 		return env.Errorf("second argument is not a proper sequence: %v", list.Type)
 	}
-	for _, v := range seqCells(list) {
+	iter := seqIter(list)
+	for v, ok := iter(); ok; v, ok = iter() {
 		expr := SExpr([]*LVal{pred, v})
 		ok := env.Eval(expr)
 		if ok.Type == LError {
@@ -1777,7 +1833,8 @@ func builtinAnyP(env *LEnv, args *LVal) *LVal {
 	if !isSeq(list) {
 		return env.Errorf("second argument is not a list: %v", list.Type)
 	}
-	for _, v := range seqCells(list) {
+	iter := seqIter(list)
+	for v, ok := iter(); ok; v, ok = iter() {
 		expr := SExpr([]*LVal{pred, v})
 		ok := env.Eval(expr)
 		if ok.Type == LError {

@@ -175,15 +175,25 @@ func findAndUnquote(env *LEnv, v *LVal, depth int) *LVal {
 	for i := len(cells) - 1; i >= 0; i-- {
 		if cells[i].Spliced {
 			splice := cells[i]
-			if splice.Type != LSExpr {
+			newcells := make([]*LVal, 0, len(v.Cells)-1)
+			newcells = append(newcells, cells[:i]...)
+			switch splice.Type {
+			case LNil:
+			case LCons:
+				for v.Type == LCons {
+					newcells = append(newcells, v.Cells[0])
+					v = v.Cells[1]
+				}
+				if v.Type != LNil {
+					newcells = append(newcells, v)
+				}
+			case LSExpr:
+				newcells = append(newcells, splice.Cells...)
+			default:
 				// TODO:  I believe it is incorrect to error out here.  But
 				// splicing non-lists is not a major concern at the moment.
 				return env.Errorf("%s: cannot splice non-list: %s", "unquote-splicing", splice.Type)
 			}
-			// TODO:  Be clever and don't force allocation here.  Grow newcells and shift v.Cells[i+1:]
-			newcells := make([]*LVal, 0, len(v.Cells)+len(splice.Cells)-1)
-			newcells = append(newcells, cells[:i]...)
-			newcells = append(newcells, splice.Cells...)
 			newcells = append(newcells, cells[i+1:]...)
 			cells = newcells
 		}

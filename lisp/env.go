@@ -437,7 +437,7 @@ func (env *LEnv) PutGlobal(k, v *LVal) *LVal {
 
 // Lambda returns a new Lambda with fun.Env and fun.Package set automatically.
 func (env *LEnv) Lambda(formals *LVal, body []*LVal) *LVal {
-	if formals.Type != LSExpr {
+	if formals.Type != LSExpr && !formals.IsNil() {
 		return env.Errorf("formals is not a list of symbols: %v", formals.Type)
 	}
 	cells := make([]*LVal, 0, len(body)+1)
@@ -674,6 +674,11 @@ eval:
 		default:
 			return env.Errorf("illegal symbol: %q", v.Str)
 		}
+	case LNil:
+		return Nil()
+	case LCons:
+		v = ConsList(v)
+		fallthrough
 	case LSExpr:
 		res := env.EvalSExpr(v)
 		if res.Type == LMarkMacExpand {

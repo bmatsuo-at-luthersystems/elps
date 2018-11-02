@@ -37,6 +37,12 @@ const (
 	// LSExpr values are "list" values in lisp and store their values in
 	// LVal.Cells.
 	LSExpr
+	// LNil is the nil value.  It represents and empty list.
+	LNil
+	// LCons values are "list" values in lisp and store two values in
+	// LVal.Cells: the CAR, a value, and the CDR which can point to another
+	// LCons value to form a linked list.
+	LCons
 	// LFun values use the following fields in an LVal:
 	// 		LVal.Str      a string containing a unique function identifier.
 	// 		LVal.Native   a reference to a native go function (LBuiltin) or a
@@ -255,7 +261,10 @@ func Symbol(s string) *LVal {
 
 // Nil returns an LVal representing nil, an empty list, an absent value.
 func Nil() *LVal {
-	return SExpr(nil)
+	return &LVal{
+		Source: nativeSource(),
+		Type:   LNil,
+	}
 }
 
 // Native returns an LVal containng a native Go value.
@@ -276,6 +285,35 @@ func SExpr(cells []*LVal) *LVal {
 		Type:   LSExpr,
 		Cells:  cells,
 	}
+}
+
+func Cons(car, cdr *LVal) *LVal {
+	return &LVal{
+		Source: nativeSource(),
+		Type:   LCons,
+		Cells:  []*LVal{car, cdr},
+	}
+}
+
+// ConsExpr returns an LSExpr with items collected from cons.  If cons is not
+// LCons or LNil an error is returned.  If cons is a pair an LSExpr containing
+// two items will be returned.
+func ConsList(cons *LVal) *LVal {
+	list := SExpr(nil)
+	if cons.Type == LNil {
+		return list
+	}
+	if cons.Type != LCons {
+		return Errorf("argument is not a cons list: %v", cons.Type)
+	}
+	for cons.Type == LCons {
+		list.Cells = append(list.Cells, cons.Cells[0])
+		cons = cons.Cells[1]
+	}
+	if cons.Type != LNil {
+		list.Cells = append(list.Cells, cons)
+	}
+	return list
 }
 
 // QExpr returns an LVal representing an Q-expression, a quoted expression, a
@@ -720,6 +758,8 @@ func (v *LVal) IsSpecialOp() bool {
 // IsNil returns true if v represents a nil value.
 func (v *LVal) IsNil() bool {
 	switch v.Type {
+	case LNil:
+		return true
 	case LSExpr:
 		return len(v.Cells) == 0
 	}
@@ -746,6 +786,25 @@ func (v *LVal) Equal(other *LVal) *LVal {
 		if v.IsNumeric() && other.IsNumeric() {
 			return v.equalNum(other)
 		}
+		if v.IsNil() && other.IsNil() {
+			return Bool(true)
+		}
+		if v.Type == LCons {
+			v, other = other, v
+		}
+		if v.Type == LSExpr && other.Type == LCons {
+			for _, c := range v.Cells {
+				if !True(c.Equal(other.Cells[0])) {
+					return Bool(false)
+				}
+				if other.Type == LNil {
+					// v is longer than other
+					return Bool(false)
+				}
+				other = other.Cells[1]
+			}
+			return Bool(true)
+		}
 		return Bool(false)
 	}
 	if v.IsNumeric() {
@@ -754,6 +813,14 @@ func (v *LVal) Equal(other *LVal) *LVal {
 	switch v.Type {
 	case LString, LSymbol:
 		return Bool(v.Str == other.Str)
+	case LNil:
+		return Bool(true)
+	case LCons:
+		eq := v.Cells[0].Equal(other.Cells[0])
+		if !True(eq) {
+			return eq
+		}
+		return v.Cells[1].Equal(other.Cells[1])
 	case LSExpr:
 		if v.Len() != other.Len() {
 			return Bool(false)
@@ -891,6 +958,16 @@ func (v *LVal) str(onTheRecord bool) string {
 			quote = QUOTE
 		}
 		return exprString(v, 0, quote+"(", ")")
+	case LCons:
+		// NOTE:  LCons always appears quoted because traditionally the `list`
+		// builtin would always produce quoted lists (returned from QExpr).
+		quote = QUOTE
+		return consString(v, quote+"(", ")")
+	case LNil:
+		if v.Quoted {
+			quote = QUOTE
+		}
+		return quote + "()"
 	case LFun:
 		if v.Quoted {
 			quote = QUOTE
@@ -980,12 +1057,70 @@ func exprString(v *LVal, offset int, left string, right string) string {
 	return buf.String()
 }
 
+func consString(v *LVal, left string, right string) string {
+	var buf bytes.Buffer
+	buf.WriteString(left)
+	pad := false
+	for v.Type == LCons {
+		if pad {
+			buf.WriteString(" ")
+		}
+		pad = true
+
+		buf.WriteString(v.Cells[0].String())
+		v = v.Cells[1]
+	}
+	if v.Type != LNil {
+		// use pair shorthand for conses of the form `(cons 1 2)`
+		buf.WriteString(" . ")
+		buf.WriteString(v.String())
+	}
+	buf.WriteString(right)
+	return buf.String()
+}
+
 func isVec(v *LVal) bool {
 	return v.Type == LArray && v.Cells[0].Len() == 1
 }
 
 func isSeq(v *LVal) bool {
-	return v.Type == LSExpr || isVec(v)
+	return v.Type == LNil || v.Type == LCons || v.Type == LSExpr || isVec(v)
+}
+
+func seqIter(v *LVal) func() (*LVal, bool) {
+	switch v.Type {
+	case LNil:
+		return func() (*LVal, bool) { return nil, false }
+	case LCons:
+		return func() (*LVal, bool) {
+			if v.Type != LCons {
+				return v, false
+			}
+			ret := v.Cells[0]
+			v = v.Cells[1]
+			return ret, true
+		}
+	case LSExpr:
+		return iterCells(v.Cells)
+	case LArray:
+		if v.Cells[0].Len() > 1 {
+			panic("multi-dimensional array is not a sequence")
+		}
+		return iterCells(v.Cells[1].Cells)
+	default:
+		panic("type is not a sequence")
+	}
+}
+
+func iterCells(cells []*LVal) func() (*LVal, bool) {
+	return func() (*LVal, bool) {
+		if len(cells) == 0 {
+			return nil, false
+		}
+		x := cells[0]
+		cells = cells[1:]
+		return x, true
+	}
 }
 
 func seqCells(v *LVal) []*LVal {
