@@ -53,6 +53,33 @@ func TestLoadFile_chain(t *testing.T) {
 	assert.Equal(t, "TESTING", result.Str)
 }
 
+func TestLoadFile_chainRecursive(t *testing.T) {
+	env := testLoaderEnv(t)
+	lok := env.LoadFile("testfixtures/test3.lisp")
+	if lok.Type == lisp.LError {
+		t.Fatalf("unable to load test fixture: %v", lok)
+	}
+
+	// test1 is loaded indirectly while test2 is being evaluated
+	fname := "test1:this-is-a-test"
+	call := lisp.SExpr([]*lisp.LVal{lisp.Symbol(fname)})
+	result := env.Eval(call)
+	assert.Equal(t, lisp.LString, result.Type)
+	assert.Equal(t, "testing", result.Str)
+
+	fname = "test2:this-is-a-test2"
+	call = lisp.SExpr([]*lisp.LVal{lisp.Symbol(fname)})
+	result = env.Eval(call)
+	assert.Equal(t, lisp.LString, result.Type)
+	assert.Equal(t, "TESTING", result.Str)
+
+	fname = "test3:this-is-a-test3"
+	call = lisp.SExpr([]*lisp.LVal{lisp.Symbol(fname)})
+	result = env.Eval(call)
+	assert.Equal(t, lisp.LString, result.Type)
+	assert.Equal(t, "__TESTING__", result.Str)
+}
+
 // dumb test asserting that it is not possible to load files without special
 // configuration (nil default SourceLibrary).
 func TestLoadFile_noSourceLibrary(t *testing.T) {

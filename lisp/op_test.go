@@ -36,19 +36,42 @@ func TestSpecialOp(t *testing.T) {
 						[y (+ (progn (debug-stack) x) 1)])
 					(+ x y)))`, "2", debugstack},
 		}},
+		{"set!", elpstest.TestSequence{
+			{`(set 'x 1)`, `1`, ``},
+			{`(set! x 2)`, `()`, ``},
+			{`x`, `2`, ``},
+			{`(let ([x 'a]) (set! x 'b) x)`, `'b`, ``},
+			{`x`, `2`, ``},
+			{`(set! false x)`, `test:1: lisp:set!: cannot rebind constant: false`, ``},
+			{`(set! foo 3)`, `test:1: lisp:set!: symbol not bound: foo`, ``},
+		}},
 		{"let*", elpstest.TestSequence{
 			{`(let* ())`, "()", ""},
 			{`(let* ((x 1)) x)`, "1", ""},
 			{`(let* ([x 1]) x)`, "1", ""},
 			{`(let* ([x 1] [y 2]) (+ x y))`, "3", ""},
 			{`(let* ([x 0]) (let* ([x 1] [y (+ x 1)]) (+ x y)))`, "3", ""},
+			{`(let ((bar 0)) (let* ((foo (lambda () bar)) (bar 1)) (foo)))`, `0`, ``},
+			// BUG:  let* should function like the following commented test
+			// according to scheme and CL.  Instead let* is able to define
+			// recursive functions.
+			//{`(let* ((f (lambda (x)
+			//			(if (= 0 x) 0 (f (- x 1))))))
+			//	(f 10))`, `test:2: lisp:if: unbound symbol: f`, ``},
 		}},
 		{"flet", elpstest.TestSequence{
-			{`(flet [])`, "()", ""},
-			{`(flet ([f (x) x]) (f 2))`, "2", ""},
-			{`(flet ([f (x y) (if (= x 0) y (f (- x 1) (+ y 1)))]) (f 3 2))`, "5", ""},
-			{`(defun orig () 1)`, "()", ""},
-			{`(flet ([orig () 2] [f () (orig)]) (f))`, "1", ""},
+			{`(flet [])`, `()`, ``},
+			{`(flet ([f (x) x]) (f 2))`, `2`, ``},
+			// BUG:  Anonymous functions bound locally do not get names in
+			// debug stacks and error messages.  Function names are mapped at
+			// the package level currently -- which may be the wrong thing to
+			// do.  LEnv objects could have a name mapping as well but you
+			// can't be guaranteed that a function was called using the that
+			// binds to it most tightly.  It is likely that the approach being
+			// used is flawed.
+			{`(flet ([f (x) (f (+ x 1))]) (f 0))`, `test:1: _fun8: unbound symbol: f`, ``},
+			{`(defun orig () 1)`, `()`, ``},
+			{`(flet ([orig () 2] [f () (orig)]) (f))`, `1`, ``},
 		}},
 		{"labels", elpstest.TestSequence{
 			{`(labels [])`, "()", ""},

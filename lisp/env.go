@@ -163,7 +163,7 @@ func (env *LEnv) LoadFile(loc string) *LVal {
 		return env.Errorf("no source library in environment runtime")
 	}
 	ctx := env.Runtime.sourceContext()
-	name, src, err := env.Runtime.Library.LoadSource(ctx, loc)
+	name, loc, src, err := env.Runtime.Library.LoadSource(ctx, loc)
 	if err != nil {
 		return env.Errorf("library error: %v", err)
 	}
@@ -315,7 +315,7 @@ func (env *LEnv) get(k *LVal) *LVal {
 		}
 		lerr := pkg.Get(Symbol(pieces[1]))
 		if lerr.Type == LError {
-			lerr.SetCallStack(env.Runtime.Stack.Copy())
+			env.ErrorAssociate(lerr)
 		}
 		return lerr
 	default:
@@ -340,7 +340,7 @@ func (env *LEnv) get(k *LVal) *LVal {
 func (env *LEnv) packageGet(k *LVal) *LVal {
 	lerr := env.Runtime.Package.Get(k)
 	if lerr.Type == LError {
-		lerr.SetCallStack(env.Runtime.Stack.Copy())
+		env.ErrorAssociate(lerr)
 	}
 	return lerr
 }
@@ -364,35 +364,76 @@ func (env *LEnv) GetFunName(f *LVal) string {
 	return pkg.FunNames[f.FID()]
 }
 
-// Put takes an LSymbol k and binds it to v in env.
-func (env *LEnv) Put(k, v *LVal) {
+// Put takes an LSymbol k and binds it to v in env.  If k is already bound to a
+// value the binding is updated so that k is bound to v.
+func (env *LEnv) Put(k, v *LVal) *LVal {
 	if k.Type != LSymbol && k.Type != LQSymbol {
-		return
+		return env.Errorf("key is not a symbol: %v", k.Type)
 	}
-	if k.Str == TrueSymbol {
-		panic("constant value")
-	}
-	if k.Str == FalseSymbol {
-		panic("constant value")
-	}
-	if v == nil {
-		panic("nil value")
+	if k.Str == TrueSymbol || k.Str == FalseSymbol {
+		return env.Errorf("cannot rebind constant: %v", k.Str)
 	}
 	if v.Type == LFun {
 		env.FunName[v.FID()] = k.Str
 	}
 	env.Scope[k.Str] = v
+	return Nil()
+}
+
+// Update updates the binding of k to v within the scope of env.  Update can
+// update either lexical or global bindings.  If k is not bound by env, an
+// enclosing LEnv, or the current package an error condition is signaled.
+func (env *LEnv) Update(k, v *LVal) *LVal {
+	if k.Type != LSymbol && k.Type != LQSymbol {
+		return env.Errorf("key is not a symbol: %v", k.Type)
+	}
+	if k.Str == TrueSymbol || k.Str == FalseSymbol {
+		return env.Errorf("cannot rebind constant: %v", k.Str)
+	}
+	return env.update(k, v)
+}
+
+func (env *LEnv) update(k, v *LVal) *LVal {
+	for {
+		_, ok := env.Scope[k.Str]
+		if ok {
+			if v.Type == LFun {
+				env.FunName[v.FID()] = k.Str
+			}
+			env.Scope[k.Str] = v
+			return Nil()
+		}
+		if env.Parent == nil {
+			lerr := env.Runtime.Package.Update(k, v)
+			if lerr.Type == LError {
+				env.ErrorAssociate(lerr)
+				return lerr
+			}
+			return Nil()
+		}
+		env = env.Parent
+	}
 }
 
 // GetGlobal takes LSymbol k and returns the value it is bound to in the
 // current package.
 func (env *LEnv) GetGlobal(k *LVal) *LVal {
-	return env.Runtime.Package.Get(k)
+	lval := env.Runtime.Package.Get(k)
+	if lval.Type == LError {
+		env.ErrorAssociate(lval)
+		return lval
+	}
+	return lval
 }
 
 // PutGlobal takes an LSymbol k and binds it to v in current package.
-func (env *LEnv) PutGlobal(k, v *LVal) {
-	env.Runtime.Package.Put(k, v)
+func (env *LEnv) PutGlobal(k, v *LVal) *LVal {
+	lerr := env.Runtime.Package.Put(k, v)
+	if lerr.Type == LError {
+		env.ErrorAssociate(lerr)
+		return lerr
+	}
+	return Nil()
 }
 
 // Lambda returns a new Lambda with fun.Env and fun.Package set automatically.
@@ -578,6 +619,25 @@ func (env *LEnv) ErrorConditionf(condition string, format string, v ...interface
 	}
 }
 
+// ErrorAssociate associates the LError value lerr with env's current call
+// stack and source location.  ErrorAssociate panics if lerr is not LError.
+func (env *LEnv) ErrorAssociate(lerr *LVal) {
+	if lerr.Type != LError {
+		panic("not an error: " + lerr.Type.String())
+	}
+	if lerr.CallStack() == nil {
+		lerr.SetCallStack(env.Runtime.Stack.Copy())
+	}
+	// This check smells a little funny.  All objects are given a source
+	// which may be a nativeSource() value which does not correspond to a
+	// file and has an invalid position (-1).  When associating an error
+	// the env's current location is probably more accurate than native
+	// source (or it may also be native source).
+	if lerr.Source == nil || lerr.Source.Pos < 0 {
+		lerr.Source = env.Loc
+	}
+}
+
 // Eval evaluates v in the context (scope) of env and returns the resulting
 // LVal.  Eval does not modify v.
 //
@@ -609,7 +669,7 @@ eval:
 			}
 			lerr := pkg.Get(Symbol(pieces[1]))
 			if lerr.Type == LError {
-				lerr.SetCallStack(env.Runtime.Stack.Copy())
+				env.ErrorAssociate(lerr)
 			}
 			return lerr
 		default:
@@ -624,12 +684,7 @@ eval:
 			goto eval
 		}
 		if res.Type == LError {
-			if res.Source == nil {
-				res.Source = env.Loc
-			}
-			if res.CallStack() == nil {
-				res.SetCallStack(env.Runtime.Stack.Copy())
-			}
+			env.ErrorAssociate(res)
 		}
 		return res
 	case LQuote:
@@ -651,9 +706,7 @@ func (env *LEnv) EvalSExpr(s *LVal) *LVal {
 	}
 	call := env.evalSExprCells(s)
 	if call.Type == LError {
-		if call.CallStack() == nil {
-			call.SetCallStack(env.Runtime.Stack.Copy())
-		}
+		env.ErrorAssociate(call)
 		return call
 	}
 	fun := call.Cells[0] // call is not an empty expression -- fun is known LFun

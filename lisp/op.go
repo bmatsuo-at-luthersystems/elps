@@ -9,6 +9,7 @@ import (
 
 var userSpecialOps []*langBuiltin
 var langSpecialOps = []*langBuiltin{
+	{"set!", Formals("name", "expr"), opSetUpdate},
 	{"assert", Formals("expr", VarArgSymbol, "message-format-args"), opAssert},
 	{"quote", Formals("expr"), opQuote},
 	{"quasiquote", Formals("expr"), opQuasiquote},
@@ -17,6 +18,7 @@ var langSpecialOps = []*langBuiltin{
 	{"thread-first", Formals("value", VarArgSymbol, "exprs"), opThreadFirst},
 	{"thread-last", Formals("value", VarArgSymbol, "exprs"), opThreadLast},
 	{"labels", Formals("bindings", VarArgSymbol, "expr"), opLabels},
+	{"macrolet", Formals("bindings", VarArgSymbol, "expr"), opMacrolet},
 	{"flet", Formals("bindings", VarArgSymbol, "expr"), opFlet},
 	{"let*", Formals("bindings", VarArgSymbol, "expr"), opLetSeq},
 	{"let", Formals("bindings", VarArgSymbol, "expr"), opLet},
@@ -47,6 +49,18 @@ func DefaultSpecialOps() []LBuiltinDef {
 		ops[offset+i] = langSpecialOps[i]
 	}
 	return ops
+}
+
+func opSetUpdate(env *LEnv, args *LVal) *LVal {
+	key, expr := args.Cells[0], args.Cells[1]
+	if key.Type != LSymbol {
+		return env.Errorf("first argument is not a symbol: %v", key.Type)
+	}
+	val := env.Eval(expr)
+	if val.Type == LError {
+		return val
+	}
+	return env.Update(key, val)
 }
 
 func opAssert(env *LEnv, args *LVal) *LVal {
@@ -316,16 +330,16 @@ func opFlet(env *LEnv, args *LVal) *LVal {
 		if len(bind.Cells) < 2 {
 			return env.Errorf("first argument is not a list of function definitions")
 		}
-		fenv := NewEnv(env) // lambdas in a flet can't call each other -- recursion OK
+		fenv := NewEnv(env) // lambdas in a flet get their own little environment
 		name, formals, body := bind.Cells[0], bind.Cells[1], bind.Cells[2:]
 		lval := fenv.Lambda(formals, body)
 		if lval.Type == LError {
-			lval.SetCallStack(env.Runtime.Stack.Copy())
 			return lval
 		}
-		// bind name in fenv to allow recursion and fletenv for the flet body.
-		fenv.Put(name, lval)
-		fletenv.Put(name, lval)
+		lerr := fletenv.Put(name, lval)
+		if lerr.Type == LError {
+			return lerr
+		}
 	}
 	return opProgn(fletenv, args)
 }
@@ -354,12 +368,51 @@ func opLabels(env *LEnv, args *LVal) *LVal {
 		// The lambda's lexical scope includes all lambdas that labels defines.
 		lval := fletenv.Lambda(formals, body)
 		if lval.Type == LError {
-			lval.SetCallStack(env.Runtime.Stack.Copy())
 			return lval
 		}
 		// Bind name for the function body and to allow cross-references
 		// between label lambdas.
-		fletenv.Put(name, lval)
+		lerr := fletenv.Put(name, lval)
+		if lerr.Type == LError {
+			return lerr
+		}
+	}
+	return opProgn(fletenv, args)
+}
+
+// macrolet functions similar to flet -- there are no cross-refrences between
+// the set of macros defined in the local macrolet.
+//
+// NOTE:  macrolet functions will not be portable to other lisp implementations
+// if they attempt to reference lexically bound symbols outside of the macro
+// expansion.  That is, while the _expanded_ macro may reference local
+// variables and functions, _during_ its exansion the macro may only make use
+// of other macros and global symbols.
+func opMacrolet(env *LEnv, args *LVal) *LVal {
+	fletenv := NewEnv(env)
+	bindlist := args.Cells[0]
+	args.Cells = args.Cells[1:] // decap so we can call builtinProgn on args.
+	if bindlist.Type != LSExpr {
+		return env.Errorf("first argument is not a list: %s", bindlist.Type)
+	}
+	for _, bind := range bindlist.Cells {
+		if bind.Type != LSExpr {
+			return env.Errorf("first argument is not a list of function definitions")
+		}
+		if len(bind.Cells) < 2 {
+			return env.Errorf("first argument is not a list of function definitions")
+		}
+		fenv := NewEnv(env) // lambdas in a macrolet get their own little environment
+		name, formals, body := bind.Cells[0], bind.Cells[1], bind.Cells[2:]
+		lval := fenv.Lambda(formals, body)
+		if lval.Type == LError {
+			return lval
+		}
+		lval.FunType = LFunMacro // evaluate as a macro
+		lerr := fletenv.Put(name, lval)
+		if lerr.Type == LError {
+			return lerr
+		}
 	}
 	return opProgn(fletenv, args)
 }
@@ -385,7 +438,10 @@ func opLet(env *LEnv, args *LVal) *LVal {
 		}
 	}
 	for i, bind := range bindlist.Cells {
-		letenv.Put(bind.Cells[0], vals[i])
+		lerr := letenv.Put(bind.Cells[0], vals[i])
+		if lerr.Type == LError {
+			return lerr
+		}
 	}
 	return opProgn(letenv, args)
 }
@@ -408,7 +464,26 @@ func opLetSeq(env *LEnv, args *LVal) *LVal {
 		if val.Type == LError {
 			return val
 		}
-		letenv.Put(bind.Cells[0], val)
+		// BUG:  A function defined in a let* is not supposed to be able to
+		// reference itself (recursively) or any bindings defined following its
+		// entry in bindlist during a funcall.  So we should create a new
+		// environment to hold the actual function binding for this cell along
+		// with any following bindings (provided they don't also bind functions
+		// and cause further fracturing of the lexical scope).  Something like
+		// the following:
+		//
+		//if val.Type == LFun {
+		//	// NOTE:  The function val may not have been created during the
+		//	// evaluation of bind.Cells[1], but it isn't clear how to detect a
+		//	// newly created lambda vs one that was merely the result of, say,
+		//	// symbol resolution inside the bind.Cells[1] expression.  So, we
+		//	// assume for now that this is a newly created function.
+		//	letenv = NewEnv(letenv)
+		//}
+		lerr := letenv.Put(bind.Cells[0], val)
+		if lerr.Type == LError {
+			return lerr
+		}
 	}
 	return opProgn(letenv, args)
 }

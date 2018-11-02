@@ -384,12 +384,33 @@ the value originally.
     (get m "carol"))    ; evaluates to 2
 ```
 
-Maps are mutable values and can be updated with the `assoc!` function.
+Maps are mutable values and can be updated with the `assoc!` function to
+add/update a key-value pair to the map.
 
 ```lisp
 (let ((m (sorted-map 'alice 0 'bob 1)))
     (assoc! m 'carol 2)
     (get m 'carol))     ; evaluates to 2
+```
+
+Analogously, the `dissoc!` function can be used to remove a key (and its
+associated value) from the map.
+
+```lisp
+(let ((m (sorted-map 'alice 0 'bob 1)))
+    (dissoc! m 'alice)
+    (dissoc! m 'gary)   ; no-op
+    m)      ; evaluates to (sorted-map 'bob 1)
+```
+
+There are also non-mutating versions of these functions, `assoc` and `dissoc`,
+which merely return new sorted-map objects without modifying their arguments.
+
+```lisp
+(let* ((m0 (sorted-map 'alice 0 'bob 1))
+       (m1 (dissoc m0 'alice))      ; does not change m0
+       (m2 (assoc m1 'carol 2)))    ; does not change m1
+    m2)      ; evaluates to (sorted-map 'bob 1 'carol 2)
 ```
 
 ##Packages
@@ -407,17 +428,34 @@ function, which changes the environment's working package.  Symbols bound using
 (in-package 'my-new-package)
 (export 'my-special-function)
 (defun my-special-function () (debug-print "something special"))
-(defun my-other-function () (debug-print "something else"))
+(set 'thing "something else")
+(defun my-other-function () (debug-print thing))
 ```
 
 Outside of the `my-new-package` package, the symbol `my-special-function` may
-be bound to other values.  Value defined inside `my-new-package` may be
-accessed by qualifying the symbol using the package name.
+be bound to other values.  Symbols defined inside `my-new-package` may be
+explicitly accessed by qualifying the symbol using the package name.
 
 ```lisp
 (my-new-package:my-special-function)  ; prints "something special"
 (my-new-package:my-other-function)    ; prints "something else"
 ```
+
+Scheme-like symbol bindings and assignment are also possible using the `define`
+and `set!` operators.
+
+```lisp
+(define counter 0)  ; bind symbol 'counter to 0 initially
+(define (count)
+    (define old counter)
+    (set! counter (+ counter 1))  ; increment the counter
+    old)
+(count)  ; evaluates to 0
+(count)  ; evaluates to 1
+```
+
+NOTE:  While scheme-style function definitions are allowed using `define` the
+argument declaration syntax is the same for all function definitions.
 
 ### Importing symbols
 

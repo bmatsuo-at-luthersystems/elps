@@ -37,6 +37,13 @@ string"""`, `"\"\"a raw\nstring"`, ""},
 			// test later if problematic.
 			{"a", "test:1: unbound symbol: a", ""},
 		}},
+		{"set", elpstest.TestSequence{
+			{`(set 'x 1)`, `1`, ``},
+			{`x`, `1`, ``},
+			{`(set 'x 2)`, `2`, ``},
+			{`x`, `2`, ``},
+			{`(set 'true 2)`, `test:1: lisp:set: cannot rebind constant: true`, ``},
+		}},
 		{"lists basics", elpstest.TestSequence{
 			{"'()", "'()", ""},
 			{"'(1 2 3)", "'(1 2 3)", ""},
