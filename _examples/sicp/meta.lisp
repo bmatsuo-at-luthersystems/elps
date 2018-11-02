@@ -1,40 +1,74 @@
 (in-package 'sicp/meta)
 
+(use-package 'testing)
+
+; well... it looks like we want linked lists after all...
 (set 'nil '())
 (defun cons (a b)
   (labels ([set-car! (x) (set! a x)]
            [set-cdr! (x) (set! b x)])
-  (lambda (op)
-    (cond ((equal? op 'car) a)
-          ((equal? op 'cdr) b)
-          ((equal? op 'set-car!) set-car!)
-          ((equal? op 'set-cdr!) set-cdr!)
-          (:else (error 'invalid-operator "invalid operator -- CONS" op))))))
+  (lisp:list 'cons
+             (lambda (op)
+               (cond ((equal? op 'car) a)
+                     ((equal? op 'cdr) b)
+                     ((equal? op 'set-car!) set-car!)
+                     ((equal? op 'set-cdr!) set-cdr!)
+                     (:else (error 'invalid-operator "invalid operator -- CONS" op)))))))
 
-(defun car (pair) (funcall pair 'car)) ; first
-(defun cdr (pair) (funcall pair 'cdr))
-(defun set-car! (pair a) (funcall (funcall pair 'set-car!) a))
-(defun set-cdr! (pair b) (funcall (funcall pair 'set-cdr!) b))
+(defun car (pair) (funcall (lisp:nth pair 1) 'car)) ; first
+(defun cdr (pair) (funcall (lisp:nth pair 1) 'cdr))
+(defun set-car! (pair a) (funcall (funcall (lisp:nth pair 1) 'set-car!) a))
+(defun set-cdr! (pair b) (funcall (funcall (lisp:nth pair 1) 'set-cdr!) b))
 
+(defun list? (val)
+  (cond ((nil? val) true)
+        ((lisp:list? val)
+          (equal? 'cons (lisp:car val)))
+        (:else false)))
+(defun tagged-list? (exp tag)
+  (if (list? exp)
+    (equal? (car exp) tag)
+    false))
 (defun list (&rest xs)
   (if (nil? xs)
     nil
-    (cons (lisp:car xs) (list:cdr xs)))) ; inefficient w/o slicing
+    (cons (lisp:car xs) (lisp:apply list (lisp:cdr xs))))) ; inefficient w/o slicing
+
+(defun cons-map (proc pair)
+  (if (nil? pair)
+    nil
+    (cons (funcall proc (car pair))
+          (cons-map proc (cdr pair)))))
+(defun cons-debug (pair &optional prefix)
+  (cond ((nil? pair) nil)
+        ((list? (car pair))
+          (debug-print (if prefix prefix ""))
+          (cons-debug (car pair) (concat 'string prefix "-"))
+          (cons-debug (cdr pair) prefix))
+        (:else
+          (if prefix
+            (debug-print prefix (car pair))
+            (debug-print "" (car pair)))
+          (cons-debug (cdr pair) prefix))))
 
 (defun cadr (pair) (car (cdr pair))) ; second
 (defun caadr (pair) (car (car (cdr pair))))
+(defun cdadr (pair) (cdr (cadr pair)))
 (defun cddr (pair) (cdr (cdr pair)))
-(defun caddr (pair) (car (cdr (cdr pair))) ; third
-(defun cadddr (pair) (car (cdr (cdr (cdr pair)))) ; fourth
+(defun caddr (pair) (car (cdr (cdr pair)))) ; third
+(defun cadddr (pair) (car (cdr (cdr (cdr pair))))) ; fourth
 
 (defun cons-length (pair &optional prefix-length)
   (if (nil? pair)
     (if (nil? prefix-length) 0 prefix-length)
-    (con-length (cdr pair) (+ 1 (if (nil? prefix-length) 0 prefix-length)))))
+    (cons-length (cdr pair) (+ 1 (if (nil? prefix-length) 0 prefix-length)))))
+
+(assert= 4 (cons-length (list 1 1 1 1)))
+(assert= 4 (cadr (cons-map #^(* % %) (list 1 2 3 4))))
 
 (defun eval (exp env)
   (cond ((self-evaluating? exp) exp)
-        ((variable? exp) (lookup-variable-value exp env))
+        ((variable? exp) (trace (lookup-variable-value exp env)))
         ((quoted? exp) (text-of-quotation exp))
         ((assignment? exp) (eval-assignment exp env))
         ((definition? exp) (eval-definition exp env))
@@ -54,10 +88,10 @@
 (defun apply (procedure arguments)
   (cond ((primitive-procedure? procedure)
           (apply-primitive-procedure procedure arguments))
-        ((compond-procedure? procedure)
+        ((compound-procedure? procedure)
           (eval-sequence
             (procedure-body procedure)
-            (endtend-environment
+            (extend-environment
               (procedure-parameters procedure)
               arguments
               (procedure-environment procedure))))
@@ -88,54 +122,49 @@
 
 (defun eval-definition (exp env)
   (define-variable! (definition-variable exp)
-                    (eval (assign-value exp) env)
+                    (eval (definition-value exp) env)
                     env)
   'ok)
 
 (defun self-evaluating? (exp)
-  (cond? ((number? exp) true)
-         ((string? exp) true)
-         (:else false)))
+  (cond ((number? exp) true)
+        ((string? exp) true)
+        (:else false)))
 
 (defun variable? (exp) (symbol? exp))
 
 (defun quoted? (exp) (tagged-list? exp 'quote))
 (defun text-of-quotation (exp) (second exp)) ; ?
 
-(defun tagged-list? (exp tag)
-  (if (list? exp)
-    (equal? (car exp) tag)
-    false)
-
 (defun assignment? (exp) (tagged-list? exp 'set!))
-(defun assignment-variable (exp) (nth exp 1))
-(defun assignment-value (exp) (nth exp 2))
+(defun assignment-variable (exp) (cadr exp))
+(defun assignment-value (exp) (caddr exp))
 
 (defun definition? (exp) (tagged-list? exp 'define))
 (defun definition-variable (exp)
-  (if (symbol? (nth exp 1))
-    (nth exp 1)
-    (car (nth exp 1))))
+  (if (symbol? (cadr exp))
+    (cadr exp)
+    (caadr exp)))
 (defun definition-value (exp)
-  (if (symbol? (nth exp 1))
-    (nth exp 2)
-    (make-lambda (cdr (nth exp 1))
-                 (cdr (cdr exp))))) ; not efficient
+  (if (symbol? (cadr exp))
+    (caddr exp)
+    (make-lambda (cdadr exp)
+                 (cddr exp))))
 
 (defun lambda? (exp) (tagged-list? exp 'lambda))
-(defun lambda-parameters exp) (nth exp 1))
-(defun lambda-body (exp) (cdr (cdr exp))) ; not efficient
+(defun lambda-parameters (exp) (cadr exp))
+(defun lambda-body (exp) (cddr exp))
 
 (defun make-lambda (parameters body)
   (list 'lambda parameters body))
 
 (defun if? (exp) (tagged-list? exp 'if))
-(defun if-predicate (exp) (nth exp 1))
-(defun if-consequent (exp) (nth exp 2))
+(defun if-predicate (exp) (cadr exp))
+(defun if-consequent (exp) (caddr exp))
 (defun if-alternative (exp)
-  (if (> 4 (car-length exp))
+  (if (> 4 (cons-length exp))
     'false
-    (nth exp 3)))
+    (cadddr exp)))
 
 (defun make-if (predicate consequent alternative)
   (list 'if predicate consequent alternative))
@@ -160,7 +189,7 @@
 (defun first-operand (ops) (car ops))
 (defun rest-operands (ops) (cdr ops))
 
-(defun cond? (exp) (tagged-list exp 'cond))
+(defun cond? (exp) (tagged-list? exp 'cond))
 (defun cond-clauses (exp) (cdr exp))
 (defun cond-else-clause? (clause) (equal? (cond-predicate clause) 'else))
 (defun cond-predicate (clause) (car clause))
@@ -188,65 +217,135 @@
 (defun false? (x)
   (equal? x false))
 
-(defun primitive-procedure? (procedure)
-  ;...
-  'unimplemented)
-(defun apply-primitive-procedure (procedure arguments)
-  ;...
-  'unimplemented)
 (defun make-procedure (parameters body env)
   (list 'procedure parameters body env))
 
 (defun compound-procedure? (p)
   (tagged-list? p 'procedure))
-(defun procedure-parameters (p) (nth p 1))
-(defun procedure-body (p) (nth p 2))
-(defun procedure-environment (p) (nth p 3))
+(defun procedure-parameters (p) (cadr p))
+(defun procedure-body (p) (caddr p))
+(defun procedure-environment (p) (cadddr p))
 
 (defun lookup-variable-value (var env)
   (labels ([env-loop (env)
-              (labels ([scan (vars vals)
-                          (cond ((null? vars) (env-loop (enclosing-environment env)))
-                                ((equal? var (car vars)) (car vanls))
-                                (:else (scan (cdr vars) (cdr vals))))])
-                (if (equal? env the-empty-environment)
-                  (error 'unbound-variable "unbound variable" var)
-                  (let ([frame (first-frame env)])
-                    (scan (frame-variables frame)
-                          (frame-values frame)))))])
+              (if (equal? env the-empty-environment)
+                (error 'unbound-variable "unbound variable" var)
+                (frame-locate-binding (first-frame env) var
+                                      (lambda (bindings) (bound-value (car bindings)))
+                                      (lambda () (env-loop (envclosing-environment env)))))])
     (env-loop env)))
 
 (defun extend-environment (variables values base-env)
-  (if (= (car-length variables) (car-length values))
+  (if (= (cons-length variables) (cons-length values))
     (cons (make-frame variables values) base-env)
-    (if (< (car-length variables) (car-length values))
+    (if (< (cons-length variables) (cons-length values))
       (error 'invalid-arguments "too many arguments supplied" variables values)
       (error 'invalid-arguments "too few arguments supplied" variables values))))
 
 (defun set-variable-value! (var value env)
   (labels ([env-loop (env)
-              (labels ([scan (vars vals)
-                          (cond ((nil? vars) (env-loop (enclosing-environment env)))
-                                ((equal? var (car vars)) ))]))])
+              (if (equal? env the-empty-environment)
+                (error 'unbound-variable "unbound variable" var)
+                (frame-locate-binding (first-frame env) var
+                                      (lambda (bindings) (set-car! bindings (cons var val)))
+                                      (lambda () (env-loop (envclosing-environment env)))))])
     (env-loop env)))
-(defun define-variable! (var value env)) ; TODO
+
+(defun define-variable! (var val env)
+  (let ([frame (first-frame env)])
+    (frame-locate-binding frame var
+                          (lambda (bindings) (set-car! bindings (cons var val)))
+                          (lambda () (add-binding-to-frame! var val frame)))))
 
 (defun enclosing-environment (env) (cdr env))
 (defun first-frame (env) (car env))
 (set 'the-empty-environment '())
 
+(defun make-binding (variable value) (cons variable value))
+(defun make-binding-list (variables values)
+  (if (nil? variables)
+    (if (nil? values)
+      nil
+      (error 'invalid-arguments "too many arguments supplied" variables values))
+    (if (nil? values)
+      (error 'invalid-arguments "too few arguments supplied" variables values)
+      (cons (cons (car variables)
+                  (car values))
+            (make-binding-list (cdr variables)
+                               (cdr values))))))
+
+(defun bound-variable (bind) (car bind))
+(defun bound-value (bind) (cdr bind))
+
 (defun make-frame (variables values)
-  (let* ([variables variables]
-         [values values]
+  (let* ([bindings (make-binding-list variables values)]
          [add-binding! (lambda (variable value)
-                         (set! variables (cons variable variables))
-                         (set! values (cons value values)))])
+                         (set! bindings (cons (make-binding variable value)
+                                              bindings))
+                         'ok)])
     (lambda (op)
-      (cond ((equal? op 'variables) variables)
-            ((equal? op 'values) values)
+      (cond ((equal? op 'bindings) bindings)
             ((equal? op 'add-binding!) add-binding!)
             (:else (error 'invalid-op "unknown operation -- FRAME"))))))
-(defun frame-variables (frame) (frame 'variables))
-(defun frame-values (frame) (frame 'variables))
+(defun frame-bindings (frame) (frame 'bindings))
 (defun add-binding-to-frame! (variable value frame)
-  (funcall (frame 'add-binding!) variable value))
+  (funcall (funcall frame 'add-binding!) variable value))
+
+(defun frame-locate-binding (frame var proc-found proc-not-found)
+  (labels ([scan (bindings)
+              (cond
+                ((nil? bindings)
+                  (funcall proc-not-found))
+                ((equal? var (bound-variable (car bindings)))
+                  (funcall proc-found bindings))
+                (:else
+                  (scan (cdr bindings))))])
+    (scan (frame-bindings frame))))
+
+(set 'primitive-procedures
+     (list (list 'car car)
+           (list 'cdr cdr)
+           (list 'cons cons)
+           (list 'nil? nil?)))
+
+(defun primitive-procedure-names ()
+  (cons-map 'car primitive-procedures))
+(defun primitive-procedure-objects ()
+  (cons-map
+       (lambda (proc) (list 'primitive (cadr proc)))
+       primitive-procedures))
+
+(defun primitive-procedure? (proc)
+  (tagged-list? proc 'primitive))
+
+(defun primitive-implementation (proc)
+  (cadr proc))
+
+(defun apply-primitive-procedure (proc args)
+  (let ([argv (vector)])
+    (labels ([push-cons (x)
+                (if (nil? x)
+                  nil
+                  (progn
+                    (set! argv (append! argv (car x)))
+                    (push-cons (cdr x))))])
+      (push-cons args)
+      (lisp:apply (primitive-implementation proc)
+              (map 'list identity argv)))))
+
+(defun setup-environment ()
+  (let ([initial-env (extend-environment (primitive-procedure-names)
+                                         (primitive-procedure-objects)
+                                         the-empty-environment)])
+    (define-variable! 'true true initial-env)
+    (define-variable! 'false false initial-env)
+    initial-env))
+
+(set 'the-global-environment (setup-environment))
+
+; note: standard quoted-list syntax '(a b c) does not work here because we are
+; using a custom cons to form linked lists.
+(assert= 3 (eval 3 the-global-environment))
+(assert-equal 'ok (eval (list 'define 'x 1) the-global-environment))
+(assert= 1 (eval 'x the-global-environment))
+(assert= 1 (eval (list 'if (list 'nil? 'x) 2 'x) the-global-environment))
