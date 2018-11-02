@@ -56,8 +56,7 @@ func (pkg *Package) Get(k *LVal) *LVal {
 }
 
 func (pkg *Package) get(k *LVal) *LVal {
-	// LQSymbols are allowed...
-	if k.Type != LSymbol && k.Type != LQSymbol {
+	if k.Type != LSymbol {
 		return Nil()
 	}
 	if k.Str == TrueSymbol {
@@ -111,7 +110,7 @@ func (pkg *Package) GetFunName(fid string) string {
 
 // Put takes an LSymbol k and binds it to v in pkg.
 func (pkg *Package) Put(k, v *LVal) *LVal {
-	if k.Type != LSymbol && k.Type != LQSymbol {
+	if k.Type != LSymbol {
 		return Errorf("key is not a symbol: %v", k.Type)
 	}
 	if k.Str == TrueSymbol || k.Str == FalseSymbol {
@@ -124,7 +123,7 @@ func (pkg *Package) Put(k, v *LVal) *LVal {
 // Update takes an LSymbol k and updates the binding of k in pkg so that k is
 // bound v.  If k is not bound in package an error is returned.
 func (pkg *Package) Update(k, v *LVal) *LVal {
-	if k.Type != LSymbol && k.Type != LQSymbol {
+	if k.Type != LSymbol {
 		return Errorf("key is not a symbol: %v", k.Type)
 	}
 	if k.Str == TrueSymbol || k.Str == FalseSymbol {

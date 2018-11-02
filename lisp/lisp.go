@@ -34,7 +34,6 @@ const (
 	// LSymbol values store a string representation of the symbol in the
 	// LVal.Str field.
 	LSymbol
-	LQSymbol // TODO:  Remove this... I can't believe it actually has usages
 	// LSExpr values are "list" values in lisp and store their values in
 	// LVal.Cells.
 	LSExpr
@@ -98,7 +97,6 @@ var lvalTypeStrings = []string{
 	LFloat:         "float",
 	LError:         "error",
 	LSymbol:        "symbol",
-	LQSymbol:       "qsymbol",
 	LSExpr:         "list",
 	LFun:           "function",
 	LQuote:         "quote",
@@ -251,15 +249,6 @@ func Symbol(s string) *LVal {
 	return &LVal{
 		Source: nativeSource(),
 		Type:   LSymbol,
-		Str:    s,
-	}
-}
-
-// QSymbol returns an LVal resprenting the quoted symbol
-func QSymbol(s string) *LVal {
-	return &LVal{
-		Source: nativeSource(),
-		Type:   LQSymbol,
 		Str:    s,
 	}
 }
