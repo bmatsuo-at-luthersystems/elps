@@ -68,7 +68,7 @@
 
 (defun eval (exp env)
   (cond ((self-evaluating? exp) exp)
-        ((variable? exp) (trace (lookup-variable-value exp env)))
+        ((variable? exp) (lookup-variable-value exp env))
         ((quoted? exp) (text-of-quotation exp))
         ((assignment? exp) (eval-assignment exp env))
         ((definition? exp) (eval-definition exp env))
@@ -98,6 +98,24 @@
         (:else (error 'invalid-procedure
                       "unrecognized procedure type -- APPLY" procedure))))
 
+(defun analyze-application (exp)
+  (let ([get-proc (analyze (operator exp))]
+        [arg-procs (cons-map 'analyze (operands exp))])
+    (lambda (env)
+      (execute-application (funcall get-proc env)
+                           (cons-map (lambda (arg-proc) (funcall arg-proc env))
+                                     arg-procs)))))
+
+(defun execute-application (proc args)
+  (cond ((primitive-procedure? proc)
+          (apply-primitive-procedure proc args))
+        ((compond-procedure? proc)
+          (funcall (procedure-body proc)
+                   (extend-environment (procedure-parameters proc)
+                                       args
+                                       (procedure-environment proc))))
+    (:else (error 'invalid-procedure "unrecognized procedure type -- EXECUTE-APPLICATION"))))
+
 (defun list-of-values (exps env)
   (if (no-operands? exps)
     '()
@@ -109,10 +127,34 @@
     (eval (if-consequent exp) env)
     (eval (if-alternative exp) env)))
 
+(defun analyze-if (exp)
+  (let ([predicate (analyze (if-predicate exp))]
+        [consequent (analyze (if-consequent exp))]
+        [alternative (analyze (if-alternative exp))])
+    (lambda (env)
+      (if (true? (funcall predicate env))
+        (funcall consequent env)
+        (funcall alternative env)))))
+
 (defun eval-sequence (exps env)
   (cond ((last-exp? exps) (eval (first-exp exps) env))
         (:else (eval (first-exp exps) env)
                (eval-sequence (rest-exps exps) env))))
+
+(defun analyze-sequence (exps)
+  (labels ([in-sequence (proc1 proc2)
+              (lambda (env)
+                (funcall proc1 env)
+                (funcall proc2 env))]
+           [loop (first-proc rem-procs)
+              (if (nil? rem-procs)
+                first-proc
+                (loop (in-sequence fisrt-proc (car rem-procs))
+                      (cdr rem-procs)))])
+    (let ([procs (cons-map analyze procs)])
+      (if (nil? procs)
+        (error 'empty-sequence "empty sequnce -- ANALYZE")
+        (loop (car procs) (cdr procs))))))
 
 (defun eval-assignment (exp env)
   (set-variable-value! (assignment-variable exp)
@@ -120,11 +162,25 @@
                        env)
   'ok)
 
+(defun analyze-assignment (exp)
+  (let ([var (assignment-variable exp)]
+        [val-fun (analyze (assignment-value exp))])
+    (lambda (env)
+      (set-variable-value var (funcall val-fun))
+      'ok)))
+
 (defun eval-definition (exp env)
   (define-variable! (definition-variable exp)
                     (eval (definition-value exp) env)
                     env)
   'ok)
+
+(defun analyze-definition (exp)
+  (let ([var (definition-variable exp)]
+        [val-fun (analyze (definition-value exp))])
+    (lambda (env)
+      (define-variable! var (funcall val-fun env) env)
+      'ok)))
 
 (defun self-evaluating? (exp)
   (cond ((number? exp) true)
@@ -219,6 +275,11 @@
 
 (defun make-procedure (parameters body env)
   (list 'procedure parameters body env))
+
+(defun analyze-lambda (exp)
+  (let ([vars       (lambda-parameters exp)]
+        [body-proc  (analyze-sequence (lambda-body exp))])
+    (lambda (env) (make-procedure vars body-proc env))))
 
 (defun compound-procedure? (p)
   (tagged-list? p 'procedure))
@@ -345,6 +406,27 @@
 
 ; note: standard quoted-list syntax '(a b c) does not work here because we are
 ; using a custom cons to form linked lists.
+(assert= 3 (eval 3 the-global-environment))
+(assert-equal 'ok (eval (list 'define 'x 1) the-global-environment))
+(assert= 1 (eval 'x the-global-environment))
+(assert= 1 (eval (list 'if (list 'nil? 'x) 2 'x) the-global-environment))
+
+(defun analyze (exp)
+  (cond ((self-evaluating? exp) (lambda (env) exp))
+        ((variable? exp)        (lambda (env) (lookup-variable-value exp env)))
+        ((quoted? exp)          (lambda (env) (text-of-quotation exp)))
+        ((assignment? exp)      (analyze-assignment exp))
+        ((definition? exp)      (analyze-definition exp))
+        ((if? exp)              (analyze-if exp))
+        ((lambda? exp)          (analyze-lambda exp))
+        ((begin? exp)           (analyze-sequence (begin-actions exp)))
+        ((application? exp)     (analyze-application exp))
+        (:else (error 'unrecognized-expression "invalid expression -- ANALYZE"))))
+
+; shadow the previously defined `eval`.
+(defun eval (exp env)
+  (funcall (analyze exp) env))
+
 (assert= 3 (eval 3 the-global-environment))
 (assert-equal 'ok (eval (list 'define 'x 1) the-global-environment))
 (assert= 1 (eval 'x the-global-environment))
