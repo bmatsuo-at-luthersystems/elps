@@ -2,24 +2,56 @@
 
 (use-package 'testing)
 
+(defmacro send (receiver message &rest args)
+  (quasiquote (funcall (funcall (unquote receiver)
+                                (unquote message))
+                       (unquote-splicing args))))
+
 ; well... it looks like we want linked lists after all...
 (set 'nil '())
 (defun cons (a b)
   (labels ([set-car! (x) (set! a x)]
-           [set-cdr! (x) (set! b x)])
+           [set-cdr! (x) (set! b x)]
+           [string-internal ()
+                            (let ([a (cond ((nil? a) "()")
+                                           ((list? a) (send (lisp:nth a 1) 'string))
+                                           (:else a))])
+                              (cond ((nil? b) (format-string "{}" a))
+                                    ((list? b) (format-string "{} {}" a (send (lisp:nth b 1) 'string-internal)))
+                                    (:else (format-string "{} . {}" a b))))]
+           [string () (format-string "({})" (string-internal))])
   (lisp:list 'cons
              (lambda (op)
-               (cond ((equal? op 'car) a)
-                     ((equal? op 'cdr) b)
+               (cond ((equal? op 'car) (lambda () a))
+                     ((equal? op 'cdr) (lambda () b))
                      ((equal? op 'set-car!) set-car!)
                      ((equal? op 'set-cdr!) set-cdr!)
+                     ((equal? op 'string) string)
+                     ((equal? op 'string-internal) string-internal)
                      (:else (error 'invalid-operator "invalid operator -- CONS" op)))))))
 
-(defun car (pair) (funcall (lisp:nth pair 1) 'car)) ; first
-(defun cdr (pair) (funcall (lisp:nth pair 1) 'cdr))
-(defun set-car! (pair a) (funcall (funcall (lisp:nth pair 1) 'set-car!) a))
-(defun set-cdr! (pair b) (funcall (funcall (lisp:nth pair 1) 'set-cdr!) b))
+(defun format-cons (pair) (send (lisp:nth pair 1) 'string))
+(defun car (pair) (send (lisp:nth pair 1) 'car)) ; first
+(defun cdr (pair) (send (lisp:nth pair 1) 'cdr))
+(defun set-car! (pair a) (send (lisp:nth pair 1) 'set-car! a))
+(defun set-cdr! (pair b) (send (lisp:nth pair 1) 'set-cdr! b))
 
+(defun inspect (x)
+  (cond ((nil? x) (format-string "{}" ()))
+        ((list? x) (send (lisp:nth x 1) 'string))
+        (:else (format-string "{}" x))))
+
+(defun make-lisp-list (pair)
+  (let ([v (vector)])
+    (labels ( [make (pair)
+                  (cond ((nil? pair) v)
+                        ((list? (cdr pair))
+                          (append! v (car pair))
+                          (make (cdr pair)))
+                        (:else
+                          (append! v (car pair))
+                          (append! v (cdr pair))))])
+      (lisp:map 'list identity (make pair)))))
 (defun list? (val)
   (cond ((nil? val) true)
         ((lisp:list? val)
@@ -33,6 +65,16 @@
   (if (nil? xs)
     nil
     (cons (lisp:car xs) (lisp:apply list (lisp:cdr xs))))) ; inefficient w/o slicing
+(defun tree (&rest xs)
+  (lisp:apply list (map 'list
+                        (lambda (x)
+                          (cond ((nil? x) nil)
+                                ((lisp:list? x) (lisp:apply tree x))
+                                (:else x)))
+                        xs)))
+(defmacro qcons (&rest xs)
+  (let ([lis (lisp:apply tree xs)])
+    (quasiquote (lisp:list (unquote-splicing lis)))))
 
 (defun cons-for-each (proc pair)
   (if (nil? pair)
@@ -44,6 +86,7 @@
     nil
     (cons (funcall proc (car pair))
           (cons-map proc (cdr pair)))))
+
 (defun cons-debug (pair &optional prefix)
   (cond ((nil? pair) nil)
         ((list? (car pair))
@@ -55,6 +98,11 @@
             (debug-print prefix (car pair))
             (debug-print "" (car pair)))
           (cons-debug (cdr pair) prefix))))
+(defun assoc-get (pair key)
+  (let ([item (car pair)])
+    (if (equal? key (car item))
+      item
+      (assoc-get (cdr pair)))))
 
 (defun cadr (pair) (car (cdr pair))) ; second
 (defun caadr (pair) (car (car (cdr pair))))
@@ -63,6 +111,9 @@
 (defun caddr (pair) (car (cdr (cdr pair)))) ; third
 (defun cadddr (pair) (car (cdr (cdr (cdr pair))))) ; fourth
 
+(assert-equal '+ (car (car (qcons (+ 1 1) abc x))))
+(assert-equal 'abc (cadr (car (cdr (qcons (+ 1 1) (1 abc) x)))))
+
 (defun cons-length (pair &optional prefix-length)
   (if (nil? pair)
     (if (nil? prefix-length) 0 prefix-length)
@@ -70,6 +121,7 @@
 
 (assert= 4 (cons-length (list 1 1 1 1)))
 (assert= 4 (cadr (cons-map #^(* % %) (list 1 2 3 4))))
+(debug-print (format-cons (qcons (+ 1 1) (1 abc) x)))
 
 (defun eval (exp env)
   (cond ((self-evaluating? exp) exp)
@@ -88,7 +140,7 @@
           (apply (eval (operator exp) env)
                  (list-of-values (operands exp) env)))
         (:else (error 'invalid-expression
-                      "unrecognized expression type -- EVAL" exp))))
+                      "unrecognized expression type -- EVAL" (inspect exp)))))
 
 (defun apply (procedure arguments)
   (cond ((primitive-procedure? procedure)
@@ -101,7 +153,7 @@
               arguments
               (procedure-environment procedure))))
         (:else (error 'invalid-procedure
-                      "unrecognized procedure type -- APPLY" procedure))))
+                      "unrecognized procedure type -- APPLY" (inspect procedure)))))
 
 (defun analyze-application (exp)
   (let ([get-proc (analyze (operator exp))]
@@ -355,7 +407,7 @@
             (:else (error 'invalid-op "unknown operation -- FRAME"))))))
 (defun frame-bindings (frame) (frame 'bindings))
 (defun add-binding-to-frame! (variable value frame)
-  (funcall (funcall frame 'add-binding!) variable value))
+  (send frame 'add-binding! variable value))
 
 (defun frame-locate-binding (frame var proc-found proc-not-found)
   (labels ([scan (bindings)
@@ -430,7 +482,7 @@
 
 ; shadow the previously defined `eval`.
 (defun eval (exp env)
-  (funcall (analyze exp) env))
+  (send analyze exp env))
 
 (assert= 3 (eval 3 the-global-environment))
 (assert-equal 'ok (eval (list 'define 'x 1) the-global-environment))
@@ -442,17 +494,17 @@
 (defun make-register (register-name)
   (let ([contents 'UNASSIGNED])
     (labels ([get () contents]
-             [set (value) (set! contents value)]
+             [put! (value) (set! contents value)]
              [dispatch (sym) (cond ((equal? sym 'get) get)
-                                   ((equal? sym 'put) set)
+                                   ((equal? sym 'put!) put!)
                                    (:else (error 'invalid-message sym)))])
       dispatch)))
 
 (defun get-contents (register)
-  (funcall (register 'get)))
+  (send register 'get))
 
 (defun set-contents! (register value)
-  (funcall (register 'set) value))
+  (send register 'put! value))
 
 ; stacks
 
@@ -471,32 +523,32 @@
              [dispatch (message) (cond ((equal? message 'push) push)
                                        ((equal? message 'pop) pop)
                                        ((equal? message 'initialize) initialize)
-                                       (:else (error 'invalid-message message)))]])
+                                       (:else (error 'invalid-message message)))])
       dispatch)))
 
 (defun push! (stack x)
-  (funcall (stack 'push) x))
+  (send stack 'push x))
 
 (defun pop! (stack x)
-  (funcall (stack 'pop) x))
+  (send stack 'pop x))
 
 ; machines
 
 (defun make-machine (register-names ops controller)
   (let ([machine (make-new-machine)])
     (cons-for-each (lambda (register-name)
-                     (funcall (machine 'allocate-register) register-name))
+                     (send machine 'allocate-register! register-name))
                    register-names)
-    (funcall (machine 'install-operations) ops)
-    (funcall (machine 'install-instruction-sequence)
-             (assemble controller machine))
+    (send machine 'install-operations! ops)
+    (send machine 'install-instruction-sequence!
+          (assemble controller machine))
     machine))
 
 (defun start! (machine)
-  (funcall (machine 'start)))
+  (send machine 'start!))
 
-(defun get-register (machine)
-  (funcall (machine 'get-register)))
+(defun get-register (machine register-name)
+  (send machine 'get-register register-name))
 
 (defun get-register-contents (machine register-name)
   (get-contents (get-register machine register-name)))
@@ -509,7 +561,7 @@
         [flag (make-register 'flag)]
         [stack (make-stack)]
         [instruction-sequence nil])
-    (let ([ops (sorted-map 'initialize-stack (lambda () (funcall (stack 'initialize))))]
+    (let ([ops (sorted-map 'initialize-stack (lambda () (send stack 'initialize)))]
           [register-table (sorted-map 'pc pc
                                       'flag flag)])
       (labels ([allocate-register! (name)
@@ -544,3 +596,240 @@
                         ((equal? msg 'operations) (lambda () ops))
                         (:else (error 'invalid-message msg)))])
         dispatch))))
+
+(defun update-insts! (insts labels machine)
+  (let ([pc (get-register machine 'pc)]
+        [flag (get-register machine 'flag)]
+        [stack (send machine 'stack)]
+        [ops (send machine 'operations)])
+    (cons-for-each (lambda (inst)
+                     (let ([proc (make-execution-procedure (instruction-text inst)
+                                                           labels
+                                                           machine
+                                                           pc
+                                                           flag
+                                                           stack
+                                                           ops)])
+                       (set-instruction-execution-proc! inst proc)))
+                   insts)))
+
+; assembler
+
+(defun assemble (controller-definition machine)
+  (extract-labels controller-definition
+                  (lambda (insts labels)
+                    (update-insts! insts labels machine)
+                    insts)))
+
+(defun extract-labels (text receive)
+  (if (nil? text)
+    (funcall receive nil (make-jumptable))
+    (extract-labels (cdr text)
+                    (lambda (insts labels)
+                      (let ([next-inst (car text)])
+                        (if (symbol? next-inst)
+                          (progn
+                            (send labels 'insert! next-inst insts)
+                            (receive insts labels))
+                          (receive (cons (make-instruction next-inst)
+                                         insts)
+                                   labels)))))))
+
+; instruction
+
+(defun make-instruction (text)
+  (cons text '()))
+
+(defun instruction-text (inst)
+  (car inst))
+
+(defun instruction-execution-proc (inst)
+  (cdr inst))
+
+(defun set-instruction-execution-proc! (inst proc)
+  (set-cdr! inst proc))
+
+; label
+
+(defun make-jumptable ()
+  (let ([table (sorted-map)])
+    (labels ([insert! (label-name insts)
+                (if (key? table label-name)
+                  (error 'duplicate-label-definition label-name)
+                  (assoc! table label-name insts))]
+             [lookup (label-name)
+                (if (key? table label-name)
+                  (get table label-name)
+                  (error 'unknown-label label-name))]
+             [dispatch (msg)
+                (cond ((equal? msg 'lookup) lookup)
+                      ((equal? msg 'insert!) insert!)
+                      (:else (error 'invalid-message msg)))])
+      dispatch)))
+
+(defun make-execution-procedure (inst labels machine pc flag stack ops)
+  (cond ((equal? (car inst) 'assign)
+         (make-assign inst machine labels ops pc))
+        ((equal? (car inst) 'test)
+         (make-test inst machine labels ops flag pc))
+        ((equal? (car inst) 'branch)
+         (make-branch inst machine labels flag pc))
+        ((equal? (car inst) 'goto)
+         (make-goto inst machine labels pc))
+        ((equal? (car inst) 'save)
+         (make-save inst machine stack pc))
+        ((equal? (car inst) 'restore)
+         (make-restore inst machine stack pc))
+        ((equal? (car inst) 'perform)
+         (make-perform inst machine labels ops pc))
+        (:else (error 'unknown-instruction-type (inspect inst)))))
+
+(defun advance-pc! (pc)
+  (set-contents! pc (cdr (get-contents pc))))
+
+(defun make-assign (inst machine labels operations pc)
+  (let ([target (get-register machine (assign-reg-name inst))]
+        [value-exp (assign-value-exp inst)])
+    (let ([value-proc
+            (if (operation-exp? value-exp)
+              (make-operation-exp value-exp machine labels operations)
+              (make-primitive-exp (car value-exp) machine labels))])
+      (lambda ()
+        (set-contents! target (funcall value-proc))
+        (advance-pc! pc)))))
+
+(defun assign-reg-name (assign-instruction)
+  (cadr assign-instruction))
+
+(defun assign-value-exp (assign-instruction)
+  (cddr assign-instruction))
+
+(defun make-test (inst machine labels operations flag pc)
+  (let ([condition (test-condition inst)])
+    (if (operation-exp? condition)
+      (let ([condition-proc (make-operation-exp condition machine labels operations)])
+        (lambda ()
+          (set-contents! flag (funcall condition-proc))
+          (advance-pc! pc)))
+      (error 'bad-test-instruction (inspect inst)))))
+
+(defun test-condition (test-instruction)
+  (cdr test-instruction))
+
+(defun make-branch (inst machine labels flag pc)
+  (let ([dest (branch-dest inst)])
+    (if (label-exp? dest)
+      (let ([insts (send labels 'lookup (label-exp-label dest))])
+        (lambda ()
+          (if (get-contents flag)
+            (set-contents! pc insts)
+            (advance-pc! pc))))
+      (error 'bad-branch-instruction (inspect inst)))))
+
+(defun branch-dest (branch-instruction)
+  (cadr branch-instruction))
+
+(defun make-goto (inst machine labels pc)
+  (let ([dest (goto-dest inst)])
+    (cond ((label-exp? dest)
+           (let ([insts (send labels 'lookup (label-exp-label dest))])
+             (lambda () (set-contents! pc insts))))
+          ((register-exp? dest)
+           (let ([reg (get-register machine (register-exp-reg dest))])
+             (lambda () (set-contents! pc (get-contents reg)))))
+          (:else (error 'bad-goto-instruction (inspect inst))))))
+
+(defun goto-dest (goto-instruction)
+  (cadr goto-instruction))
+
+(defun make-save (inst machine stack pc)
+  (let ([reg (get-register machine (stack-inst-reg-name inst))])
+    (lambda ()
+      (push! stack (get-contents reg))
+      (advance-pc! pc))))
+
+(defun make-restore (inst machine stack pc)
+  (let ([reg (get-register machine (stack-inst-reg-name inst))])
+    (lambda ()
+      (set-contents! reg (pop! stack))
+      (advance-pc! pc))))
+
+(defun stack-inst-reg-name (stack-instruction)
+  (cadr stack-instruction))
+
+(defun make-perform (inst machine labels operations pc)
+  (let ([action (perform-action inst)])
+    (if (operation-exp? action)
+      (let ([action-proc (make-operation-exp action machine labels operations)])
+        (lambda ()
+          (funcall action-proc)
+          (advance-pc! pc)))
+      (error 'bad-perform-instruction (inspect inst)))))
+
+(defun perform-action (perform-instruction)
+  (cdr perform-instruction))
+
+(defun make-primitive-exp (exp machine labels)
+  (cond ((constant-exp? exp)
+         (let ([c (constant-exp-value exp)])
+           (lambda () c)))
+        ((label-exp? exp)
+         (let ([insts (send labels 'lookup (label-exp-label exp))])
+           (lambda () insts)))
+        ((register-exp? exp)
+         (let ([r (get-register machine (register-exp-reg exp))])
+           (lambda () (get-contents r))))
+        (:else (error 'unknown-expression-type (inspect exp)))))
+
+(defun register-exp? (exp) (tagged-list? exp 'reg))
+(defun register-exp-reg (exp) (cadr exp))
+(defun constant-exp? (exp) (tagged-list? exp 'const))
+(defun constant-exp-value (exp) (cadr exp))
+(defun label-exp? (exp) (tagged-list? exp 'label))
+(defun label-exp-label (exp) (cadr exp))
+
+(defun make-operation-exp (exp machine labels operations)
+  (let ([op (lookup-prim (operation-exp-op exp) operations)]
+        [aprocs (cons-map #^(make-primitive-exp % machine labels)
+                          (operation-exp-operands exp))])
+    (lambda ()
+      ; NOTE: The version of apply defined by the sicp in an earlier section
+      ; does not work with implementation of a machine
+      (lisp:apply op (make-lisp-list (cons-map funcall aprocs))))))
+
+(defun operation-exp? (exp)
+  (and (list? exp) (tagged-list? (car exp) 'op)))
+
+(defun operation-exp-op (operation-exp)
+  (cadr (car operation-exp)))
+
+(defun operation-exp-operands (operation-exp)
+  (cdr operation-exp))
+
+(defun lookup-prim (symbol operations)
+  (if (key? operations symbol)
+    (car (get operations symbol))
+    (error 'unknown-operation symbol)))
+
+(defun gcd-machine ()
+     (make-machine
+       (qcons a b t)
+       (list (list 'rem mod) (list '= =))
+       (qcons test-b
+              (test (op =) (reg b) (const 0))
+              (branch (label gcd-done))
+              (assign t (op rem) (reg a) (reg b))
+              (assign a (reg b))
+              (assign b (reg t))
+              (goto (label test-b))
+              gcd-done)))
+
+(defun gcd (a b)
+  (let ([gcd (gcd-machine)])
+    (set-register-contents! gcd 'a a)
+    (set-register-contents! gcd 'b b)
+    (start! gcd)
+    (get-register-contents gcd 'a)))
+
+(assert= 10 (gcd 40 630))
+(assert= 5 (gcd 735 635))
