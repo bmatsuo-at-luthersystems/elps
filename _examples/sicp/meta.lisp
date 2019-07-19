@@ -30,11 +30,50 @@
                      ((equal? op 'string-internal) string-internal)
                      (:else (error 'invalid-operator "invalid operator -- CONS" op)))))))
 
+(defun format-value (x)
+  (cond ((nil? x) "'()")
+        ((list? x) (format-cons x))
+        (:else (format-string "{}" x))))
+
+(defun equal-cons? (a b)
+  (cond ((and (nil? a) (nil? b)) true)
+        ((and (list? a) (list? b))
+         (and (not (or (nil? a) (nil? b)))
+              (equal-cons? (car a) (car b))
+              (equal-cons? (cdr a) (cdr b))))
+        (:else (equal? a b))))
 (defun format-cons (pair) (send (lisp:nth pair 1) 'string))
 (defun car (pair) (send (lisp:nth pair 1) 'car)) ; first
 (defun cdr (pair) (send (lisp:nth pair 1) 'cdr))
 (defun set-car! (pair a) (send (lisp:nth pair 1) 'set-car! a))
 (defun set-cdr! (pair b) (send (lisp:nth pair 1) 'set-cdr! b))
+
+(defun drop-while (predicate lis)
+  (cond ((nil? lis) nil)
+        ((funcall predicate (car lis)) (drop-while (cdr lis)))
+        (:else lis)))
+
+(defun reject! (pred lis)
+  (cond ((nil? lis) '())
+        ((funcall pred (car lis)) (cdr lis))
+        (:else
+          (set-cdr! lis (reject! pred (cdr lis)))
+          lis)))
+
+(defun insert! (lis elem n skip)
+  (cond ((nil? lis) (error 'invalid-list "nil list"))
+        ((funcall skip (car lis))
+         (set-cdr! lis (insert! (cdr lis) elem n skip))
+         lis)
+        ((< 0 n)
+         (set-cdr! lis (insert! (cdr lis) elem (- n 1) skip))
+         lis)
+        ((= 0 n)
+         (let ([tail (cons (car lis) (cdr lis))])
+           (set-car! lis elem)
+           (set-cdr! lis tail)
+           lis))
+        (:else (error 'invalid-index n))))
 
 (defun inspect (x)
   (cond ((nil? x) (format-string "{}" ()))
@@ -492,11 +531,20 @@
 ; registers
 
 (defun make-register (register-name)
-  (let ([contents 'UNASSIGNED])
+  (let ([contents 'UNASSIGNED]
+        [tracing false])
     (labels ([get () contents]
-             [put! (value) (set! contents value)]
+             [put! (value)
+                (if tracing
+                  (debug-print 'register register-name (format-value contents) '-> (format-value value) )
+                  ())
+                (set! contents value)]
+             [trace-on! () (set! tracing true)]
+             [trace-off! () (set! tracing false)]
              [dispatch (sym) (cond ((equal? sym 'get) get)
                                    ((equal? sym 'put!) put!)
+                                   ((equal? sym 'trace-on!) trace-on!)
+                                   ((equal? sym 'trace-off!) trace-off!)
                                    (:else (error 'invalid-message sym)))])
       dispatch)))
 
@@ -509,28 +557,45 @@
 ; stacks
 
 (defun make-stack ()
-  (let ([s nil])
-    (labels ([push (x) (set! s (cons x s))]
+  (let ([s nil]
+        [num-pushes 0]
+        [max-depth 0]
+        [current-depth 0])
+    (labels ([push (x)
+               (set! s (cons x s))
+               (set! num-pushes (+ 1 num-pushes))
+               (set! current-depth (+ 1 current-depth))
+               (set! max-depth (max current-depth max-depth))]
              [pop ()
-                  (if (nil? s)
-                    (error 'empty-stack "pop called on an empty stack")
-                    (let ([head (car s)])
-                      (set! s (cdr s))
-                      head))]
+               (if (nil? s)
+                 (error 'empty-stack "pop called on an empty stack")
+                 (let ([head (car s)])
+                   (set! s (cdr s))
+                   (set! current-depth (- current-depth 1))
+                   head))]
              [initialize ()
-                         (set! s nil)
-                         'done]
-             [dispatch (message) (cond ((equal? message 'push) push)
-                                       ((equal? message 'pop) pop)
-                                       ((equal? message 'initialize) initialize)
-                                       (:else (error 'invalid-message message)))])
+               (set! s nil)
+               (set! num-pushes 0)
+               (set! max-depth 0)
+               (set! current-depth 0)
+               'done]
+             [print-statistics ()
+               (debug-print)
+               (debug-print 'total-pushes '= num-pushes)
+               (debug-print 'maximum-depth '= max-depth)]
+             [dispatch (message)
+               (cond ((equal? message 'push) push)
+                     ((equal? message 'pop) pop)
+                     ((equal? message 'initialize) initialize)
+                     ((equal? message 'print-statistics) print-statistics)
+                     (:else (error 'invalid-message message)))])
       dispatch)))
 
 (defun push! (stack x)
   (send stack 'push x))
 
-(defun pop! (stack x)
-  (send stack 'pop x))
+(defun pop! (stack)
+  (send stack 'pop))
 
 ; machines
 
@@ -544,8 +609,26 @@
           (assemble controller machine))
     machine))
 
+(defun install-breakpoint! (machine label n)
+  (send machine 'install-breakpoint! label n))
+
+(defun cancel-breakpoint! (machine label n)
+  (send machine 'cancel-breakpoint! label n))
+
+(defun cancel-all-breakpoints! (machine label n)
+  (send machine 'cancel-all-breakpoints! label n))
+
 (defun start! (machine)
   (send machine 'start!))
+
+(defun proceed-machine! (machine)
+  (send machine 'proceed!))
+
+(defun trace-on! (machine)
+  (send machine 'trace-on!))
+
+(defun trace-off! (machine)
+  (send machine 'trace-on!))
 
 (defun get-register (machine register-name)
   (send machine 'get-register register-name))
@@ -556,12 +639,29 @@
 (defun set-register-contents! (machine register-name value)
   (set-contents! (get-register machine register-name) value))
 
+(defun trace-on-register! (machine register-name)
+  (send (get-register machine register-name) 'trace-on!))
+
+(defun trace-off-register! (machine register-name)
+  (send (get-register machine register-name) 'trace-off!))
+
 (defun make-new-machine ()
   (let ([pc (make-register 'pc)]
         [flag (make-register 'flag)]
+        [ca (make-register 'ca)]
+        [cd (make-register 'cd)]
         [stack (make-stack)]
-        [instruction-sequence nil])
-    (let ([ops (sorted-map 'initialize-stack (lambda () (send stack 'initialize)))]
+        [instruction-sequence nil]
+        [instruction-execution-count 0]
+        [break false]
+        [tracing false])
+
+    (let ([ops (sorted-map 'initialize-stack! (lambda () (send stack 'initialize))
+                           'print-stack-statistics (lambda () (send stack 'print-statistics))
+                           'print-execution-statistics (lambda ()
+                                                         (debug-print)
+                                                         (debug-print 'instructions-executed '=
+                                                                      instruction-execution-count)))]
           [register-table (sorted-map 'pc pc
                                       'flag flag)])
       (labels ([allocate-register! (name)
@@ -574,26 +674,86 @@
                [install-instructions! (seq)
                   (set! instruction-sequence seq)]
                [install-operations! (pairs)
-                  (cons-for-each (lambda (pair) (assoc! ops (car pair) (cdr pair)))
+                  (cons-for-each (lambda (pair) (assoc! ops (car pair) (cadr pair)))
                                  pairs)]
+               [install-breakpoint! (label n)
+                  (if (<= n 0)
+                    (error 'invalid-breakpoint-offset n)
+                    (let ([pos (drop-while (lambda (inst) (not (equal? label (instruction-text inst))))
+                                           instruction-sequence)])
+                      (if (nil? pos)
+                        (error 'label-does-not-exist label)
+                        (let ([inst (make-phony-instruction (list 'break label n))]
+                              [execution-proc (lambda ()
+                                                (set! break true)
+                                                (advance-pc! pc))])
+                          (set-instruction-execution-proc! inst execution-proc)
+                          (insert! pos inst n phony-instruction?)))))]
+               [cancel-breakpoint! (label n)
+                  (reject! (lambda (inst) (equal-cons? (instruction-text inst)
+                                                       (list 'break label n)))
+                           instruction-sequence)]
+               [cancel-all-breakpoints! ()
+                  (reject! (lambda (inst)
+                             (let ([text (instruction-text inst)])
+                               (and (list? text)
+                                    (equal? 'break (car text)))))
+                           instruction-sequence)]
+               [proceed! ()
+                  (if break
+                    (progn
+                      (set! break false)
+                      (execute!))
+                    (error 'no-break "machine is idle"))]
                [start! ()
+                  (reset-execution-statistics!)
                   (set-contents! pc instruction-sequence)
                   (execute!)]
+               [trace-instruction (inst)
+                  (let ([text (instruction-text inst)])
+                    (if (list? text)
+                      (debug-print (format-cons text))
+                      (debug-print text)))]
                [execute! ()
                   (let ([insts (get-contents pc)])
                     (if (nil? insts)
                       'done
-                      (progn
-                        (funcall (instruction-execution-proc (car insts)))
-                        (execute!))))]
+                      (let* ([inst (car insts)]
+                             [proc (instruction-execution-proc inst)])
+                        (if tracing (trace-instruction inst) ())
+                        (if proc
+                          (progn
+                            (funcall (instruction-execution-proc inst))
+                            (set! instruction-execution-count (+ 1 instruction-execution-count)))
+                          (advance-pc! pc)) ; pseudo-instructions can't otherwise advance the pc.
+                        (if break
+                          'break
+                          (execute!)))))]
+               [print-execution-statistics ()
+                  (debug-print)
+                  (debug-print 'instructions-executed '= instruction-execution-count)]
+               [reset-execution-statistics! ()
+                  (set! instruction-execution-count 0)]
+               [trace-on! ()
+                  (set! tracing true)]
+               [trace-off! ()
+                  (set! tracing false)]
                [dispatch (msg)
                   (cond ((equal? msg 'start!) start!)
+                        ((equal? msg 'proceed!) proceed!)
                         ((equal? msg 'install-instruction-sequence!) install-instructions!)
                         ((equal? msg 'install-operations!) install-operations!)
+                        ((equal? msg 'install-breakpoint!) install-breakpoint!)
+                        ((equal? msg 'cancel-breakpoint!) cancel-breakpoint!)
+                        ((equal? msg 'cancel-all-breakpoints!) cancel-all-breakpoints!)
                         ((equal? msg 'allocate-register!) allocate-register!)
                         ((equal? msg 'get-register) lookup-register)
                         ((equal? msg 'stack) (lambda () stack))
                         ((equal? msg 'operations) (lambda () ops))
+                        ((equal? msg 'print-execution-statistics) print-execution-statistics)
+                        ((equal? msg 'reset-execution-statistics!) reset-execution-statistics!)
+                        ((equal? msg 'trace-on!) trace-on!)
+                        ((equal? msg 'trace-off!) trace-off!)
                         (:else (error 'invalid-message msg)))])
         dispatch))))
 
@@ -626,28 +786,37 @@
     (funcall receive nil (make-jumptable))
     (extract-labels (cdr text)
                     (lambda (insts labels)
-                      (let ([next-inst (car text)])
+                      (let* ([next-inst (car text)]
+                             [insts (cons (make-instruction next-inst) insts)])
                         (if (symbol? next-inst)
-                          (progn
-                            (send labels 'insert! next-inst insts)
-                            (receive insts labels))
-                          (receive (cons (make-instruction next-inst)
-                                         insts)
-                                   labels)))))))
+                            (progn
+                              (set-instruction-phony! (car insts))
+                              (send labels 'insert! next-inst insts))
+                            ())
+                        (receive insts labels))))))
 
 ; instruction
 
 (defun make-instruction (text)
-  (cons text '()))
+  (list text false))
+
+(defun make-phony-instruction (text)
+  (list text true))
 
 (defun instruction-text (inst)
   (car inst))
 
 (defun instruction-execution-proc (inst)
-  (cdr inst))
+  (cddr inst))
+
+(defun phony-instruction? (inst)
+  (cadr inst))
+
+(defun set-instruction-phony! (inst)
+  (set-car! (cdr inst) true))
 
 (defun set-instruction-execution-proc! (inst proc)
-  (set-cdr! inst proc))
+  (set-cdr! (cdr inst) proc))
 
 ; label
 
@@ -668,7 +837,8 @@
       dispatch)))
 
 (defun make-execution-procedure (inst labels machine pc flag stack ops)
-  (cond ((equal? (car inst) 'assign)
+  (cond ((symbol? inst) nil) ; labels are noop pseudo-instructions used only for tracing
+        ((equal? (car inst) 'assign)
          (make-assign inst machine labels ops pc))
         ((equal? (car inst) 'test)
          (make-test inst machine labels ops flag pc))
@@ -808,7 +978,7 @@
 
 (defun lookup-prim (symbol operations)
   (if (key? operations symbol)
-    (car (get operations symbol))
+    (get operations symbol)
     (error 'unknown-operation symbol)))
 
 (defun gcd-machine ()
@@ -833,3 +1003,56 @@
 
 (assert= 10 (gcd 40 630))
 (assert= 5 (gcd 735 635))
+
+(defun factorial-machine ()
+  (make-machine
+    (qcons n val continue)
+    (list (list '= =) (list '- -) (list '* *))
+    (qcons (assign continue (label fact-done))
+           fact-loop
+           (test (op =) (reg n) (const 1))
+           (branch (label base-case))
+           (save continue)
+           (save n)
+           (assign n (op -) (reg n) (const 1))
+           (assign continue (label after-fact))
+           (goto (label fact-loop))
+           after-fact
+           (restore n)
+           (restore continue)
+           (assign val (op *) (reg n) (reg val))
+           (goto (reg continue))
+           base-case
+           (assign val (const 1))
+           (goto (reg continue))
+           fact-done
+           (perform (op print-stack-statistics))
+           (perform (op print-execution-statistics)))))
+
+(defun factorial (n)
+  (let ([fact (factorial-machine)])
+    (set-register-contents! fact 'n n)
+    (start! fact)
+    (get-register-contents fact 'val)))
+
+(assert= 6 (factorial 3))
+(assert= 120 (factorial 5))
+(assert= 5040 (factorial 7))
+(assert= 1 (factorial 1))
+
+(let ([gcd (gcd-machine)])
+  (set-register-contents! gcd 'a 15)
+  (set-register-contents! gcd 'b 9)
+  (trace-on! gcd)
+  (install-breakpoint! gcd 'test-b 4)
+  (debug-print (start! gcd))
+  (debug-print (get-register-contents gcd 'a))
+  (cancel-breakpoint! gcd 'test-b 4)
+  (debug-print (proceed-machine! gcd))
+  (debug-print (get-register-contents gcd 'a)))
+
+(defun evaluator-machine ()
+  (make-machine
+    (qcons exp env val continue proc arg1 unev)
+    (list)
+    (qcons)))

@@ -66,6 +66,7 @@ var langBuiltins = []*langBuiltin{
 	{"first", Formals("seq"), builtinFirst},
 	{"second", Formals("seq"), builtinSecond},
 	{"nth", Formals("seq", "n"), builtinNth},
+	{"set-nth!", Formals("seq", "n", "value"), builtinSetNth},
 	{"map", Formals("type-specifier", "fn", "seq"), builtinMap},
 	{"foldl", Formals("fn", "z", "seq"), builtinFoldLeft},
 	{"foldr", Formals("fn", "z", "seq"), builtinFoldRight},
@@ -588,6 +589,25 @@ func builtinNth(env *LEnv, args *LVal) *LVal {
 		return Nil()
 	}
 	return cells[n.Int]
+}
+
+func builtinSetNth(env *LEnv, args *LVal) *LVal {
+	list, n, value := args.Cells[0], args.Cells[1], args.Cells[2]
+	if !isSeq(list) {
+		return env.Errorf("first argument is not a proper sequence: %v", list.Type)
+	}
+	if n.Type != LInt {
+		return env.Errorf("second argument is not an integer: %v", n.Type)
+	}
+	if n.Int < 0 {
+		return env.Errorf("index cannot be negative: %d", n.Int)
+	}
+	cells := seqCells(list)
+	if len(cells) <= n.Int {
+		return Nil()
+	}
+	cells[n.Int] = value
+	return value
 }
 
 func builtinMap(env *LEnv, args *LVal) *LVal {
