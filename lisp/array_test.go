@@ -36,6 +36,16 @@ func TestArray(t *testing.T) {
 			{"(second (vector 1 2))", "2", ""},
 			{"(rest (vector 1 2))", "'(2)", ""},
 		}},
+		{"set-aref!", elpstest.TestSequence{
+			{`(set 'v (vector 1 2 3))`, `(vector 1 2 3)`, ``},
+			{`(set-aref! v 10 0)`, `()`, ``},
+			{`v`, `(vector 10 2 3)`, ``},
+			{`(set-aref! v 10 3)`, `test:1: lisp:set-aref!: <native code>: index 3 out of bounds for array dimenion 0 of '(3)`, ``},
+			{`(set-aref! v 10 -1)`, `test:1: lisp:set-aref!: <native code>: index is negative: -1`, ``},
+			{`v`, `(vector 10 2 3)`, ``},
+			{`(set-aref! v -1 1)`, `()`, ``},
+			{`v`, `(vector 10 -1 3)`, ``},
+		}},
 		{"append!", elpstest.TestSequence{
 			{"(set 'v (vector))", "(vector)", ""},
 			{"(append! v 1)", "(vector 1)", ""},

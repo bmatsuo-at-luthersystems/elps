@@ -1,6 +1,6 @@
 BIN=../elps
 
-EXAMPLES=$(shell find . -name '*.lisp')
+EXAMPLES=$(shell find . -path ./metacircular -prune -false -o -name '*.lisp')
 
 .PHONY: default
 default: all
@@ -22,6 +22,11 @@ all: ${EXAMPLES}
 test: ${EXAMPLES}
 ${EXAMPLES}: ${BIN}
 	${BIN} run $@
+
+.PHONY: meta
+test: meta
+meta: ${BIN}
+	${BIN} run ./metacircular/main.lisp
 
 .PHONY: ${BIN}
 ${BIN}:

@@ -75,3 +75,11 @@ func BenchmarkEnvFunCallVar(b *testing.B) {
 	  (dotimes (n 1000) (benchmark "a" "b" "c"))
 	`)
 }
+
+func BenchmarkEnvFact20(b *testing.B) {
+	elpstest.RunBenchmark(b, `
+		(set 'fact-tailrec (lambda (acc n) (if (< n 2) acc (fact-tailrec (* n acc) (- n 1)))))
+		(set 'fact (lambda (n) (fact-tailrec 1 n)))
+		(fact 20)
+	`)
+}

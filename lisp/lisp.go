@@ -702,6 +702,24 @@ func (v *LVal) ArrayDims() *LVal {
 
 // ArrayIndex returns the value at
 func (v *LVal) ArrayIndex(index ...*LVal) *LVal {
+	i := v.arrayIndex(index...)
+	if i.Type == LError {
+		return i
+	}
+	return v.Cells[1].Cells[i.Int]
+}
+
+// ArraySetIndex sets the value at the given index to val
+func (v *LVal) ArraySetIndex(val *LVal, index ...*LVal) *LVal {
+	i := v.arrayIndex(index...)
+	if i.Type == LError {
+		return i
+	}
+	v.Cells[1].Cells[i.Int] = val
+	return Nil()
+}
+
+func (v *LVal) arrayIndex(index ...*LVal) *LVal {
 	if v.Type != LArray {
 		panic("not an array: " + v.Type.String())
 	}
@@ -731,8 +749,7 @@ func (v *LVal) ArrayIndex(index ...*LVal) *LVal {
 		stride *= dims.Cells[len(index)-1].Int
 		index = index[:len(index)-1]
 	}
-
-	return v.Cells[1].Cells[i]
+	return Int(i)
 }
 
 // MapGet returns the value corresponding to k in v or an LError if k is not

@@ -101,6 +101,7 @@ var langBuiltins = []*langBuiltin{
 	// because 'string would be equivalent to (concat 'string ...)
 	{"append-bytes", Formals("bytes", "byte-sequence"), builtinAppendBytes},
 	{"aref", Formals("a", VarArgSymbol, "indices"), builtinARef},
+	{"set-aref!", Formals("a", "value", VarArgSymbol, "indices"), builtinSetARef},
 	{"length", Formals("seq"), builtinLength},
 	{"empty?", Formals("seq"), builtinIsEmpty},
 	{"cons", Formals("head", "tail"), builtinCons},
@@ -1694,6 +1695,18 @@ func builtinARef(env *LEnv, args *LVal) *LVal {
 		return env.Errorf("first argument is not an array: %v", array.Type)
 	}
 	v := array.ArrayIndex(indices...)
+	if v.Type == LError {
+		return env.Error(v)
+	}
+	return v
+}
+
+func builtinSetARef(env *LEnv, args *LVal) *LVal {
+	array, val, indices := args.Cells[0], args.Cells[1], args.Cells[2:]
+	if array.Type != LArray {
+		return env.Errorf("first argument is not an array: %v", array.Type)
+	}
+	v := array.ArraySetIndex(val, indices...)
 	if v.Type == LError {
 		return env.Error(v)
 	}

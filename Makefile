@@ -23,6 +23,10 @@ go-test:
 examples:
 	$(MAKE) -C _examples
 
+.PHONY: meta
+meta:
+	$(MAKE) -C _examples meta
+
 .PHONY: test-examples
 test: test-examples
 test-examples:
