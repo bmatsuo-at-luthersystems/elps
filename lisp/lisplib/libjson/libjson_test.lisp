@@ -94,16 +94,80 @@
                     (json:load-string "\"ok-json\""))))
 
 (benchmark-simple "load-object"
-  (dotimes (n 1000)
-    (json:load-string """{"test1": 123, "test2": 456, "test3": 789}""")))
+  (let ([b (to-bytes """{"test1": 123, "test2": 456, "test3": 789}""")])
+    (dotimes (n 1000)
+      (json:load-bytes b))))
 
 (benchmark-simple "load-array"
-  (dotimes (n 1000)
-    (json:load-string """["test1", 123, "test2", 456, "test3", 789]""")))
+  (let ([b (to-bytes """["test1", 123, "test2", 456, "test3", 789]""")])
+    (dotimes (n 1000)
+      (json:load-bytes b))))
 
 (benchmark-simple "load-nested"
-  (dotimes (n 1000)
-    (json:load-string """{"test1": 123, "test2": 456, "test3": {"test1": 123, "test2": 456, "test3": 789}}""")))
+  (let ([b (to-bytes """{"test1": 123, "test2": 456, "test3": {"test1": 123, "test2": 456, "test3": 789}}""")])
+    (dotimes (n 1000)
+      (json:load-bytes b))))
+
+(set 'benchmark-input-get-nested """
+{
+  "e0": 12,
+  "e1":
+  {
+    "e0": 34
+  },
+  "e2":
+  [
+    {
+      "e0": 56
+    }
+  ],
+  "e3":
+  [
+    {
+      "e0":
+      {
+        "e0": 78
+      },
+      "e1":
+      [
+        {
+          "e0": 90
+        }
+      ]
+    }
+  ]
+}
+""")
+
+(benchmark-simple "get-nested-baseline"
+  (let ([v (json:load-bytes (to-bytes benchmark-input-get-nested))])
+    (dotimes (n 1000)
+      (assert-equal 12
+                    (thread-first v
+                                  (get "e0")))
+      (assert-equal 34
+                    (thread-first v
+                                  (get "e1")
+                                  (get "e0")))
+      (assert-equal 56
+                    (thread-first v
+                                  (get "e2")
+                                  (nth 0)
+                                  (get "e0")))
+      (assert-equal 78
+                    (thread-first v
+                                  (get "e3")
+                                  (nth 0)
+                                  (get "e0")
+                                  (get "e0")))
+      (assert-equal 90
+                    (thread-first v
+                                  (get "e3")
+                                  (nth 0)
+                                  (get "e1")
+                                  (nth 0)
+                                  (get "e0")))
+      )))
 
 (benchmark-simple "dump-object"
   (let* ([val (sorted-map "test1" 123 "test2" 456 "test3" 789)])

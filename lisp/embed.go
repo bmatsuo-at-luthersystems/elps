@@ -142,16 +142,11 @@ func GoMap(v *LVal) (map[interface{}]interface{}, bool) {
 	if v.Type != LSortMap {
 		return nil, false
 	}
-	lmap := v.Map()
-	m := make(map[interface{}]interface{}, len(lmap))
-	for k, vlisp := range lmap {
-		vgo := GoValue(vlisp)
-		switch k.(type) {
-		case MapSymbol:
-			m[string(k.(MapSymbol))] = vgo
-		default:
-			m[k] = vgo
-		}
+	data := v.Map()
+	m := make(map[interface{}]interface{}, data.Len())
+	for _, pair := range sortedMapEntries(data).Cells {
+		// FIXME:  typecheck pair
+		m[GoValue(pair.Cells[0])] = GoValue(pair.Cells[1])
 	}
 	return m, true
 }
