@@ -8,7 +8,13 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/luthersystems/elps/parser/internal/interntoken"
 )
+
+// InternTable is used to intern all symbols and strings tokenized by Scanner
+// types.  Interning can be globally disabled by setting InternTable to nil.
+var InternTable = interntoken.NewTable()
 
 // Scanner facilitates construction of tokens from a byte stream (io.Reader).
 type Scanner struct {
@@ -82,7 +88,7 @@ func (s *Scanner) Ignore() {
 // Text returns a string containing text scanned since the last call to either
 // EmitToken or Ignore.
 func (s *Scanner) Text() string {
-	return string(s.buf[s.start:s.next])
+	return InternTable.GetBytes(s.buf[s.start:s.next])
 }
 
 // Rune returns the current unicode rune that is being scanned.  The rune
