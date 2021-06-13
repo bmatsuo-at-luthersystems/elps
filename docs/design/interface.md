@@ -62,9 +62,14 @@ about).
 ## Applications
 
 It seems beneficial to perform an in-depth discussion of possible applications
-for interface types in elps.  Maybe applications will be similar or essentially
-identical to interfaces in golang.  Though there will also be interfaces which
-are more specific.
+for interface types in elps.  An interface in elps may be similar or
+essentially identical to a corresponding interface in golang.  Though there
+will also be interfaces which are more specific to computing in a lisp
+environment. Nonetheless, it will be useful te discuss serveral interfaces
+which have been particularly helpful in golang and examine why those interfaces
+are useful or particularly well suited for the task they fullfil.  This will
+help build a foundation with which we can define the goals and practical
+limitations of an interface system which could be built in elps.
 
 ### Application: I/O
 
@@ -128,7 +133,7 @@ writing byte streams.
 
 ### Application:  String Formatting
 
-An interface which is still related indirectly to I/O but is special enough to
+An interface which is still indirectly related to I/O but is special enough to
 deserve it's own discussion is fmt.Stringer.  This interface is so widely
 implemented that it stands out from other I/O-adjacent interfaces.  The pattern
 is so universally used many programmers would not know that its root definition
@@ -226,6 +231,9 @@ TODO
 
 - "iterator"
 
+- "closers"  -- ties into looking at more purely functional approaches to solve
+  the polymorphism problem.
+
 
 ## Possible Other Approaches
 
@@ -264,4 +272,3 @@ lead to increased error rates across all classifications of errors.  So this
 apparent increase in risk would seem to suggest that elps should have
 additional goals for an implementation of interface types to avoid writing
 unreliable code.
-
