@@ -168,7 +168,7 @@ ideal.  And there are other values like function closures which are not
 trivially representable and the default representation chosen in elps1 is
 intentionally incomplete (lacking contextual scope details).  At some level
 there is a need for user defined types in elps to (automatically) provide
-better ways utilities like `format-string` to render them as text.
+better ways for utilities like `format-string` to render them as text.
 
 ### Application:  Errors
 
@@ -205,23 +205,24 @@ their set of methods and signatures was adequately problematic and they broke
 everyone's gobeta code when moving to go1, deleting the os.Error type and
 moving to the current `error` interface.  Golang will dynamically convert
 values into any interface their method names and signatures satisfy.  And this
-was such a core idea that the problem that the authors of golang did not want
-to give it up, and had to grapple with their type system's complete inability
-to detect the _semantic differences_ between an error and *anything else* which
-also needed a human readable representation.  For this other reasons they
-decided to introduce a distinction between errors and fmt.Stringer that could
-be detected by the type system.  But the problem they encountered is more
-universal and remains unsolved.  If authors use short method names and common
-type signatures they are likely to produce interfaces which look the same to
-golang's type system but have incompatible semantics.
+was such a core idea that the authors of golang did not want to give it up, and
+had to grapple with their type system's complete inability to detect the
+_semantic differences_ between an error and *anything else* which also needed a
+human readable representation.  For this other reasons they decided to
+introduce a distinction between errors and fmt.Stringer that could be detected
+by the type system.  But the problem they encountered is more universal and
+remains unsolved.  If authors use short method names and common type signatures
+they are likely to produce interfaces which look the same to golang's type
+system but have incompatible semantics.
 
 It is unclear how much elps would benefit from an error handling model in which
-all errors are merely implementations of an interface.  This application of
-interfaces intended mostly to reinforce the notion that common type systems
-cannot capture the notion of api sameness and provide a concrete example where
-language authors had to deal with two identical apis which look the same.  This
-could also be viewed as a case study in why interfaces are not the same as
-sharing a common superclass in an objected oriented language.
+all errors are merely implementations of an interface.  This example
+application of interfaces is intended mostly to reinforce the notion that
+common type systems cannot capture the notion of api sameness,  to provide a
+concrete example where language authors had to deal with two semantically
+different apis which look the same.  This could also be viewed as a case study
+in why interfaces are not the same as sharing a common superclass in an
+objected oriented language.
 
 ### Other interesting and useful interfaces
 
